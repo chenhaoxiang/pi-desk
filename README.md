@@ -6,7 +6,7 @@ Pi Desk 是 Pi-only 的轻量 macOS 原生可视化与管理客户端。它连�
 
 ## 当前状态
 
-2026-10-24：已有 **SwiftUI/AppKit + TypeScript 本地源码候选**，不再只是静态稿。原生窗口、顶栏、双向私有 UDS、在线投影、原生消息/中止、Subagents 管理与统计、现有计划及注意事项均有实现；隔离真实 SDK、真实 Subagents owner 和 Schedule 管理 seam 候选的 faux-provider 验证见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
+2026-10-24：已有 **SwiftUI/AppKit + TypeScript 本地源码候选**，不再只是静态稿。原生compact/expanded顶部灵动岛、中文分层管理窗口、双向私有 UDS、在线投影、原生消息/中止、Subagents 管理与统计、现有计划及注意事项均有实现；隔离真实 SDK、真实 Subagents owner 和 Schedule 管理 seam 候选的 faux-provider 验证见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
 
 这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付/无障碍完整组合及长期真实 TUI 验收尚未完成；Gate/CI 无真实 producer。当前支持显式授权的本机稳定安装；不强制重载业务会话，不对外发布或部署。远端仍为空，本机安装不代表共享 main 或 GitHub CI 已通过。
 
@@ -58,6 +58,14 @@ PI_DESK_PEER_CHECK="$PWD/tmp/candidate/Pi Desk.app/Contents/Helpers/PiDeskPeerCh
 默认 socket 在当前用户的 `Library/Caches/PiDesk/runtime/desk.sock`；可通过 `PI_DESK_SOCKET` 和 App 的 `--socket-path` 指定相同的隔离路径。App 的 `--settings-path` 可将本 App 设置放到独立测试目录。桥接不会自动安装、启动 Pi、选择模型、修改思考档或增加工具。
 
 `PiDeskPeerCheck` 是随 App 打包的有限 UID 检查助手：Node 通过公开的子进程 stdio API 传入已经连接的 fd，助手只执行 `getpeereid(3)` 后退出。没有另一个 Agent、守护进程或网络服务。缺少助手、UID 不符或路径不安全时，只有观察连接不可用，原 Pi 继续运行。
+
+## 日常可视化与操作
+
+- 顶部胶囊是日常入口：悬停或点击展开，pin固定展开；离开延迟收起，编辑时保持。Escape先退出编辑，再收起非固定面板；普通状态事件不自动弹大窗或抢焦点。
+- 会话/项目名和中文状态优先；追加要求、纠偏就近按需展开，不用一直面对空白表单。危险的“中止当前回合”放在更多操作中。
+- 诊断保留source/epoch/runId/覆盖原因，但不占主层；未知、部分覆盖、较旧或断开仍有可读提示。
+- 管理窗跟随系统深浅色，顶部固定深色；动效尊重减少动态效果。无刘海/外接屏用顶部胶囊，camera/safeArea不需要屏幕录制或无障碍授权。
+- 原生合成预览脚本 `scripts/create-visual-fixture.mjs` 仅生成明确synthetic记录；`--visual-fixture` 模式不连接真实会话、不保存真实设置、不递送真实管理请求。
 
 ## 使用边界
 

@@ -52,6 +52,13 @@
 
 2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整VoiceOver/系统组合未验；6.1–6.3 仍不是全矩阵通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
 
+## 7. Native visual and interaction refinement
+
+- [x] 7.1 实现顶部AppKit panel的compact/expanded、hover/click/Escape/pin/edit保护与camera/safeArea/普通屏fallback；不加权限或自动抢焦点。
+- [x] 7.2 实现中文状态/图标/色标与层级卡片、准确工具/子任务摘要、按需追加/纠偏、后置诊断；未知/partial/断联保留可读提示。
+- [x] 7.3 以显式合成fixture核对原生compact/expanded/管理窗、长名/空/断/多会话、Tab与Reduce Motion，并验证准确epoch管理目标不串线。
+- [ ] 7.4 冻结验证过的新source/build，更新稳定App与固定bridge，保留027572e安装回退；不强reload业务Pi，不冒称完整现场资格。
+
 ## Workflow follow-up
 
 - 共享源码交付按当时适用的独立只读审查、PR、检查和普通merge流程；空仓首main的初始化需匹配实际授权，不默认直推。

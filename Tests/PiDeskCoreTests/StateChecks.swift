@@ -81,6 +81,28 @@ enum StateChecks {
     precondition(EvidencePolicy.isCurrentFact(evidence, head: "abcdef1234", now: 1001))
     precondition(!EvidencePolicy.isCurrentFact(evidence, head: "new-head", now: 1001))
     precondition(!EvidencePolicy.isCurrentFact(evidence, head: "abcdef1234", now: 400000))
+    var inputView = store.sessions[other.identity.sessionKey]!
+    precondition(Presentation.status(inputView).title == "正在运行")
+    inputView.snapshot.inputs = [
+      try JSONDecoder().decode(
+        InputNotice.self,
+        from: Data(#"{"id":"q","source":"fixture","kind":"question","startedAt":1000}"#.utf8))
+    ]
+    precondition(Presentation.status(inputView).title == "需要输入")
+    let island = IslandGeometry.calculate(
+      screen: CGRect(x: 0, y: 0, width: 1440, height: 900),
+      visible: CGRect(x: 0, y: 0, width: 1440, height: 868), safeTop: 0, cameraGap: 0)
+    precondition(island.compact.width == 300 && island.expanded.width == 640)
+    var interaction = IslandInteraction()
+    interaction.expand()
+    precondition(interaction.mayAutoCollapse)
+    interaction.pinned = true
+    precondition(!interaction.mayAutoCollapse)
+    interaction.escape()
+    precondition(interaction.expanded)
+    interaction.pinned = false
+    interaction.escape()
+    precondition(!interaction.expanded)
     precondition(LinkPolicy.exactHTTPS("https://example.invalid/console") != nil)
     for url in [
       "file:///fixture", "javascript:alert(1)", "https://user:pass@example.invalid",

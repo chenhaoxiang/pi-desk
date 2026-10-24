@@ -24,6 +24,11 @@ enum BuildIdentity {
     "Pi Desk \(version) · \(channel) build \(build) · source \(source.prefix(12))"
   }
 }
+struct VisualFixture: Decodable {
+  let synthetic: Bool
+  let records: [WireRecord]
+  let connections: [String: String]?
+}
 struct DeskSettings: Codable {
   var herdrExecutable = ""
   var managementURL = ""
@@ -38,18 +43,36 @@ struct DeskSettings: Codable {
   @Published var settings = DeskSettings()
   @Published var dismissed: Set<String> = []
   @Published var muted = false
+  @Published var drafts: [Identity: String] = [:]
+  let isPreview: Bool
+  var showManager: () -> Void = {}
+  var showIsland: () -> Void = {}
+  func setDraft(_ value: String, for identity: Identity) {
+    if drafts.count >= 64 && drafts[identity] == nil {
+      drafts.removeValue(forKey: drafts.keys.first!)
+    }
+    drafts[identity] = value
+  }
+  func select(_ identity: Identity) {
+    guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
+    selected = identity.sessionKey
+  }
   private var notified: Set<String> = []
   private var server: SocketServer!
   private var timer: Timer?
   private let settingsURL: URL
   let socketPath: String
   var sessions: [SessionView] {
-    store.sessions.values.sorted { $0.snapshot.display.name < $1.snapshot.display.name }
+    store.sessions.values.sorted {
+      let a = Presentation.priority($0)
+      let b = Presentation.priority($1)
+      return a == b ? $0.snapshot.display.name < $1.snapshot.display.name : a < b
+    }
   }
   var current: SessionView? { selected.flatMap { store.sessions[$0] } }
   var activeCount: Int {
     sessions.filter {
-      $0.connection == .connected
+      $0.connection == .connected && $0.snapshot.inputs.isEmpty
         && [.running, .retrying, .compacting, .waitingChildren].contains($0.snapshot.execution)
     }.count
   }
@@ -70,6 +93,31 @@ struct DeskSettings: Codable {
       fileURLWithPath: argument("--settings-path") ?? ProcessInfo.processInfo.environment[
         "PI_DESK_SETTINGS"]
         ?? home.appendingPathComponent("Library/Application Support/PiDesk/settings.json").path)
+    let fixturePath = argument("--visual-fixture")
+    isPreview = fixturePath != nil
+    if let fixturePath = fixturePath {
+      diagnostic = "合成视觉预览 · 不连接真实会话"
+      do {
+        let data = try PrivateSettings.load(URL(fileURLWithPath: fixturePath))
+        let preview = try JSONDecoder().decode(VisualFixture.self, from: data)
+        guard preview.synthetic, preview.records.count <= 12 else { throw WireError.invalidRecord }
+        for record in preview.records {
+          try record.validate()
+          let connection = UUID()
+          let now = Date().timeIntervalSince1970 * 1000
+          _ = store.apply(
+            record, connection: connection,
+            now: preview.connections?[record.identity.nativeSessionId] == "stale"
+              ? now - 20000 : now)
+          if preview.connections?[record.identity.nativeSessionId] == "disconnected" {
+            store.disconnect(connection)
+          }
+        }
+        store.tick(now: Date().timeIntervalSince1970 * 1000)
+        selected = sessions.first?.snapshot.identity.sessionKey
+      } catch { diagnostic = "合成预览文件不可用；未连接真实会话" }
+      return
+    }
     loadSettings()
     server = SocketServer(path: socketPath) { [weak self] event in
       if Thread.isMainThread {
@@ -102,18 +150,28 @@ struct DeskSettings: Codable {
   }
   func stop() {
     timer?.invalidate()
-    server.stop()
+    server?.stop()
   }
-  func refresh(usage: Bool = false) {
-    guard let s = current, s.connection == .connected else { return }
+  func refresh(usage: Bool = false, identity: Identity? = nil) {
+    guard !isPreview, let s = identity.flatMap({ store.sessions[$0.sessionKey] }) ?? current,
+      s.connection == .connected, identity == nil || s.snapshot.identity == identity
+    else { return }
     server.send(
       WireRecord(
         kind: "query", identity: s.snapshot.identity, requestId: UUID().uuidString,
         query: usage ? "usage.refresh" : "refresh"), to: s.connectionId)
   }
   @discardableResult
-  func action(_ action: Action, target: Target, parameters: Parameters = Parameters()) -> Bool {
-    guard let s = current,
+  func action(
+    _ action: Action, target: Target, parameters: Parameters = Parameters(),
+    identity: Identity? = nil
+  ) -> Bool {
+    guard !isPreview else {
+      actionNote = "合成预览：未递送任何真实请求"
+      return false
+    }
+    guard let s = identity.flatMap({ store.sessions[$0.sessionKey] }) ?? current,
+      identity == nil || s.snapshot.identity == identity,
       let record = store.request(
         identity: s.snapshot.identity, action: action, target: target, parameters: parameters,
         now: Date().timeIntervalSince1970 * 1000)
@@ -132,8 +190,14 @@ struct DeskSettings: Codable {
       return false
     }
   }
-  func openOriginal() {
-    guard let s = current, s.connection == .connected, let route = s.snapshot.display.route,
+  func openOriginal(identity: Identity? = nil) {
+    guard !isPreview else {
+      actionNote = "合成预览：不会切换到其他应用"
+      return
+    }
+    guard let s = identity.flatMap({ store.sessions[$0.sessionKey] }) ?? current,
+      identity == nil || s.snapshot.identity == identity, s.connection == .connected,
+      let route = s.snapshot.display.route,
       route.kind == "herdr", route.sessionId == s.snapshot.identity.nativeSessionId,
       let file = route.sessionFile, !settings.herdrExecutable.isEmpty
     else {
@@ -146,7 +210,9 @@ struct DeskSettings: Codable {
       do {
         let raw = try await FiniteCommand.run(executable, ["api", "snapshot"])
         let pane = try Navigation.exactPane(snapshot: raw, sessionFile: file)
-        guard current?.snapshot.identity == identity else { throw NavigationError.unavailable }
+        guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else {
+          throw NavigationError.unavailable
+        }
         // Only this fixed public owner action; never send-keys, shell or lifecycle control.
         _ = try await FiniteCommand.run(executable, ["agent", "focus", pane.paneId])
         let verify = try await FiniteCommand.run(executable, ["api", "snapshot"])
@@ -157,6 +223,7 @@ struct DeskSettings: Codable {
     }
   }
   func openManagement() {
+    guard !isPreview else { return }
     guard let url = LinkPolicy.exactHTTPS(settings.managementURL) else {
       actionNote = "管理页未配置或不是无凭据的精确 HTTPS 地址"
       return
@@ -164,6 +231,10 @@ struct DeskSettings: Codable {
     if !NSWorkspace.shared.open(url) { actionNote = "管理页未能打开" }
   }
   func saveSettings() {
+    guard !isPreview else {
+      actionNote = "合成预览不保存真实设置"
+      return
+    }
     guard settings.herdrExecutable.isEmpty || settings.herdrExecutable.hasPrefix("/") else {
       actionNote = "Herdr 需为明确的本机绝对可执行路径"
       return

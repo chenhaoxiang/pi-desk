@@ -56,8 +56,8 @@
 
 - [x] 7.1 实现顶部AppKit panel的compact/expanded、hover/click/Escape/pin/edit保护与camera/safeArea/普通屏fallback；不加权限或自动抢焦点。
 - [x] 7.2 实现中文状态/图标/色标与层级卡片、准确工具/子任务摘要、按需追加/纠偏、后置诊断；未知/partial/断联保留可读提示。
-- [x] 7.3 以显式合成fixture核对原生compact/expanded/管理窗、长名/空/断/多会话、Tab与Reduce Motion，并验证准确epoch管理目标不串线。
-- [ ] 7.4 冻结验证过的新source/build，更新稳定App与固定bridge，保留027572e安装回退；不强reload业务Pi，不冒称完整现场资格。
+- [x] 7.3 以显式合成fixture核对原生compact/expanded/管理窗、长名/空/断/多会话、Escape编辑保护与Reduce Motion，并验证准确epoch管理目标不串线；Tab焦点遍历尚不可证，完整资格仍留2.4/6.3。
+- [x] 7.4 冻结视觉源码4f8846f/build 5，更新并验真稳定App与固定bridge，保留027572e/build 4准确安装回退；原生双会话追加仅命中A，不强reload业务Pi，不冒称完整现场资格。
 
 ## Workflow follow-up
 

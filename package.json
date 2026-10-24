@@ -1,0 +1,21 @@
+{
+	"name": "pi-desk-workspace",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"workspaces": [
+		"packages/desk-bridge"
+	],
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "node --import tsx --test --test-concurrency=1 packages/desk-bridge/test/*.test.ts",
+		"check": "npm run typecheck && npm test && node scripts/check-public.mjs",
+		"test:native-sdk": "node --import tsx scripts/check-baseline.mjs && node --import tsx scripts/check-native-host.mjs && node --import tsx scripts/check-native-controls.mjs && node --import tsx scripts/check-input-native.mjs"
+	},
+	"devDependencies": {
+		"@types/node": "24.19.2",
+		"typescript": "6.0.2",
+		"tsx": "4.21.0",
+		"@earendil-works/pi-coding-agent": "1.4.0"
+	}
+}

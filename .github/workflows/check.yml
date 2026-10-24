@@ -1,0 +1,23 @@
+name: Synthetic checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm run test:native-sdk
+  native:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-native.sh
+      - run: swift build -c release --jobs 2
+# No deployment, model provider, credential, global extension install or main bootstrap.

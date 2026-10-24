@@ -3,12 +3,12 @@ doc_type: plan
 project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
-release_scope: 首版交互候选；不是可运行客户端
-status: draft
+release_scope: 原生源码候选与静态设计参照；非完整实机验收
+status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-10-24
-verification_scope: 合成静态预览与信息结构；未验证原生窗口/无障碍/通知行为
+verification_scope: 原生窗口AX/双会话GUI消息与合成提示；完整VoiceOver/系统通知/Herdr实机未验
 ---
 
 # 交互设计
@@ -70,4 +70,4 @@ verification_scope: 合成静态预览与信息结构；未验证原生窗口/�
 
 ## 7. 原生实现验收
 
-支持键盘导航、VoiceOver、动态文字、非颜色状态、减少动态效果、外接屏和无刘海屏；全屏/锁屏/显示器变化不阻塞主任务。不抢焦点，不自动打开控制面板盖住正在操作的应用。真实原生验收在后续实施阶段完成，静态预览只用于讨论布局和信息密度。
+支持键盘导航、VoiceOver、动态文字、非颜色状态、减少动态效果、外接屏和无刘海屏；全屏/锁屏/显示器变化不阻塞主任务。不抢焦点，不自动打开控制面板盖住正在操作的应用。原生候选已有窗口/顶栏和AX控件，可用CUA在后台显示两个隔离SDK会话并提交native消息，界面保留requested而非假queued；空态、断联和提示也有实现。完整VoiceOver、系统通知交付、Herdr实机跳转与长期组合仍未完成。静态预览只用于设计参照，不是运行证据。

@@ -3,12 +3,12 @@ doc_type: spec
 project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
-release_scope: 首版规划；不代表已实现或确定发行版本
+release_scope: 首版合同与本地源码候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-10-24
-verification_scope: 当前对话收敛的用户目标与非目标；不包含运行验收
+verification_scope: 用户范围、源码候选与隔离faux-native证据；不含业务会话和完整实机兼容验收
 ssot: true
 ---
 
@@ -18,7 +18,7 @@ ssot: true
 
 用户可以在一个原生入口看清已接入 Pi 会话、子任务、消耗和例外，并对原工作发出准确的管理请求；不用持续切换窗口，也不用守着界面让自动化继续。界面缺失、关闭或故障不改变原任务、通知兜底及权限。
 
-需求依据是本次用户确认：只考虑 Pi；不需要各工具历史会话扫描；Pi Token 统计可以有；首版绝对不能降低 AI 自动化程度。2026-10-24 用户授权拉取新仓并规划架构、设计及实施方案，本轮不实现业务代码、不安装部署、不推送空仓 main。
+需求依据是本次用户确认：只考虑 Pi；不需要各工具历史会话扫描；Pi Token 统计可以有；首版绝对不能降低 AI 自动化程度。2026-10-24 先完成架构候选，后获授权沿单一 Change 实施和隔离验证。当前已有本地源码与旁路候选；不全局安装、部署、发行或初始化空远端 main，真实证据见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
 
 ## 2. 范围与完成标准
 
@@ -70,4 +70,4 @@ ssot: true
 - 产生真实待输入生命周期与合成治理/CI变化，关闭提醒不影响原问题和任务。
 - 比较关闭/接入两组相同fixture的执行轨迹、模型调用数、人工确认数、原参数及额外开销。
 
-本轮仅验证文档、spec与静态合成设计，不执行上述业务或真实会话验收。规范要求见单一 Change 的 [live-pi-sessions](../openspec/changes/pi-desk-v0-1/specs/live-pi-sessions/spec.md)、[owned-management](../openspec/changes/pi-desk-v0-1/specs/owned-management/spec.md)、[usage-and-attention](../openspec/changes/pi-desk-v0-1/specs/usage-and-attention/spec.md)。
+当前已验证其中的源码/隔离真实 SDK、Subagents/计划 owner 和原生 GUI 路径；尚未覆盖的真实 TUI、Herdr、系统通知/无障碍完整组合保持未完成，不把下层通过冒充整项首版验收。规范要求见单一 Change 的 [live-pi-sessions](../openspec/changes/pi-desk-v0-1/specs/live-pi-sessions/spec.md)、[owned-management](../openspec/changes/pi-desk-v0-1/specs/owned-management/spec.md)、[usage-and-attention](../openspec/changes/pi-desk-v0-1/specs/usage-and-attention/spec.md)。

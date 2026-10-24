@@ -3,21 +3,21 @@ doc_type: plan
 project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
-release_scope: 首版分阶段实施候选；非排期或发布承诺
-status: draft
+release_scope: 首版本地源码与旁路候选；非完整发行验收
+status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-10-24
-verification_scope: 对照用户范围、公开接口和架构拆分；无业务实现或运行验收
+verification_scope: 本地Swift/Node与隔离真实SDK/owner/GUI证据；未安装/发布，不含完整真实TUI/Herdr验收
 ---
 
 # 分阶段实施方案
 
 ## 1. 当前交付与下一次实施起点
 
-本轮只完成仓库拉取、需求/架构/交互/实施方案候选、单一OpenSpec Change与文档检查。无业务代码、可安装App、全局扩展接入、真实Pi控制、发布或部署。远端空main不能普通创建PR；本地规划分支保全成果，不因此直推main或改变保护。
+架构基线为 `e561305`，在原专属树有序接管后连续实施。当前已建立原生App、TS薄扩展、真实owner管理和隔离验证，具体证据见第6节；这不是完整v0.1/业务会话/上线声明。远端仍空，不能据此直推或bootstrap main；源码、安装和发行分开。
 
-未来实施沿[本Change任务](../openspec/changes/pi-desk-v0-1/tasks.md)推进。阶段任务是依赖与验收划分，不是逐项人工审批流程；用户后续授权的实际范围决定可连续实施到哪一步。新增运行/生产/账号/预算边界按真实授权判断，不靠文档猜测。
+实施与剩余验收沿[本Change任务](../openspec/changes/pi-desk-v0-1/tasks.md)推进。阶段任务是依赖与验收划分，不是逐项人工审批流程；用户后续授权的实际范围决定可连续实施到哪一步。新增运行/生产/账号/预算边界按真实授权判断，不靠文档猜测。
 
 ## 2. 阶段与依赖
 
@@ -94,7 +94,38 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 ## 5. 交付与停止
 
-- 本轮停止于可审阅的本地规划，不把空仓首个main创建当普通同步动作，不远端直推。
+- 本次交付为本地源码/旁路候选与真实未完成项；不把空仓首个main创建当普通同步动作，不远端直推。
 - 后续本地开发、共享源码、安装、真实接入和发布分开说明。授权覆盖的动作连续完成，不逐任务追加批准。
 - 先补会改变设计的最小证据：管理上下文安全、usage归属和背压负例。事实不支持时改接线，不用削弱原自动化、增加LLM判断或取消必要管理来过验收。
 - 尚未确定的发行版本号、自动更新渠道和商业分发不是架构前置；实现时按真实范围决定，不预建账户系统、服务端或证书流程。
+
+## 6. 本地实施与证据层级
+
+### 已实现的候选
+
+- SPM App/Core/Transport/有限 peer UID 助手和无运行依赖的 TS bridge；双端共享 wire fixture，主版本、代际、seq、闭集动作、有界队列与同 UID 检查。
+- 原生顶栏、六页管理窗口、准确会话身份、分开的连接/回合/输入/owner覆盖、模型/思考档和按需本机元数据。只显示主动接入；Git 元数据仅后台固定只读命令，不逐工具运行。
+- native follow-up/steer/abort-current；Subagents ping/status/cost/steer/stop/resume 与公开 schedule allowlist。Workflow 根、后台 child runId、display-only Fleet 对象分开，不用展示 key 控制运行。
+- attachment-window 按模型分组、final receipt 去重、未知/partial；owner累计保留原scope和child覆盖，不拼全账户/历史总账。Schema中 owner 未提供的累计起点为 null。
+- Schedule Prompt owner 薄 seam 本地提交 `85c58cd961417b663d17f9ba88c323228af9adec`（分支 `feat/pi-desk-management-20261024`，未推送/安装）：只复用原 owner 的当前会话列表、暂停/恢复/删除及既有 event-job 触发；不新增 scheduler/CRUD/service。
+- 实际 ui_prompt 和可选 question producer 生命周期、已读/静音、系统已授权通知的旁路发送、未接管原兜底；可选安全 evidence reader 和精确本机管理页设置，不消费原始日志或凭据。
+
+### 可复跑的验证
+
+| 入口 | 已证明 | 不代表 |
+|---|---|---|
+| `npm run check` | 类型、共享协议/usage黄金、过载/去重/旧对象、字段白名单、可选提示/evidence、公开源码检查 | 真实账号/计费/全模式验收 |
+| `bash scripts/check-native.sh` | 本机Swift构建、Core reducer/导航/链接、原生 framing；可执行测试不依赖 XCTest | VoiceOver/系统通知/Herdr实机 |
+| `npm run test:native-sdk` | 实际SDK基线/桥接轨迹与loadout一致；新增模型调用/人工确认0；双会话、忙时follow-up/steer、abort终态、实际原生UI输入生命周期 | 业务模型执行或授权所有旧TUI会话升级 |
+| `scripts/check-socket-host.mjs` | 实际Swift UDS↔Node两原生会话，双端peer UID、重复请求只执行一次，SIGKILL接收器后Pi继续，重连不重放 | GUI所有显示器/系统行为组合 |
+| `scripts/check-subagents-native.mjs` | 固定0.80 owner：真实native child与前台Fleet、精准后台child steer、stop受理/终态、paused恢复成功、stopped恢复拒绝、现有计划暂停与cost | 所有历史owner/runner/远程模式 |
+| `scripts/check-schedule-native.mjs` | 固定Schedule候选经真实SDK暂停/恢复、事件触发一次、外会话拒绝；查询新增模型调用0、显式faux触发1 | 已安装/启用常驻监督 |
+| 原生GUI/CUA | 双会话主动接入、原生AX控件、后台发送只命中选定会话，界面requested；截图只在ignored tmp | 完整TUI/系统通知/Herdr现场交付 |
+
+实际对照使用 Pi `1.4.0-fork.1`、Subagents `0.80.0-fork.1` 和上述 Schedule 源码提交；默认开发依赖 Pi `1.4.0` 的 SDK 基线也跑过。真实 provider/账号/密钥调用均为0，未改全局Pi设置、模型/思考档/原工具或业务会话。原生helper和 App 为本仓代码，没有复用 CodeIsland 文件或素材。
+
+性能证据限于合成标量：10,000次观察handler的p95/p99均低于0.01ms（候选机实测），慢socket/10万次离线投影保持有界；同一简单SDK任务的开启/关闭轨迹一致，另有1,000次真实SDK事件dispatch对照（包含宿主派发，实测p95/p99仍满足1ms/5ms预算，不与纯handler数值混标）。一次任务耗时不是通用性能结论，不宣称零开销。CI仅有配置、没有远端运行记录；本机无XCTest，改用同样可失败的Foundation检查runner，未安装Xcode或降低行为断言。
+
+### 保留的未完成项
+
+完整v0.1未验收、Change未归档。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整VoiceOver、系统通知许可/交付与长时间真实TUI/多显示器组合仍待验证。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release旁路App为arm64约1.4MiB，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。旁路ad-hoc候选不是发行签名、公证、自动更新、安装或上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

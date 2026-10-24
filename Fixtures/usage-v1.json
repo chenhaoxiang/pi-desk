@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "name": "final-once-cache-replay",
+      "settlements": [
+        {
+          "id": "a",
+          "model": "fixture/a",
+          "usage": {
+            "input": 10,
+            "output": 2,
+            "cacheRead": 4,
+            "cacheWrite": 1
+          }
+        },
+        {
+          "id": "a",
+          "model": "fixture/a",
+          "usage": {
+            "input": 10,
+            "output": 2,
+            "cacheRead": 4,
+            "cacheWrite": 1
+          }
+        }
+      ],
+      "expected": {
+        "input": 10,
+        "output": 2,
+        "cacheRead": 4,
+        "cacheWrite": 1
+      }
+    },
+    {
+      "name": "normalized-nested-tool-usage-only",
+      "settlements": [
+        {
+          "id": "assistant",
+          "model": "fixture/a",
+          "usage": {
+            "input": 10,
+            "output": 2,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "tool",
+          "model": "tool-usage-model-unknown",
+          "usage": {
+            "input": 8,
+            "output": 3,
+            "cacheRead": 1,
+            "cacheWrite": 0
+          }
+        }
+      ],
+      "expected": {
+        "input": 18,
+        "output": 5,
+        "cacheRead": 1,
+        "cacheWrite": 0
+      }
+    },
+    {
+      "name": "switch-model-preserves-groups",
+      "settlements": [
+        {
+          "id": "a",
+          "model": "fixture/a",
+          "usage": {
+            "input": 10,
+            "output": 2,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        },
+        {
+          "id": "b",
+          "model": "fixture/b",
+          "usage": {
+            "input": 20,
+            "output": 3,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        }
+      ],
+      "expected": {
+        "input": 30,
+        "output": 5,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      }
+    },
+    {
+      "name": "missing-usage-not-zero",
+      "settlements": [
+        {
+          "id": "a",
+          "model": "fixture/a",
+          "usage": {
+            "input": 7
+          }
+        }
+      ],
+      "expected": {
+        "input": 7,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null
+      }
+    }
+  ],
+  "partialOnly": [
+    "attachment-window",
+    "auxiliary-usage-not-covered",
+    "fork-inheritance-unavailable",
+    "compaction-summary-not-covered"
+  ],
+  "crossSessionTotal": "unknown-unless-disjoint-owner-proof"
+}

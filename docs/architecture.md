@@ -3,12 +3,12 @@ doc_type: plan
 project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
-release_scope: 首版架构候选；尚无运行实现
-status: draft
+release_scope: 本地实现候选；完整首版验收仍未完成
+status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-10-24
-verification_scope: 源码接口对照和本地设计；未验证IPC/原生UI/运行性能
+verification_scope: Swift/TS源码、UDS/隔离真实SDK与owner组合；不含业务会话/Herdr实机和长时可靠性
 ---
 
 # 系统架构
@@ -37,7 +37,7 @@ verification_scope: 源码接口对照和本地设计；未验证IPC/原生UI/�
 - **UDS + 有界LF-JSON协议**：无HTTP端口、WebSocket服务、跨网发现和数据库。Native socket读取在后台串行队列，UI只接收合并后的不可变快照。
 - 不引入通用plugin框架、事件代理平台或OTel Collector。增加一个具体owner适配器不代表支持所有工具。
 
-拟建目录（目前未实现）：
+已建目录（实现为本地候选，非安装声明）：
 
 ```text
 Sources/PiDeskApp/           # SwiftUI窗口、顶栏及导航
@@ -49,6 +49,8 @@ packages/desk-bridge/test/   # Node/真实SDK faux-provider测试
 docs/                       # 本页、产品、交互、接口与实施说明
 openspec/changes/pi-desk-v0-1/
 ```
+
+`Sources/PiDeskPeerCheck/` 是有限 syscall 助手，不是第三个运行宿主：在桥接的异步连接验证阶段经公开 stdio 传递 fd，仅执行 `getpeereid` 并退出。它随 App 打包，缺失/失败只使该观察连接不可用，绝不替换为不验证 peer 的连接。
 
 不提前建立第三个协议SDK包；跨语言共享wire fixtures和封闭schema，编译实现只放两端必要结构。
 
@@ -86,7 +88,7 @@ App断线重连同一epoch，要求全量当前快照并保留monotonic seq；�
 
 观察使用notification型事件，拿必要标量后同步入队并立即返回undefined。禁止在`tool_call`、`tool_result`、`context`或`agent_before_settle`建立阻塞审批/变换/continuation；不订阅原始provider stream或逐token转发。
 
-建议初始传输预算（实现前用负例校准，非已验证性能）：每连接最多128待发记录或1MiB、单帧最多64KiB、display文本最多512字符；管理文本最多16KiB。状态与usage快照按键合并，慢端按最新值替换。过载丢显示事件后累计drop计数并要求当前快照，不能重跑业务来补事件。
+建议初始传输预算（实现前用负例校准，非已验证性能）：每连接最多128待发记录或1MiB、单帧最多64KiB、display文本最多512字节；管理文本最多16KiB。状态与usage快照按键合并，慢端按最新值替换。过载丢显示事件后累计drop计数并要求当前快照，不能重跑业务来补事件。
 
 socket写、序列化、可选branch查询和owner统计放到有界后台调度，不在原事件handler await。扩展不逐工具同步跑ps/git，不逐事件读取会话或owner artifacts。长统计切片让出事件循环；不承诺Promise timeout能隔离同步CPU。无同等真实用例性能证据不得称零影响。
 
@@ -109,7 +111,7 @@ socket写、序列化、可选branch查询和owner统计放到有界后台调度
 | action-result | 扩展→App | requestId、rejected/accepted/queued/requested/unknown，owner handle/原因 |
 | operation-update | 扩展→App | 同一owner引用的实际执行/终态，不能由socket送达推导 |
 
-断线后的App不重放action。一次点击只生成一个请求；重复同ID在同epoch的有效缓存内只返回相同受理结果，不能再次执行；同ID不同参数必须拒绝。已知缓存过期/新epoch/潜在副作用不明时返回unknown并按owner引用对账；不承诺在记忆窗口外识别任意重复提交，不承诺持久exactly-once，不建立新操作账本。控制请求数量与回复队列独立限流，不用普通状态覆盖回复。
+断线后的App不重放action。一次点击只生成一个请求；重复同ID在同epoch的有效缓存内只返回相同受理结果，不能再次执行；同ID不同参数必须拒绝。已知缓存过期/新epoch/潜在副作用不明时返回unknown并按owner引用对账；不承诺在记忆窗口外识别任意重复提交，不承诺持久exactly-once，不建立新操作账本。控制请求数量与回复队列独立限流，不用普通状态覆盖回复。当前生产端采用1条合并快照＋32条回复，App每连接/每批也有上限；组合DTO按字节预算投影并保留omitted/partial，不让合法大快照超过64KiB后永久断联。
 
 App请求由连接owner在原宿主事件循环的应用层回调处理，不从新模型工具或tool_call内递归调用工具。确需模型执行的新要求明确进入原生sendUserMessage队列；普通查看/管理不以LLM代替确定性API。
 
@@ -117,8 +119,8 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 
 - `session.message`：原生`pi.sendUserMessage`，明确steer/followUp，不通过terminal send-key；不把任意slash文本当通用管理端点。该API返回void，因此bridge只能报告`requested`（已调用提交路径）；只有具有关联的owner收据才可标accepted/queued，缺少该证据不能从调用返回猜测已入队，实际处理另观测。
 - `session.abort-current`：当前ctx.abort，请求后观察终态。明确它不是暂停schedule、清空queue或停止所有子任务；只中止当前回合，可能仍有后续原生工作。
-- `run.steer/stop/resume`：复用Subagents进程内RPC并查询capabilities；resume在原owner验证租约/状态，失败不新建替代运行。
-- `schedule.*`：保留owner命名空间。Subagents只用其managementActions allowlist；Schedule Prompt尚缺通用在线管理seam，按实施方案在该owner补薄入口或跳回其原UI，不在本仓偷用私有字段。
+- `run.steer/stop/resume`：复用Subagents进程内RPC并查询capabilities。Workflow 根只用于根级动作；后台孩子从公开定向 `status.details.workflowChildren` 取得真实 runId，不用 workflow key/Fleet key。resume在原owner验证租约/状态，失败不新建替代运行。
+- `schedule.*`：保留owner命名空间。Subagents只用其managementActions allowlist；Schedule Prompt 管理 seam 已在该 owner 的独立本地候选补齐并隔离验证，未全局安装。旧 owner 缺 seam 时只显示不可用，不直接读写其 JSON。
 - Intercom v1 outbox没有wake/mode，不能据此承诺精确唤醒/纠偏；自己的已接入会话优先走直接原生接口。跨peer操作只在owner接线明确后开放。
 - 原问题回答继续在原TUI；首版准确通知与跳转，不拦截ask工具或要求先在App回答。已有自动决策/审批路径不变。
 - 治理/Gate/CI和SAW都是可选集成。实际记录有来源/head/freshness才展示相应事实；缺少reader不读私有审计全文。首版SAW以打开选定现有页面为主，不新增凭据库或操作权限。
@@ -158,4 +160,4 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 
 初始性能目标为实现候选：观察handler不含I/O等待；合成负载下新增同步工作p95≤1ms、p99≤5ms；在至少1000事件及既定会话规模下与关闭桥接比较耗时/内存。阈值不是已测事实，超出先优化观察接线，不能换低能力模型、减工具或加审批过线。
 
-本轮没有安装/卸载/更新计划被执行。后续回退只退出App、按原扩展加载方式移除本扩展；不能结束Pi、清理他人状态或倒退原owner版本。发行更新需单独验证App身份/签名、独立更新源和卸载影响。
+当前只构建旁路 ad-hoc 候选和隔离 fixture；没有安装/发布/业务会话更新被执行。后续回退只退出App、按原扩展加载方式移除本扩展；不能结束Pi、清理他人状态或倒退原owner版本。发行更新需单独验证App身份/签名、独立更新源和卸载影响。

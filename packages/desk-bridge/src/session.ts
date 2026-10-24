@@ -40,6 +40,7 @@ export type SessionOptions = {
 		receive: (record: RecordV1) => void,
 	) => TransportLike;
 	now?: () => number;
+	sourceRevision?: string;
 };
 export class DeskSession {
 	private ctx?: ExtensionContext;
@@ -68,6 +69,7 @@ export class DeskSession {
 	private settledObserved = false;
 	private observationDrops = 0;
 	private metadataLoaded = false;
+	private bridgeSource: string;
 	constructor(
 		private pi: ExtensionAPI,
 		ctx: ExtensionContext,
@@ -75,6 +77,10 @@ export class DeskSession {
 	) {
 		this.ctx = ctx;
 		this.now = options.now ?? Date.now;
+		this.bridgeSource =
+			options.sourceRevision && /^[a-f0-9]{40}$/.test(options.sourceRevision)
+				? options.sourceRevision
+				: "development";
 		const identity = {
 			localHostId: createHash("sha256")
 				.update(hostname() + ":" + String(process.getuid?.()))
@@ -97,7 +103,10 @@ export class DeskSession {
 					"schedules.refresh",
 					"operation.status",
 				],
-				owners: { pi: "extension-api-1.4" },
+				owners: {
+					pi: "extension-api-1.4",
+					"pi-desk-bridge": this.bridgeSource,
+				},
 			},
 			display: { name: "Pi", mode: ctx.mode },
 			execution: ctx.isIdle() ? "unknown" : "running",
@@ -632,6 +641,7 @@ export class DeskSession {
 				queries: this.snapshot.capabilities.queries,
 				owners: {
 					pi: "extension-api-1.4",
+					"pi-desk-bridge": this.bridgeSource,
 					subagents: this.cap.version,
 					"schedule-prompt": this.scheduleActions.length
 						? "rpc-v1"

@@ -50,7 +50,7 @@
 
 ### 当前仍未满足的组合验收
 
-2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整VoiceOver/系统组合未验；6.1–6.3 仍不是全矩阵通过。6.4 已有release ad-hoc旁路候选和实际kill/重启隔离检查，hash保存在本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
+2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整VoiceOver/系统组合未验；6.1–6.3 仍不是全矩阵通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
 
 ## Workflow follow-up
 

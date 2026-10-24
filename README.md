@@ -8,7 +8,7 @@ Pi Desk 是 Pi-only 的轻量 macOS 原生可视化与管理客户端。它连�
 
 2026-10-24：已有 **SwiftUI/AppKit + TypeScript 本地源码候选**，不再只是静态稿。原生窗口、顶栏、双向私有 UDS、在线投影、原生消息/中止、Subagents 管理与统计、现有计划及注意事项均有实现；隔离真实 SDK、真实 Subagents owner 和 Schedule 管理 seam 候选的 faux-provider 验证见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
 
-这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付/无障碍完整组合及长期真实 TUI 验收尚未完成；Gate/CI 无真实 producer。未全局安装扩展、未重载业务会话、未发布或部署。远端仍为空，本地候选不代表共享 main 或 GitHub CI 已通过。
+这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付/无障碍完整组合及长期真实 TUI 验收尚未完成；Gate/CI 无真实 producer。当前支持显式授权的本机稳定安装；不强制重载业务会话，不对外发布或部署。远端仍为空，本机安装不代表共享 main 或 GitHub CI 已通过。
 
 ## 构建和合成检查
 
@@ -23,11 +23,30 @@ node --import tsx scripts/check-socket-host.mjs
 bash scripts/package-app.sh release
 ```
 
-原生检查使用 Foundation 可执行检查 runner，因此只装 CommandLineTools 时也可运行，不要求额外安装 XCTest。旁路候选位于 `tmp/candidate/Pi Desk.app`，只做 ad-hoc 本机签名，无公证、自动更新或安装步骤。
+原生检查使用 Foundation 可执行检查 runner，因此只装 CommandLineTools 时也可运行，不要求额外安装 XCTest。构建产物位于 `tmp/candidate/Pi Desk.app`，采用独立 `io.github.chenhaoxiang.pi-desk` 身份和 ad-hoc 本机签名；内含 version/build/source tree/commit 与 bridge 文件哈希，没有公证或自动更新。dirty 源码构建不能进入稳定安装。
 
 真实 owner 组合检查是显式选择的本地测试，不读取业务会话：设置 `PI_DESK_SDK` 为已审核 SDK 包根、`PI_DESK_SUBAGENTS` 为已审核 Subagents 包根、`PI_DESK_SCHEDULE_PROMPT` 为带管理 seam 的 Schedule 源码候选根，再运行 `scripts/check-subagents-native.mjs` 或 `scripts/check-schedule-native.mjs`。这些检查创建自己的合成会话、faux provider 和临时产物；不能用缺少 seam 的已安装 Schedule 版本冒充候选。
 
-## 显式接入（仅在你选择的隔离会话中）
+## 稳定本机安装与回退
+
+先在 clean 的已验证源码上构建 release，再显式安装：
+
+```sh
+bash scripts/package-app.sh release
+node --import tsx scripts/install-local.mjs install
+node --import tsx scripts/install-local.mjs verify
+```
+
+- App 固定在当前用户的 `~/Applications/Pi Desk.app`，随附 `Contents/Helpers/PiDeskPeerCheck`；首次可从 Finder 打开，不要求管理员权限，不关闭系统保护。
+- Bridge 固定在 `~/Library/Application Support/PiDesk/bridge/<source-commit>/`，内容按 manifest 校验并设为只读，不指向 worktree/tmp。普通 Pi 通过 `~/.pi/agent/extensions/pi-desk-bridge.ts` 自动发现这一固定入口；无需每次设置 helper 环境变量或 `--extension`。
+- 不改原 `settings.json`、模型、思考档、工具、prompt 或权限；已运行的会话不强制 reload，待新会话/安全自然加载才接入。显式 `--no-extensions` 或原资源排除规则继续生效。
+- `install-current.json` 只记录 App/bridge 安装字节与上一版回退位置，不保存任务、对话或凭据。安装器只替换可核验的本工具已管理版本，未知/被改写的目标保全并报错；更新前退出本 App，Pi 无需退出。
+- 首次安装的回退是退出 App 后运行 `node --import tsx scripts/install-local.mjs rollback`，只移除受管理的 App/入口与当前安装记录；有上一版则恢复其准确字节。已有 Pi 不被停止，旧的固定 bridge 版本保留以免破坏已加载会话。未知目标和其他 Pi 设置/组件不清理。
+- Schedule seam 仍只是独立候选，不随 App 偷装/升级全局 Schedule，也不启动常驻监督。未配置/旧 owner 的可选能力按实际 unavailable 展示。
+
+安装状态以 `verify` 的 byte/hash 回读和实际 App/新会话证据为准；写文件、源码检查、安装、进程运行与新会话已加载分别记录。
+
+## 开发态显式接入（仅在你选择的隔离会话中）
 
 先手动打开本地候选，再从本仓显式加载扩展：
 

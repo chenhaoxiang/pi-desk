@@ -142,6 +142,9 @@ struct SessionDetail: View {
           badge("思考档", snap.display.effort ?? "未知")
         }
         Text("当前 cwd 分支：" + (snap.display.branch ?? "未知/非 Git 目录"))
+        Text("已加载桥接 source：" + (snap.capabilities.owners["pi-desk-bridge"] ?? "未提供")).font(
+          .caption.monospaced()
+        ).textSelection(.enabled)
         if let omitted = snap.omitted, omitted.values.contains(where: { $0 > 0 }) {
           Text(
             "显示预算省略："
@@ -448,6 +451,10 @@ struct SettingsPage: View {
   @EnvironmentObject var model: AppModel
   var body: some View {
     Form {
+      Section("此应用") {
+        Text(BuildIdentity.label).font(.caption.monospaced()).textSelection(.enabled)
+        Text("本机 ad-hoc 构建，未公证、未对外发行；旧 Pi 会话不被强制重载。").font(.caption)
+      }
       Section("本机连接") {
         Text(model.socketPath).font(.caption.monospaced())
         Text("主动加载扩展；不扫描历史、不自动安装或强 reload。").font(.caption)

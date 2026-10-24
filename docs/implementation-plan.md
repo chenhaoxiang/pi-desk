@@ -15,7 +15,7 @@ verification_scope: 本地Swift/Node与隔离真实SDK/owner/GUI证据；未安�
 
 ## 1. 当前交付与下一次实施起点
 
-架构基线为 `e561305`，在原专属树有序接管后连续实施。当前已建立原生App、TS薄扩展、真实owner管理和隔离验证，具体证据见第6节；这不是完整v0.1/业务会话/上线声明。远端仍空，不能据此直推或bootstrap main；源码、安装和发行分开。
+架构基线为 `e561305`，在原专属树有序接管后连续实施。当前已建立原生App、TS薄扩展、真实owner管理和隔离验证，具体证据见第6节；这不是完整v0.1/业务会话/上线声明。当前新增本机安装授权，按用户Applications固定App与只读bridge版本实施，不以远端空仓或可选现场验收不足新增装机门槛。远端仍空，不能据此直推或bootstrap main；源码、安装和发行分开。
 
 实施与剩余验收沿[本Change任务](../openspec/changes/pi-desk-v0-1/tasks.md)推进。阶段任务是依赖与验收划分，不是逐项人工审批流程；用户后续授权的实际范围决定可连续实施到哪一步。新增运行/生产/账号/预算边界按真实授权判断，不靠文档猜测。
 
@@ -127,6 +127,10 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有28个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝负例。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
 
 性能证据限于合成标量：10,000次观察handler的p95/p99均低于0.01ms（候选机实测），慢socket/10万次离线投影保持有界；同一简单SDK任务的开启/关闭轨迹一致，另有1,000次真实SDK事件dispatch对照（包含宿主派发，实测p95/p99仍满足1ms/5ms预算，不与纯handler数值混标）。一次任务耗时不是通用性能结论，不宣称零开销。CI仅有配置、没有远端运行记录；本机无XCTest，改用同样可失败的Foundation检查runner，未安装Xcode或降低行为断言。
+
+### 本机稳定安装增量
+
+用户随后明确授权本机安装、正常启动与安全验证。`scripts/install-local.mjs` 的 install/verify/rollback 只管理固定用户域App、以source commit命名的bridge和独立自动发现入口；不修改原Pi settings，不升级可选Schedule或启动服务，不强reload旧业务会话。新的 `check-installed-native.mjs` 先用公共resolver确认真实入口可发现，再把同一入口字节放入隔离agent profile，以原生SDK常规自动发现而非 `--extension`/注入registerBridge启用；检查默认helper/socket与实际加载source。具体安装路径、hash、当前进程和本机一次性原件只保存在本机manifest与ignored tmp，不进入公开Git。
 
 ### 保留的未完成项
 

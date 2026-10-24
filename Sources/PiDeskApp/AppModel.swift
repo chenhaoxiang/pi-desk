@@ -6,6 +6,24 @@ import PiDeskTransport
 import SwiftUI
 import UserNotifications
 
+enum BuildIdentity {
+  static var version: String {
+    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+      ?? "development"
+  }
+  static var source: String {
+    Bundle.main.object(forInfoDictionaryKey: "PiDeskSourceRevision") as? String ?? "unbundled"
+  }
+  static var channel: String {
+    Bundle.main.object(forInfoDictionaryKey: "PiDeskBuildChannel") as? String ?? "development"
+  }
+  static var build: String {
+    Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+  }
+  static var label: String {
+    "Pi Desk \(version) · \(channel) build \(build) · source \(source.prefix(12))"
+  }
+}
 struct DeskSettings: Codable {
   var herdrExecutable = ""
   var managementURL = ""

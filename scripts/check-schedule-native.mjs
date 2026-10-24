@@ -62,6 +62,18 @@ try {
 			expiresAt: new Date(Date.now() + 60000).toISOString(),
 		});
 	storage.addJob({
+		id: "fault-own",
+		name: "Synthetic uncertain delete",
+		type: "interval",
+		schedule: "1h",
+		intervalMs: 3600000,
+		prompt: "PRIVATE_FIXTURE_PLAN",
+		enabled: false,
+		createdAt: new Date().toISOString(),
+		runCount: 0,
+		session: own.session.sessionId,
+	});
+	storage.addJob({
 		id: "event-own",
 		name: "Synthetic-event",
 		type: "event",
@@ -131,6 +143,44 @@ try {
 	await own.session.waitForIdle();
 	assert.equal(storage.getJob("event-own").runCount, 1);
 	assert.equal(own.session.messages.filter((m) => m.role === "user").length, 0);
+	const originalRemove = CronStorage.prototype.removeJob;
+	let uncertainEffects = 0;
+	try {
+		CronStorage.prototype.removeJob = function (id) {
+			const removed = originalRemove.call(this, id);
+			if (id === "fault-own") {
+				uncertainEffects++;
+				throw Error("PRIVATE_POST_MUTATION");
+			}
+			return removed;
+		};
+		const uncertain = await request(
+			"uncertain-delete",
+			"schedule.delete",
+			"fault-own",
+		);
+		assert.equal(uncertain.status, "unknown");
+		assert.equal(uncertain.ownerRef, "fault-own");
+		assert.equal(storage.getJob("fault-own"), undefined);
+		assert.equal(
+			(await request("uncertain-delete", "schedule.delete", "fault-own"))
+				.status,
+			"unknown",
+		);
+		await until(
+			() =>
+				records.filter((r) => r.requestId === "uncertain-delete").length >= 2,
+		);
+		assert.ok(
+			records
+				.filter((r) => r.requestId === "uncertain-delete")
+				.every((r) => r.result.status === "unknown"),
+		);
+		assert.equal(uncertainEffects, 1);
+		assert.ok(!JSON.stringify(records).includes("PRIVATE_POST_MUTATION"));
+	} finally {
+		CronStorage.prototype.removeJob = originalRemove;
+	}
 	assert.deepEqual(own.errors, []);
 	console.log(
 		JSON.stringify({
@@ -138,6 +188,8 @@ try {
 			realOwner: "pi-schedule-prompt-management-candidate",
 			nativeSDK: true,
 			pauseResume: true,
+			postMutationUnknown: true,
+			unknownDuplicateNotReplayed: true,
 			foreignTargetRejected: true,
 			triggerExistingEvent: true,
 			noPromptInWire: true,

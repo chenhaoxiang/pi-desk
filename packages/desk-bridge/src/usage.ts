@@ -101,7 +101,7 @@ export class AttachmentUsage {
 			coverage: "partial",
 			tokens: this.consumed ? { ...this.totals } : emptyTokens(),
 			cost: null,
-			unresolvedChildren: 0,
+			unresolvedChildren: null,
 			includedRunIds: [],
 			reasons: [...this.reasons],
 		};
@@ -123,7 +123,7 @@ export function costProjection(
 		Number.isSafeInteger(raw.unresolvedAsyncChildren) &&
 		Number(raw.unresolvedAsyncChildren) >= 0
 			? Number(raw.unresolvedAsyncChildren)
-			: 1;
+			: null;
 	const ids = raw.children
 		.slice(0, 128)
 		.flatMap((c) => (object(c) && safeId(c.runId) ? [c.runId] : []));
@@ -136,7 +136,7 @@ export function costProjection(
 		windowId,
 		startedAt,
 		coverage:
-			unresolved || !valid || ids.length !== raw.children.length
+			unresolved !== 0 || !valid || ids.length !== raw.children.length
 				? "partial"
 				: "owner-reported",
 		tokens: total,
@@ -149,6 +149,11 @@ export function costProjection(
 		unresolvedChildren: unresolved,
 		includedRunIds: [...new Set(ids)],
 		accountingGroup: windowId,
-		reasons: unresolved ? ["unresolved-children"] : [],
+		reasons:
+			unresolved === null
+				? ["child-coverage-unavailable"]
+				: unresolved > 0
+					? ["unresolved-children"]
+					: [],
 	};
 }

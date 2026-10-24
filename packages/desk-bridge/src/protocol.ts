@@ -35,7 +35,7 @@ export type UsageReport = {
 	coverage: string;
 	tokens: Tokens;
 	cost: number | null;
-	unresolvedChildren: number;
+	unresolvedChildren: number | null;
 	includedRunIds: string[];
 	accountingGroup?: string;
 	reasons: string[];
@@ -148,12 +148,24 @@ export const object = (v: unknown): v is Record<string, unknown> =>
 	v !== null && typeof v === "object" && !Array.isArray(v);
 export const safeId = (v: unknown): v is string =>
 	typeof v === "string" && /^[A-Za-z0-9._-]{1,128}$/.test(v);
-export const text = (v: unknown, limit = 512): string | undefined =>
-	typeof v === "string"
-		? Buffer.from(v.slice(0, limit).replace(/[\x00-\x1f\x7f]/g, " "))
-				.subarray(0, Math.max(0, limit - 3))
-				.toString("utf8")
-		: undefined;
+export function text(v: unknown, limit = 512): string | undefined {
+	if (typeof v !== "string") return undefined;
+	const budget = Number.isSafeInteger(limit) ? Math.max(0, limit) : 512;
+	let output = "",
+		bytes = 0;
+	for (const character of v) {
+		const point = character.codePointAt(0)!;
+		const scalar =
+			point < 32 || point === 127 || (point >= 0xd800 && point <= 0xdfff)
+				? " "
+				: character;
+		const size = Buffer.byteLength(scalar);
+		if (bytes + size > budget) break;
+		output += scalar;
+		bytes += size;
+	}
+	return output;
+}
 export const identityValid = (v: unknown): v is Identity =>
 	object(v) &&
 	safeId(v.localHostId) &&

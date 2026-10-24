@@ -9,6 +9,49 @@ import {
 	type Schedule,
 	type Result,
 } from "./protocol.ts";
+const preAdmissionCodes = new Set([
+	"invalid_request",
+	"invalid_params",
+	"unsupported_version",
+	"unsupported_method",
+	"no_active_session",
+	"not_found",
+	"invalid_state",
+	"request-rejected",
+]);
+const ownerErrorCodes = new Set([
+	...preAdmissionCodes,
+	"execution_failed",
+	"management-unavailable",
+	"operation-outcome-unknown",
+]);
+export class OwnerFailure extends Error {
+	constructor(
+		readonly code: string,
+		readonly notAdmitted = false,
+	) {
+		super(code);
+		this.name = "OwnerFailure";
+	}
+}
+function replyFailure(raw: unknown): OwnerFailure {
+	const code =
+		object(raw) && typeof raw.code === "string" && ownerErrorCodes.has(raw.code)
+			? raw.code
+			: "owner-error-unknown";
+	return new OwnerFailure(code, preAdmissionCodes.has(code));
+}
+export function ownerFailureResult(error: unknown, ownerRef?: string): Result {
+	return error instanceof OwnerFailure
+		? {
+				status: error.notAdmitted ? "rejected" : "unknown",
+				code: error.code.startsWith("owner-")
+					? error.code
+					: "owner-" + error.code,
+				ownerRef,
+			}
+		: { status: "unknown", code: "owner-outcome-unknown", ownerRef };
+}
 export class OwnerRPC {
 	private pending = new Set<() => void>();
 	constructor(
@@ -17,21 +60,25 @@ export class OwnerRPC {
 		readonly timeoutMs = 2000,
 	) {}
 	call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-		if (this.pending.size >= 4) return Promise.reject(new Error("owner-busy"));
+		if (this.pending.size >= 4)
+			return Promise.reject(new OwnerFailure("owner-busy", true));
 		return new Promise((resolve, reject) => {
 			const requestId = randomUUID();
 			let done = false;
 			let off = () => {};
-			const finish = (error?: string, data?: unknown) => {
+			const finish = (error?: OwnerFailure, data?: unknown) => {
 				if (done) return;
 				done = true;
 				clearTimeout(timer);
 				off();
 				this.pending.delete(cancel);
-				error ? reject(new Error(error)) : resolve(data);
+				error ? reject(error) : resolve(data);
 			};
-			const cancel = () => finish("owner-unavailable");
-			const timer = setTimeout(() => finish("owner-timeout"), this.timeoutMs);
+			const cancel = () => finish(new OwnerFailure("owner-unavailable"));
+			const timer = setTimeout(
+				() => finish(new OwnerFailure("owner-timeout")),
+				this.timeoutMs,
+			);
 			timer.unref();
 			this.pending.add(cancel);
 			off = this.events.on(
@@ -44,7 +91,7 @@ export class OwnerRPC {
 					)
 						return;
 					if (reply.success === true) finish(undefined, reply.data);
-					else finish("owner-rejected");
+					else finish(replyFailure(reply.error));
 				},
 			);
 			try {
@@ -55,7 +102,7 @@ export class OwnerRPC {
 					params,
 				});
 			} catch {
-				finish("owner-unavailable");
+				finish(new OwnerFailure("owner-unavailable"));
 			}
 		});
 	}
@@ -113,7 +160,7 @@ export function subagentRuns(raw: unknown, cap: OwnerCapabilities): Run[] {
 				if (cap.steer && r.kind !== "workflow") actions.push("run.steer");
 			}
 			if (
-				["paused", "stopped", "failed", "partial"].includes(state) &&
+				["paused", "complete", "failed", "partial"].includes(state) &&
 				cap.resume
 			)
 				actions.push("run.resume");
@@ -166,7 +213,10 @@ export function subagentChildRuns(
 			if (cap.stop) actions.push("run.stop");
 			if (cap.steer) actions.push("run.steer");
 		}
-		if (["stopped", "paused", "failed"].includes(state) && cap.resume)
+		if (
+			["paused", "complete", "failed", "partial"].includes(state) &&
+			cap.resume
+		)
 			actions.push("run.resume");
 		return [
 			{
@@ -238,7 +288,7 @@ export function ownerResult(
 	if (!object(raw))
 		return { status: "unknown", code: "owner-response-unknown", ownerRef };
 	if (raw.success === false || raw.isError === true)
-		return { status: "rejected", code: "owner-rejected", ownerRef };
+		return ownerFailureResult(replyFailure(raw.error), ownerRef);
 	const details = object(raw.details) ? raw.details : raw;
 	if (safeId(details.asyncId)) ownerRef = details.asyncId;
 	else if (safeId(details.runId)) ownerRef = details.runId;

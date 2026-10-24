@@ -93,7 +93,7 @@ public struct UsageReport: Codable, Equatable, Sendable {
   public var coverage: String
   public var tokens: Tokens
   public var cost: Double?
-  public var unresolvedChildren: Int
+  public var unresolvedChildren: Int?
   public var includedRunIds: [String]
   public var accountingGroup: String?
   public var reasons: [String]

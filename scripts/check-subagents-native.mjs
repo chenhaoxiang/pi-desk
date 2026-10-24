@@ -265,7 +265,10 @@ try {
 		() =>
 			records.some((r) =>
 				r.snapshot?.runs.some(
-					(run) => run.runId === runId && run.actions.includes("run.resume"),
+					(run) =>
+						run.runId === runId &&
+						run.state === "stopped" &&
+						!run.actions.includes("run.resume"),
 				),
 			),
 		15000,
@@ -283,6 +286,12 @@ try {
 	assert.equal(
 		records.find((r) => r.requestId === "stopped-resume-refused").result.status,
 		"rejected",
+	);
+	await assert.rejects(
+		rpc.call("resume", {
+			id: runId,
+			message: "Do not replace stopped fixture",
+		}),
 	);
 	await rm(join(root, "child-ready"), { force: true });
 	const pausedLaunch = await rpc.call("spawn", {

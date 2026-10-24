@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { AttachmentUsage } from "../src/usage.ts";
+import { AttachmentUsage, costProjection } from "../src/usage.ts";
 import type { Tokens } from "../src/protocol.ts";
 const fixture = JSON.parse(
 	await readFile(
@@ -35,4 +35,22 @@ test("reload/fork/auxiliary scopes are not promoted to native total", () => {
 	assert.equal(usage.report().scope, "attachment-window");
 	assert.equal(usage.report().windowId, "new-window");
 	assert.equal(usage.report().coverage, "partial");
+});
+
+test("missing child coverage is null, not an invented zero or one", () => {
+	assert.equal(
+		new AttachmentUsage("unknown-window").report().unresolvedChildren,
+		null,
+	);
+	const report = costProjection(
+		{
+			version: 1,
+			total: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+			children: [],
+		},
+		"owner",
+		null,
+	)!;
+	assert.equal(report.unresolvedChildren, null);
+	assert.equal(report.coverage, "partial");
 });

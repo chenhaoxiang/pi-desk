@@ -55,7 +55,7 @@
           "cacheWrite": 5
         },
         "cost": null,
-        "unresolvedChildren": 0,
+        "unresolvedChildren": null,
         "includedRunIds": [],
         "reasons": [
           "attachment-only"

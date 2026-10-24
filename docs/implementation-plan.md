@@ -107,7 +107,7 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 - 原生顶栏、六页管理窗口、准确会话身份、分开的连接/回合/输入/owner覆盖、模型/思考档和按需本机元数据。只显示主动接入；Git 元数据仅后台固定只读命令，不逐工具运行。
 - native follow-up/steer/abort-current；Subagents ping/status/cost/steer/stop/resume 与公开 schedule allowlist。Workflow 根、后台 child runId、display-only Fleet 对象分开，不用展示 key 控制运行。
 - attachment-window 按模型分组、final receipt 去重、未知/partial；owner累计保留原scope和child覆盖，不拼全账户/历史总账。Schema中 owner 未提供的累计起点为 null。
-- Schedule Prompt owner 薄 seam 本地提交 `85c58cd961417b663d17f9ba88c323228af9adec`（分支 `feat/pi-desk-management-20261024`，未推送/安装）：只复用原 owner 的当前会话列表、暂停/恢复/删除及既有 event-job 触发；不新增 scheduler/CRUD/service。
+- Schedule Prompt owner 薄 seam 本地提交 `249a8fa8529c4ac988f1b5a4845426ce6aa2dd79`（含首个seam提交 `85c58cd`）（分支 `feat/pi-desk-management-20261024`，未推送/安装）：只复用原 owner 的当前会话列表、暂停/恢复/删除及既有 event-job 触发；不新增 scheduler/CRUD/service。
 - 实际 ui_prompt 和可选 question producer 生命周期、已读/静音、系统已授权通知的旁路发送、未接管原兜底；可选安全 evidence reader 和精确本机管理页设置，不消费原始日志或凭据。
 
 ### 可复跑的验证
@@ -123,6 +123,8 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 | 原生GUI/CUA | 双会话主动接入、原生AX控件、后台发送只命中选定会话，界面requested；截图只在ignored tmp | 完整TUI/系统通知/Herdr现场交付 |
 
 实际对照使用 Pi `1.4.0-fork.1`、Subagents `0.80.0-fork.1` 和上述 Schedule 源码提交；默认开发依赖 Pi `1.4.0` 的 SDK 基线也跑过。真实 provider/账号/密钥调用均为0，未改全局Pi设置、模型/思考档/原工具或业务会话。原生helper和 App 为本仓代码，没有复用 CodeIsland 文件或素材。
+
+首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有28个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝负例。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
 
 性能证据限于合成标量：10,000次观察handler的p95/p99均低于0.01ms（候选机实测），慢socket/10万次离线投影保持有界；同一简单SDK任务的开启/关闭轨迹一致，另有1,000次真实SDK事件dispatch对照（包含宿主派发，实测p95/p99仍满足1ms/5ms预算，不与纯handler数值混标）。一次任务耗时不是通用性能结论，不宣称零开销。CI仅有配置、没有远端运行记录；本机无XCTest，改用同样可失败的Foundation检查runner，未安装Xcode或降低行为断言。
 

@@ -10,7 +10,7 @@ import {
 	type Result,
 	type Snapshot,
 } from "./protocol.ts";
-import { OwnerRPC, ownerResult } from "./owners.ts";
+import { OwnerRPC, ownerResult, ownerFailureResult } from "./owners.ts";
 export class ActionRouter {
 	private cache = new Map<
 		string,
@@ -77,9 +77,10 @@ export class ActionRouter {
 			void this.dispatch(record)
 				.then(resolve, (error: unknown) =>
 					resolve(
-						error instanceof Error && error.message === "owner-rejected"
-							? { status: "rejected", code: "owner-rejected" }
-							: { status: "unknown", code: "owner-outcome-unknown" },
+						ownerFailureResult(
+							error,
+							record.target?.runId ?? record.target?.scheduleId,
+						),
 					),
 				)
 				.finally(() => this.active--);

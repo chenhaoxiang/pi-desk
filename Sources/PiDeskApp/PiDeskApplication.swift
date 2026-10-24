@@ -181,10 +181,12 @@ struct SessionDetail: View {
                 "管理消息，仅递送到选定会话")
               HStack {
                 Button("发送要求") {
-                  model.action(
+                  if model.action(
                     .message, target: Target(owner: "pi"),
                     parameters: Parameters(text: message, mode: mode))
-                  message = ""
+                  {
+                    message = ""
+                  }
                 }.disabled(
                   message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     || message.utf8.count > 16384 || s.connection != .connected)
@@ -367,7 +369,10 @@ struct TokenPage: View {
                     token("Cache read", u.tokens.cacheRead)
                     token("Cache write", u.tokens.cacheWrite)
                   }
-                  Text("未覆盖孩子 \(u.unresolvedChildren) · " + u.reasons.joined(separator: ", ")).font(
+                  Text(
+                    "未覆盖孩子 " + (u.unresolvedChildren.map { String($0) } ?? "未知") + " · "
+                      + u.reasons.joined(separator: ", ")
+                  ).font(
                     .caption
                   ).foregroundStyle(.secondary)
                 }

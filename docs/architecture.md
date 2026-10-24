@@ -111,7 +111,9 @@ socket写、序列化、可选branch查询和owner统计放到有界后台调度
 | action-result | 扩展→App | requestId、rejected/accepted/queued/requested/unknown，owner handle/原因 |
 | operation-update | 扩展→App | 同一owner引用的实际执行/终态，不能由socket送达推导 |
 
-断线后的App不重放action。一次点击只生成一个请求；重复同ID在同epoch的有效缓存内只返回相同受理结果，不能再次执行；同ID不同参数必须拒绝。已知缓存过期/新epoch/潜在副作用不明时返回unknown并按owner引用对账；不承诺在记忆窗口外识别任意重复提交，不承诺持久exactly-once，不建立新操作账本。控制请求数量与回复队列独立限流，不用普通状态覆盖回复。当前生产端采用1条合并快照＋32条回复，App每连接/每批也有上限；组合DTO按字节预算投影并保留omitted/partial，不让合法大快照超过64KiB后永久断联。
+断线后的App不重放action。一次点击只生成一个请求；重复同ID在同epoch的有效缓存内只返回相同受理结果，不能再次执行；同ID不同参数必须拒绝。已知缓存过期/新epoch/潜在副作用不明时返回unknown并按owner引用对账；不承诺在记忆窗口外识别任意重复提交，不承诺持久exactly-once，不建立新操作账本。owner回报已进入执行但失败、超时或无分类错误时保持unknown并保留已知owner引用；只有原owner明确证明尚未入副作用阶段才显示rejected。Schedule seam分别使用request-rejected与operation-outcome-unknown，不把旧management-unavailable视作未执行证明。
+
+控制请求数量与回复队列独立限流，不用普通状态覆盖回复。当前生产端采用1条合并快照＋32条回复，App每连接/每批也有上限；组合DTO按字节预算投影并保留omitted/partial，不让合法大快照超过64KiB后永久断联。
 
 App请求由连接owner在原宿主事件循环的应用层回调处理，不从新模型工具或tool_call内递归调用工具。确需模型执行的新要求明确进入原生sendUserMessage队列；普通查看/管理不以LLM代替确定性API。
 

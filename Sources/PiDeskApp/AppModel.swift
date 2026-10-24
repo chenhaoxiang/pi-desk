@@ -93,22 +93,25 @@ struct DeskSettings: Codable {
         kind: "query", identity: s.snapshot.identity, requestId: UUID().uuidString,
         query: usage ? "usage.refresh" : "refresh"), to: s.connectionId)
   }
-  func action(_ action: Action, target: Target, parameters: Parameters = Parameters()) {
+  @discardableResult
+  func action(_ action: Action, target: Target, parameters: Parameters = Parameters()) -> Bool {
     guard let s = current,
       let record = store.request(
         identity: s.snapshot.identity, action: action, target: target, parameters: parameters,
         now: Date().timeIntervalSince1970 * 1000)
     else {
-      actionNote = "目标不可用，或已有相同操作等待回执"
-      return
+      actionNote = "目标不可用，或已有相同操作等待回执；草稿已保留"
+      return false
     }
     do {
       _ = try Wire.encode(record)
       server.send(record, to: s.connectionId)
       actionNote = "已发出请求；受理与实际结果分别显示"
+      return true
     } catch {
       store.failSend(record.requestId!)
-      actionNote = "请求未确认，未自动重发"
+      actionNote = "请求未确认，未自动重发；草稿已保留"
+      return false
     }
   }
   func openOriginal() {

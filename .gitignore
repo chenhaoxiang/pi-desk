@@ -1,0 +1,17 @@
+# Local experiments, synthetic fixtures and generated previews
+/tmp/
+/.build/
+/.swiftpm/
+/node_modules/
+/dist/
+.DS_Store
+
+# Never commit private settings or credentials
+/keys-local/
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.local.json
+*.local.yaml

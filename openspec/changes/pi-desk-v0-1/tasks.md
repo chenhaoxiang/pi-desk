@@ -73,7 +73,7 @@
 - [x] 9.2 增加仅显式点击的系统通知授权入口和fake授权/拒绝/错误/发送失败检查，真实OS consent保持用户决定，不新增执行门禁。
 - [x] 9.3 非法custom日期不查询/不改义并保留旧聚合及在途保护，补calendar同日边界与真实原生提示。
 - [x] 9.4 已运行600.005s独立PTY/实际InteractiveMode/faux soak：58轮、12次工具续行、5次receiver重启/15离线轮、140 final与A/B 82/58一致；不假称完整业务TUI资格。
-- [ ] 9.5 更新固定source稳定App并保留build7准确回退，回读安装和通知按钮/日期提示；未满足的Herdr/VoiceOver/真实系统投递继续保留。
+- [x] 9.5 已安装62277d8/build9并保留ad09e82/build7准确回退，回读签名/hash/实际通知按钮和日期合成提示；Herdr/VoiceOver/真实系统投递继续保留。
 
 ## Workflow follow-up
 

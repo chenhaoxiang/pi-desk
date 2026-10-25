@@ -39,17 +39,16 @@ struct AggregateTokenPage: View {
         }
         let uncovered = model.sessions.filter { $0.connection == .connected && $0.snapshot.usageRecorder == nil }
         if !uncovered.isEmpty {
-          DeskCard {
-            VStack(alignment: .leading, spacing: 8) {
-              Label("旧桥接未纳入：\(uncovered.count) 个在线会话", systemImage: "exclamationmark.triangle").font(.subheadline.weight(.medium)).foregroundStyle(.orange)
-              Text("这些会话当前没有final持久采集器。新Pi会话正常启动时自动加载新版；正在工作的旧会话不强制重载，先前用量无法按日期补记。")
-              Text("未采集模型：" + Array(Set(uncovered.compactMap { $0.snapshot.display.model })).sorted().joined(separator: "、")).lineLimit(2)
-              DisclosureGroup("查看未纳入会话") {
-                ForEach(uncovered, id: \.snapshot.identity) { session in
-                  Text(session.snapshot.display.name + " · " + (session.snapshot.display.model ?? "模型未知")).font(.caption2)
-                }
-              }.font(.caption)
-            }.font(.caption).fixedSize(horizontal: false, vertical: true)
+          DisclosureGroup {
+            VStack(alignment: .leading, spacing: 7) {
+              Text("这些旧会话当前没有final持久采集器；新Pi正常启动时自动加载新版，不强制重载正在进行的工作，旧窗口累计不能补记日期。")
+              Text("同一模型的新会话已记录数据仍单独计入总览；这里表示会话覆盖缺口，不表示整个模型都未采集。")
+              ForEach(uncovered, id: \.snapshot.identity) { session in
+                Text(session.snapshot.display.name + " · " + (session.snapshot.display.model ?? "模型未知")).font(.caption2)
+              }
+            }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+          } label: {
+            Label("旧桥接未纳入：\(uncovered.count) 个在线会话 · 等待自然加载", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
           }
         }
         if model.usagePreset == .custom {

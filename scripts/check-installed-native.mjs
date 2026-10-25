@@ -3,6 +3,7 @@ import {
 	mkdir,
 	mkdtemp,
 	readFile,
+	readdir,
 	writeFile,
 	copyFile,
 	rm,
@@ -18,6 +19,8 @@ assert.ok(!installed.bridgePath.includes("/tmp/"));
 const rootParent = resolve("tmp/installed-native");
 await mkdir(rootParent, { recursive: true, mode: 0o700 });
 const root = await mkdtemp(join(rootParent, "case-"));
+// Usage recording is persistent now. Synthetic autoload checks must never enter the user's ledger.
+process.env.PI_DESK_USAGE_DIR = join(root, "usage-v1");
 delete process.env.PI_DESK_PEER_CHECK;
 delete process.env.PI_DESK_SOCKET;
 // Discovery only: no other global extension factory or account/settings store is loaded.
@@ -48,6 +51,8 @@ async function state() {
 		helperSha256: installed.helperSha256,
 		canonicalDiscovery: true,
 		isolatedAutoload: true,
+		usageStoreIsolated: true,
+		usageRoot: process.env.PI_DESK_USAGE_DIR,
 		peerHelperOverride: false,
 		socketOverride: false,
 		sdkVersion,
@@ -155,6 +160,17 @@ try {
 		assert.equal(faux.state.callCount, 0);
 		hosts.push({ session, faux, errors, name });
 		await session.prompt("One isolated installed bridge fixture");
+	}
+	if (installed.info.bridgeFiles["src/usage-store.ts"]) {
+		await until(async () => {
+			const spool = join(process.env.PI_DESK_USAGE_DIR, "spool");
+			let count = 0;
+			for (const shard of await readdir(spool).catch(() => [])) {
+				if (!/^[a-f0-9]{2}$/.test(shard)) continue;
+				count += (await readdir(join(spool, shard))).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).length;
+			}
+			return count >= hosts.length;
+		});
 	}
 	await save();
 	console.log(

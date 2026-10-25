@@ -8,7 +8,7 @@ Pi Desk 是 Pi-only 的轻量 macOS 原生可视化与管理客户端。它连�
 
 2026-10-24：已有 **SwiftUI/AppKit + TypeScript 本地源码候选**，不再只是静态稿。原生compact/expanded顶部灵动岛、中文分层管理窗口、双向私有 UDS、在线投影、原生消息/中止、Subagents 管理与统计、现有计划及注意事项均有实现；隔离真实 SDK、真实 Subagents owner 和 Schedule 管理 seam 候选的 faux-provider 验证见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
 
-这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付/无障碍完整组合及长期真实 TUI 验收尚未完成；Gate/CI 无真实 producer。已按显式授权完成本机稳定安装（视觉源码 `4f8846f` / build `5`）及隔离双会话管理验真，保留上一版准确回退；不强制重载业务会话，不对外发布或部署。远端仍为空，本机安装不代表共享 main 或 GitHub CI 已通过。
+这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付/无障碍完整组合及长期真实 TUI 验收尚未完成；Gate/CI 无真实 producer。已按显式授权完成本机稳定安装（总用量实现源码 `ad09e82` / build `7`）及隔离双会话管理验真，保留上一版准确回退；不强制重载业务会话，不对外发布或部署。远端仍为空，本机安装不代表共享 main 或 GitHub CI 已通过。
 
 ## 构建和合成检查
 

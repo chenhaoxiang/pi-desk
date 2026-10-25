@@ -136,7 +136,7 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 用户要求参考CodeIsland顶部区域，重点转为给人看、给人操作的可视化。沿同一Change已实现原生顶部compact/expanded panel、safeArea/无刘海fallback、中文分层卡片、按需消息输入与后置诊断；不改变wire/owner/模型或工具。显式合成预览真实显示了compact、expanded、空态、长名、断连、状态较旧、多会话和浅色管理窗；pin与Escape退出编辑保留草稿已用原生控件验真。核心检查增加中文状态、几何/交互和两个目标切换后的准确epoch管理断言；Reduce Motion路径禁用动效。Escape退出编辑与草稿保留有原生状态回读；Tab有一次精确窗口前台投递失败，最终显式合成窗口投递后原生responder回读为SwiftUI.KeyViewProxy，但没有证明完整焦点顺序。完整键盘遍历与系统辅助技术资格留在2.4/6.3，不冒称全验。预览不连接真实会话、不发送管理动作、不改系统设置。
 
-视觉代码首个build5安装事实仍保留。当前持久用量候选在build6源码前由本次实现继续构建，尚未替换稳定App；只有在最终release/安装verify后更新本段installed事实。已验证视觉源码 `4f8846f69aab02e7ebc93f0dc89a5cdb7883341f` 构建为本机 `0.1.0` build `5`，稳定App/固定bridge的安装、签名、字节清单与实际运行source均回读一致；上一版 `027572e36fc9143f1c8ade44156ded44d417c5f2` build `4` 的准确回退保留。新管理窗通过真实安装入口自动发现的两个隔离faux-native会话验证：在A卡片追加要求后，A调用数1→2、B保持1，真实provider调用0。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
+总用量候选 `ad09e82865aebffacfea914542924e4216142fc6` 已构建为本机 `0.1.0` build `7` 并完成安装/verify、签名与运行验真；App SHA256=`a3f486872a8e4c0a43cda8a5369996524a7ef516ae37f5dbdd7b9dc78a292c09`，bridge digest=`4036a6287d28e05dbfc8ed05eeecab802a21087f69554404c3552b0be4c064a8`，entry SHA256=`12d4f228488ae39f658dfdfef5aed2b573e81bf8f0e70a7d0d3f9308a88b8ede`；上一版视觉 `4f8846f69aab02e7ebc93f0dc89a5cdb7883341f` build `5` 的准确回退保留。新版稳定入口的两个隔离faux-native会话自动发现验证仍通过：A/B初始调用1/1，实际provider0，usage spool独立落到测试目录不污染用户账本；原生稳定App总览页重开后回读4条隔离synthetic final并显示总量3116，App退出期间A/B继续到2/2，重开SQLite索引后spool清空且总量恢复，无重复。旧build5的A追加要求A1→2/B1证据继续有效，动作边界未改。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
 
 ### 保留的未完成项
 

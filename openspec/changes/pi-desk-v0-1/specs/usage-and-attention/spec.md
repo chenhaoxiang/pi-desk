@@ -58,6 +58,10 @@ Pi Desk SHALL 默认展示跨所有已记录Pi会话的时间总用量，支持�
 - **WHEN** 用户在明确的本地IANA时区选择日期范围
 - **THEN** 用日历日边界与内部半开区间归桶，DST/跨月/跨日保持精确，自定义结束日含整天，未来和未采集日期不伪装成零消费
 
+#### Scenario: Cache reuse dominates recorded volume
+- **WHEN** 缓存读取大于本次交互输入输出
+- **THEN** 主页面分别显示交互Token(input+output)、缓存复用/写入和四桶记录总处理量；默认趋势使用交互口径，趋势/数据表/模型分布随同一选择切换，不把缓存隐藏或冒充新输入/账单
+
 #### Scenario: Custom end precedes start
 - **WHEN** 自定义结束日期早于开始日期
 - **THEN** 不提交新查询，不将范围偷偷归一成另一天，保留旧有效结果并清楚要求修正日期；旧在途回调也不覆盖当前结果

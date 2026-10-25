@@ -145,7 +145,7 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 用户要求参考CodeIsland顶部区域，重点转为给人看、给人操作的可视化。沿同一Change已实现原生顶部compact/expanded panel、safeArea/无刘海fallback、中文分层卡片、按需消息输入与后置诊断；不改变wire/owner/模型或工具。显式合成预览真实显示了compact、expanded、空态、长名、断连、状态较旧、多会话和浅色管理窗；pin与Escape退出编辑保留草稿已用原生控件验真。核心检查增加中文状态、几何/交互和两个目标切换后的准确epoch管理断言；Reduce Motion路径禁用动效。Escape退出编辑与草稿保留有原生状态回读；Tab有一次精确窗口前台投递失败，最终显式合成窗口投递后原生responder回读为SwiftUI.KeyViewProxy，但没有证明完整焦点顺序。完整键盘遍历与系统辅助技术资格留在2.4/6.3，不冒称全验。预览不连接真实会话、不发送管理动作、不改系统设置。
 
-总用量候选 `62277d8d6ef7f742f499f32e9849f9874305fe6d` 已构建为本机 `0.1.0` build `9` 并完成安装/verify、签名与运行验真；App SHA256=`2a9c0bcd20f176a82f86625c7f0f36a96b541b0aaf095306d9b8bd4652fa9230`，bridge digest=`4036a6287d28e05dbfc8ed05eeecab802a21087f69554404c3552b0be4c064a8`，entry SHA256=`687838165e76dadd0f9c9c3acc35d169cf562a9c9b6b86a1921ed6fdcd4f36dd`；上一版总用量 `ad09e82865aebffacfea914542924e4216142fc6` build `7` 的准确回退保留。新版稳定App实际读回“本机版本9”、通知状态“尚未授权；点击开启后才申请许可”和显式“开启系统通知”按钮；前述隔离faux-native持久重开3116/2→2证据、旧build5 A追加A1→2/B1证据继续有效，动作边界未改。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
+总用量候选 `cb139bd70ff9b44e9133501ac3f21225c883f255` 已构建为本机 `0.1.0` build `12` 并完成安装/verify、签名与运行验真；App SHA256=`2ec6e9bae1806caed122d1b65e3fedff44e1038cd0d90581b6cccd535b0a3a80`，bridge digest=`4036a6287d28e05dbfc8ed05eeecab802a21087f69554404c3552b0be4c064a8`；上一版 `83926f3d24f7acdae7fca1ad10ccf8e71ec287a3` build `11` 的准确回退保留。新版稳定App真实读回：默认“在线”不把断连卡挤入主列表；真实搜索无匹配时可见计数归零且详情进入选择空态；Token页默认交互口径、缓存/全部可切换，采集覆盖从实际最早记录起，明确本地时区和原始UTC。真实metadata-only聚合和UI对应数值只保存在本机ignored tmp，不将用户具体用量放入公开Git。前述隔离faux-native持久重开3116及旧build5 A追加证据继续有效，动作边界未改。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
 
 ### A1–A11 / 6.1–6.2 逐项覆盖与缺口
 

@@ -75,7 +75,7 @@
 - [x] 9.4 已运行600.005s独立PTY/实际InteractiveMode/faux soak：58轮、12次工具续行、5次receiver重启/15离线轮、140 final与A/B 82/58一致；不假称完整业务TUI资格。
 - [x] 9.5 已安装62277d8/build9并保留ad09e82/build7准确回退，回读签名/hash/实际通知按钮和日期合成提示；Herdr/VoiceOver/真实系统投递继续保留。
 
-## Workflow follow-up
+## 10. 真实运行界面与统计语义核修\n\n- [x] 10.1 真实稳定App核对SessionList的在线/全部/断连/搜索/选择空态，修可见计数、长名和默认断连呈现，避免过滤外详情误操作。\n- [x] 10.2 将用量总览拆为交互Token、缓存复用/写入、四桶记录总处理量；趋势/数据表/模型分布共用交互/缓存/全部口径，补独立算式和真实metadata-only回读。\n- [x] 10.3 更新并验真固定source稳定App，保留build11回退；真实Herdr/VoiceOver/OS通知投递等仍不冒称。\n\n## Workflow follow-up
 
 - 共享源码交付按当时适用的独立只读审查、PR、检查和普通merge流程；空仓首main的初始化需匹配实际授权，不默认直推。
 - 安装、真实启用和发行只按对应范围连续推进，不把本Change的存在当额外批准或操作许可。

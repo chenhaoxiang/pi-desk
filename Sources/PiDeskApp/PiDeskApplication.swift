@@ -186,7 +186,7 @@ struct SessionList: View {
         TextField("搜索会话、项目或模型", text: $model.search).textFieldStyle(.roundedBorder).accessibilityLabel("搜索已接入会话")
         Picker("状态筛选", selection: $model.sessionFilter) {
           ForEach(["在线", "全部", "运行中", "需输入", "断连"], id: \.self) { Text($0).tag($0) }
-        }.pickerStyle(.segmented).accessibilityLabel("按状态筛选会话")
+        }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("按状态筛选会话")
         if !model.hiddenSessions.isEmpty { Button("显示已隐藏卡片（不改变运行）") { model.hiddenSessions.removeAll() }.font(.caption2) }
       }.padding(.horizontal, 13).padding(.bottom, 12)
       ScrollView {

@@ -128,6 +128,7 @@ export async function createHost(
 		session,
 		faux,
 		api,
+		services: { cwd, agentDir, modelRuntime: runtime, settingsManager: settings, resourceLoader: loader, diagnostics: [] },
 		errors,
 		close: async () => {
 			await session.extensionRunner.emit({

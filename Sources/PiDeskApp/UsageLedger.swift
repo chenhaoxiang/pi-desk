@@ -220,7 +220,11 @@ private struct DiskRecorder: Decodable {
   let reasons: [String]
 }
 
-public final class UsageLedger {
+protocol UsageLedgerClient: AnyObject {
+  func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void)
+}
+
+public final class UsageLedger: UsageLedgerClient {
   private let queue = DispatchQueue(label: "io.github.chenhaoxiang.pi-desk.usage-ledger", qos: .utility)
   private let root: URL
   private var request = 0

@@ -58,6 +58,10 @@ Pi Desk SHALL 默认展示跨所有已记录Pi会话的时间总用量，支持�
 - **WHEN** 用户在明确的本地IANA时区选择日期范围
 - **THEN** 用日历日边界与内部半开区间归桶，DST/跨月/跨日保持精确，自定义结束日含整天，未来和未采集日期不伪装成零消费
 
+#### Scenario: Custom end precedes start
+- **WHEN** 自定义结束日期早于开始日期
+- **THEN** 不提交新查询，不将范围偷偷归一成另一天，保留旧有效结果并清楚要求修正日期；旧在途回调也不覆盖当前结果
+
 #### Scenario: UI is closed and reopened
 - **WHEN** 原Pi继续产生final usage而App退出或崩溃
 - **THEN** bridge只入有界异步标量记录队列，App重开恢复持久总量，记录不依赖内存快照或同步handler磁盘I/O
@@ -93,6 +97,10 @@ Pi Desk SHALL 让已读、静音、关闭提醒和通知失败只影响表现，
 #### Scenario: Notification transport fails
 - **WHEN** 显示或通知交付失败
 - **THEN** 不禁用已授权执行、不重新执行任务，也不关闭仍有效的原通知路径
+
+#### Scenario: User explicitly enables system notifications
+- **WHEN** 用户主动点击开启系统通知
+- **THEN** App调用标准系统授权接口，由用户在OS提示中决定；启动/状态事件不自动申请，不自动允许，拒绝或失败只影响表现且保持原Pi通知兜底
 
 ### Requirement: Evidence and private content separation
 

@@ -552,8 +552,11 @@ struct SettingsPage: View {
           Text("提醒表现").font(.subheadline.weight(.semibold))
           Toggle("使用系统已授权的通知", isOn: $model.settings.notifications)
           Text(model.notificationStatus).font(.caption).foregroundStyle(.secondary)
-          Button("检查系统通知状态") { model.checkNotificationStatus() }.font(.caption)
-          Text("不弹出新的许可请求；未授权或发送失败时保留原入口兜底。").font(.caption).foregroundStyle(.secondary)
+          HStack {
+            Button("开启系统通知") { model.enableNotifications() }.disabled(model.isPreview || model.requestingNotifications)
+            Button("检查系统通知状态") { model.checkNotificationStatus() }
+          }.font(.caption)
+          Text("仅主动点击开启时向系统申请许可；是否允许由你在系统提示中决定。拒绝或发送失败不影响原Pi通知与自动化。").font(.caption).foregroundStyle(.secondary)
           Button("保存本 App 设置") { model.saveSettings() }.buttonStyle(.bordered)
         }
       }

@@ -103,6 +103,28 @@ enum StateChecks {
     interaction.pinned = false
     interaction.escape()
     precondition(!interaction.expanded)
+    // A legacy wire-v1 session can coexist with a recorder-enabled, restricted-capability session.
+    var mixed = SessionStore(), legacy = fixture, modern = fixture
+    legacy.identity.nativeSessionId = "legacy-wire-no-recorder"
+    legacy.usageRecorder = nil
+    legacy.capabilities.owners["subagents"] = "unavailable"
+    legacy.capabilities.actions = [.message, .abortCurrent]
+    legacy.runs = []; legacy.schedules = []; legacy.childCoverage = "unknown"
+    modern.identity.nativeSessionId = "modern-restricted-cap"
+    modern.capabilities.actions = [.message]
+    modern.usageRecorder = try JSONDecoder().decode(UsageRecorder.self, from: Data(#"{"version":1,"pending":0,"dropped":0,"writeFailures":0,"lastSuccessAt":1000,"reasons":[]}"#.utf8))
+    let oldRecord = WireRecord(kind: "hello", identity: legacy.identity, snapshot: legacy)
+    let oldBytes = try Wire.encode(oldRecord)
+    precondition(!String(decoding: oldBytes, as: UTF8.self).contains("usageRecorder"))
+    let decodedOld = try Wire.decode(Data(oldBytes.dropLast()))
+    precondition(mixed.apply(decodedOld, connection: UUID(), now: now))
+    precondition(mixed.apply(WireRecord(kind: "hello", identity: modern.identity, snapshot: modern), connection: UUID(), now: now))
+    precondition(mixed.sessions.count == 2 && mixed.sessions[legacy.identity.sessionKey]?.snapshot.usageRecorder == nil)
+    precondition(mixed.request(identity: modern.identity, action: .abortCurrent, target: Target(owner: "pi"), now: now) == nil)
+    precondition(mixed.request(identity: legacy.identity, action: .stop, target: Target(owner: "subagents", runId: "missing-owner-run"), now: now) == nil)
+    precondition(mixed.request(identity: legacy.identity, action: .message, target: Target(owner: "pi"), now: now) != nil)
+    precondition(mixed.request(identity: modern.identity, action: .message, target: Target(owner: "pi"), now: now) != nil)
+    precondition(mixed.request(identity: legacy.identity, action: .abortCurrent, target: Target(owner: "pi"), now: now) != nil)
     precondition(LinkPolicy.exactHTTPS("https://example.invalid/console") != nil)
     for url in [
       "file:///fixture", "javascript:alert(1)", "https://user:pass@example.invalid",

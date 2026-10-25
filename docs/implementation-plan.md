@@ -120,11 +120,12 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 | `scripts/check-socket-host.mjs` | 实际Swift UDS↔Node两原生会话，双端peer UID、重复请求只执行一次，SIGKILL接收器后Pi继续，重连不重放 | GUI所有显示器/系统行为组合 |
 | `scripts/check-subagents-native.mjs` | 固定0.80 owner：真实native child与前台Fleet、精准后台child steer、stop受理/终态、paused恢复成功、stopped恢复拒绝、现有计划暂停与cost | 所有历史owner/runner/远程模式 |
 | `scripts/check-schedule-native.mjs` | 固定Schedule候选经真实SDK暂停/恢复、事件触发一次、外会话拒绝；查询新增模型调用0、显式faux触发1 | 已安装/启用常驻监督 |
-| `scripts/check-usage-native.mjs` | 实际Pi SDK两个隔离会话的final usage异步记录；App/UDS接收器缺席时仍写盘，App关闭期间续行，loadout不变、真实provider0 | 真实历史账单/未接入旧会话/所有owner附加usage |\n| 原生GUI/CUA | 双会话主动接入、原生AX控件、后台发送只命中选定会话，界面requested；总用量页今日/近7天/本月合成预览、搜索与状态过滤、64卡片缩放均读回；截图只在ignored tmp | 完整TUI/系统通知/Herdr现场交付 |
+| `scripts/check-usage-native.mjs` | 实际Pi SDK两个隔离会话的final usage异步记录；App/UDS接收器缺席时仍写盘，App关闭期间续行，loadout不变、真实provider0 | 真实历史账单/未接入旧会话/所有owner附加usage |
+| 原生GUI/CUA | 双会话主动接入、原生AX控件、后台发送只命中选定会话，界面requested；总用量页今日/近7天/本月合成预览、搜索与状态过滤、64卡片缩放均读回；截图只在ignored tmp | 完整TUI/系统通知/Herdr现场交付 |
 
 实际对照使用 Pi `1.4.0-fork.1`、Subagents `0.80.0-fork.1` 和上述 Schedule 源码提交；默认开发依赖 Pi `1.4.0` 的 SDK 基线也跑过。真实 provider/账号/密钥调用均为0，未改全局Pi设置、模型/思考档/原工具或业务会话。原生helper和 App 为本仓代码，没有复用 CodeIsland 文件或素材。
 
-首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有40个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝/准确目标负例；usage handler 10,000次合成入队p95/p99分别约0.004/0.008ms，队列满只显示下界不阻塞Pi。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
+首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有42个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝/准确目标负例；usage handler 10,000次合成入队p95/p99分别约0.004/0.008ms，队列满只显示下界不阻塞Pi。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
 
 性能证据限于合成标量：10,000次观察handler的p95/p99均低于0.01ms（候选机实测），慢socket/10万次离线投影保持有界；同一简单SDK任务的开启/关闭轨迹一致，另有1,000次真实SDK事件dispatch对照（包含宿主派发，实测p95/p99仍满足1ms/5ms预算，不与纯handler数值混标）。一次任务耗时不是通用性能结论，不宣称零开销。CI仅有配置、没有远端运行记录；本机无XCTest，改用同样可失败的Foundation检查runner，未安装Xcode或降低行为断言。
 
@@ -132,11 +133,43 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 用户随后明确授权本机安装、正常启动与安全验证。`scripts/install-local.mjs` 的 install/verify/rollback 只管理固定用户域App、以source commit命名的bridge和独立自动发现入口；不修改原Pi settings，不升级可选Schedule或启动服务，不强reload旧业务会话。新的 `check-installed-native.mjs` 先用公共resolver确认真实入口可发现，再把同一入口字节放入隔离agent profile，以原生SDK常规自动发现而非 `--extension`/注入registerBridge启用；检查默认helper/socket与实际加载source。具体安装路径、hash、当前进程和本机一次性原件只保存在本机manifest与ignored tmp，不进入公开Git。
 
-### 持久时间总用量与原生可操作性增量\n\n用户将Token主页面改为跨所有已记录会话的Pi总用量。桥接只在`turn_end`取得assistant final的稳定entry ID、UTC occurrence、model和input/output/cache四个白名单标量，使用有界异步writer落到用户域0700目录；不将reasoning/cacheWrite1h子集再相加，不记父owner生命周期累计或归属不明tool usage。App后台通过SQLite `usage_entries`唯一键索引spool，WAL/忙时等待、重开恢复、冲突表、坏库保留、提交后删spool；数据库只存不含prompt/output/path/凭据的元数据。旧桥接只在总览页显示未纳入持久采集，不强reload。\n\n日期总览按本地Gregorian日历和当前IANA时区计算今日、含今日近7天、本月、自定义含结束日范围，内部查询使用`[start,end)`；DST用日历加法，未来桶和未采集桶留空/文字标记，不用0伪装。合成检查覆盖同日双会话、跨日/时区/DST、重复/conflict、缺字段、owner/tool边界、App缺席续行、坏库/符号链接/overflow/队列满。原生总览已读回四桶、趋势、模型分布、搜索和状态筛选；图表与表格数据均有可读label。\n\n视觉优化仍不声称完整现场资格：系统通知仅展示权限/失败状态，不自动申请；真实Herdr/VoiceOver和长时真实TUI继续待现场。\n\n### 原生视觉交互增量
+### 持久时间总用量与原生可操作性增量
+
+用户将Token主页面改为跨所有已记录会话的Pi总用量。桥接只在`turn_end`取得assistant final的稳定entry ID、UTC occurrence、model和input/output/cache四个白名单标量，使用有界异步writer落到用户域0700目录；不将reasoning/cacheWrite1h子集再相加，不记父owner生命周期累计或归属不明tool usage。App后台通过SQLite `usage_entries`唯一键索引spool，WAL/忙时等待、重开恢复、冲突表、坏库保留、提交后删spool；数据库只存不含prompt/output/path/凭据的元数据。旧桥接只在总览页显示未纳入持久采集，不强reload。
+
+日期总览按本地Gregorian日历和当前IANA时区计算今日、含今日近7天、本月、自定义含结束日范围，内部查询使用`[start,end)`；DST用日历加法，未来桶和未采集桶留空/文字标记，不用0伪装。合成检查覆盖同日双会话、跨日/时区/DST、重复/conflict、缺字段、owner/tool边界、App缺席续行、坏库/符号链接/overflow/队列满。原生总览已读回四桶、趋势、模型分布、搜索和状态筛选；图表与表格数据均有可读label。
+
+视觉优化仍不声称完整现场资格：系统通知只有用户显式点击才申请许可；真实Herdr/VoiceOver和长期业务TUI继续待现场。
+
+### 原生视觉交互增量
 
 用户要求参考CodeIsland顶部区域，重点转为给人看、给人操作的可视化。沿同一Change已实现原生顶部compact/expanded panel、safeArea/无刘海fallback、中文分层卡片、按需消息输入与后置诊断；不改变wire/owner/模型或工具。显式合成预览真实显示了compact、expanded、空态、长名、断连、状态较旧、多会话和浅色管理窗；pin与Escape退出编辑保留草稿已用原生控件验真。核心检查增加中文状态、几何/交互和两个目标切换后的准确epoch管理断言；Reduce Motion路径禁用动效。Escape退出编辑与草稿保留有原生状态回读；Tab有一次精确窗口前台投递失败，最终显式合成窗口投递后原生responder回读为SwiftUI.KeyViewProxy，但没有证明完整焦点顺序。完整键盘遍历与系统辅助技术资格留在2.4/6.3，不冒称全验。预览不连接真实会话、不发送管理动作、不改系统设置。
 
 总用量候选 `ad09e82865aebffacfea914542924e4216142fc6` 已构建为本机 `0.1.0` build `7` 并完成安装/verify、签名与运行验真；App SHA256=`a3f486872a8e4c0a43cda8a5369996524a7ef516ae37f5dbdd7b9dc78a292c09`，bridge digest=`4036a6287d28e05dbfc8ed05eeecab802a21087f69554404c3552b0be4c064a8`，entry SHA256=`12d4f228488ae39f658dfdfef5aed2b573e81bf8f0e70a7d0d3f9308a88b8ede`；上一版视觉 `4f8846f69aab02e7ebc93f0dc89a5cdb7883341f` build `5` 的准确回退保留。新版稳定入口的两个隔离faux-native会话自动发现验证仍通过：A/B初始调用1/1，实际provider0，usage spool独立落到测试目录不污染用户账本；原生稳定App总览页重开后回读4条隔离synthetic final并显示总量3116，App退出期间A/B继续到2/2，重开SQLite索引后spool清空且总量恢复，无重复。旧build5的A追加要求A1→2/B1证据继续有效，动作边界未改。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
+
+### A1–A11 / 6.1–6.2 逐项覆盖与缺口
+
+本轮复用既有原件，并把总用量/兼容新增证据绑定如下：
+
+| 矩阵 | 当前证据 | 仍未证明 |
+|---|---|---|
+| A1 UI关闭/kill/update | 既有UDS kill/无App usage与实际App退出续行；新增10min实际InteractiveMode/PTY soak，receiver重启5次、离线15轮仍落usage | 业务TUI长期运行与更新热加载 |
+| A2 慢读/满队列/畸形帧 | native framing、slow socket/overload、usage writer bounded queue/ENOSPC/坏记录；handler p95/p99原件 | 生产规模长期内存曲线 |
+| A3 retry/compaction/queued continuation | 既有lifecycle/usage golden、未知边界；新增PTY soak 58轮含12次工具续行，116次settled，usage只收final | 长时间连续retry/compaction业务TUI |
+| A4 丢回复/重连/重复点击 | UDS重连不重放、action dedup、usage stable ID与冲突表；旧/新wire混用仍只局部降级 | 真实网络/跨用户环境（本产品不支持） |
+| A5 stop/计划与未命中对象 | `check-native-controls`、Subagents/Schedule owner原件；受限owner fixture只隐藏对应控制，Pi message/abort和另一会话仍可用 | 未配置远程owner |
+| A6 新旧owner/capability | 旧wire无`usageRecorder`、old owner/缺cap fixture；unsupported run control拒绝但native action继续，UI显示partial/unavailable | 所有历史owner版本组合 |
+| A7 父子/前后台 | 既有Subagents child/parent归属及usage boundary golden；工具/父累计不进时间账 | 未加载ambient扩展的真实前台child |
+| A8 usage重复/缺失/时间 | usage golden与UsageLedger Swift：DST 23/25h、时区重算、半开、自定义/未来、重复冲突/缺字段/坏库/并发索引 | provider账单或启用前历史 |
+| A9 input/通知 | input native check；fake notification authorized/denied/error/delivery-error + 实际稳定App显示未授权；仅用户点击才申请 | 用户系统consent后的真实投递 |
+| A10 raw/canary | public source/白名单/原有canary与usage scalar-only；无prompt/output/path/凭据 | 无 |
+| A11 observer failure/loadout | baseline/native SDK loadout不变、0新模型/确认；spool/SQLite失败仅partial不改Pi | 长时资源耗尽下全平台行为 |
+| 6.1 | A1–A11逐行如上，10min PTY实际InteractiveMode+faux 58轮/140条final、接收器离线重连均过 | 完整业务模式组合及长期真实provider TUI |
+| 6.2 | Pi 1.4.0-fork.1、Subagents/Schedule版本原件；旧wire/no recorder/缺cap fixture；不强reload旧Pi | 全历史owner版本与真实混合现场 |
+
+本轮新增 `scripts/check-narrow-ux.sh`：fake notification client验证authorized/denied/request error/delivery error与重复点击；实际稳定App只读回“尚未授权”，未触发系统consent。`scripts/run-pty-check.py --soak` 在独立PTY内运行实际公开InteractiveMode（bridge真实mode=tui）600.005秒：58轮、12次工具续行、116次agent_settled、receiver重启5次/离线15轮，A/B模型调用82/58与持久final记录140严格对应，重连无重放，loadout不变，真实provider/新增确认0，错误0，进程peak RSS约214MiB。非TUI试跑196秒主动终止未当10min证据；结果不替代长期业务TUI/provider资格。
+
+新增通知按钮只在用户显式点击时调用标准系统`requestAuthorization`；启动仅读取状态。custom结束日期早于开始日期时不发新ledger查询，也不替换上一次有效聚合。
 
 ### 保留的未完成项
 

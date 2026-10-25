@@ -19,7 +19,7 @@ struct AggregateTokenPage: View {
           Spacer()
           Button { model.refreshUsage() } label: {
             Label(model.usageLoading ? "正在索引" : "刷新记录", systemImage: "arrow.clockwise")
-          }.disabled(model.usageLoading).accessibilityLabel("刷新本机跨会话用量记录")
+          }.disabled(model.usageLoading || !model.customRangeIsValid).accessibilityLabel("刷新本机跨会话用量记录")
         }
         HStack {
           Picker("时间范围", selection: $model.usagePreset) {
@@ -37,8 +37,8 @@ struct AggregateTokenPage: View {
             DatePicker("开始日期", selection: $model.usageCustomStart, displayedComponents: .date)
             DatePicker("结束日期（含当天）", selection: $model.usageCustomEnd, displayedComponents: .date)
           }.datePickerStyle(.field).font(.caption)
-          if model.usageCustomEnd < model.usageCustomStart {
-            Text("结束早于开始：按开始日期当天显示，请调整结束日期。")
+          if !model.customRangeIsValid {
+            Text("结束日期不能早于开始日期。未查询新范围，仍显示上次有效结果；请调整日期。")
               .font(.caption).foregroundStyle(.orange)
           }
         }

@@ -53,7 +53,9 @@ struct DeskSettings: Codable {
   @Published var aggregate = UsageAggregate.empty(.make(preset: .today))
   @Published var usageLoading = false
   @Published var notificationStatus = "尚未检查系统通知状态"
-  private var ledger: UsageLedger?
+  @Published var requestingNotifications = false
+  private let notificationClient: NotificationClient?
+  private var ledger: UsageLedgerClient?
   private var lastUsageRefresh = Date.distantPast
   let isPreview: Bool
   var showManager: () -> Void = {}
@@ -95,7 +97,17 @@ struct DeskSettings: Codable {
     if selected == identity.sessionKey { selected = visibleSessions.first?.snapshot.identity.sessionKey }
     actionNote = "仅隐藏断连卡片，未停止或删除任何Pi工作"
   }
+  var customRangeIsValid: Bool {
+    guard usagePreset == .custom else { return true }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    return calendar.startOfDay(for: usageCustomEnd) >= calendar.startOfDay(for: usageCustomStart)
+  }
   func refreshUsage() {
+    guard customRangeIsValid else {
+      actionNote = "结束日期早于开始日期，未查询新范围；请先调整日期"
+      return
+    }
     let range = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)
     if isPreview { aggregate = .empty(range, preview: true); return }
     guard !usageLoading, let ledger else { return }
@@ -103,26 +115,58 @@ struct DeskSettings: Codable {
     ledger.refresh(range: range) { [weak self] result in
       guard let self else { return }
       self.usageLoading = false
+      guard self.customRangeIsValid else { return }
+      let expected = UsageDateRange.make(preset: self.usagePreset, customStart: self.usageCustomStart, customEnd: self.usageCustomEnd)
+      guard expected == result.range else { self.refreshUsage(); return }
       if result.error != nil, self.aggregate.totals.seen, self.aggregate.range == result.range {
         self.aggregate.error = result.error
         self.aggregate.coverageReasons = result.coverageReasons
       } else { self.aggregate = result }
-      let expected = UsageDateRange.make(preset: self.usagePreset, customStart: self.usageCustomStart, customEnd: self.usageCustomEnd)
-      if expected != result.range { self.refreshUsage() }
     }
   }
   func checkNotificationStatus() {
-    guard !isPreview, Bundle.main.bundleURL.pathExtension == "app" else {
+    guard !isPreview, let notificationClient else {
       notificationStatus = isPreview ? "合成预览：未请求系统许可" : "未打包运行，未访问通知服务"; return
     }
-    UNUserNotificationCenter.current().getNotificationSettings { permission in
+    notificationClient.settings { status in
       Task { @MainActor in
-        switch permission.authorizationStatus {
+        switch status {
         case .authorized, .provisional, .ephemeral: self.notificationStatus = "系统通知已授权；发送失败仍保留原入口兜底"
         case .denied: self.notificationStatus = "系统通知已拒绝；Pi原通知和自动化不受影响"
-        case .notDetermined: self.notificationStatus = "系统通知尚未授权；本App不自动申请许可"
-        @unknown default: self.notificationStatus = "系统通知许可状态未知"
+        case .notDetermined: self.notificationStatus = "系统通知尚未授权；点击开启后才申请许可"
+        case .unknown: self.notificationStatus = "系统通知许可状态未知；Pi原通知和自动化不受影响"
         }
+      }
+    }
+  }
+  func enableNotifications() {
+    guard !isPreview, let notificationClient, !requestingNotifications else { return }
+    requestingNotifications = true
+    notificationStatus = "正在请求系统通知许可…"
+    notificationClient.requestAuthorization { result in
+      Task { @MainActor in
+        self.requestingNotifications = false
+        switch result {
+        case .success(true):
+          self.settings.notifications = true
+          self.saveSettings()
+          self.checkNotificationStatus()
+        case .success(false): self.notificationStatus = "系统通知未获授权；如需启用，请在系统设置中修改Pi Desk通知权限。原Pi通知与自动化不受影响"
+        case .failure: self.notificationStatus = "开启系统通知失败；请稍后重试。Pi原通知和自动化不受影响"
+        }
+      }
+    }
+  }
+  func sendNotification(for input: InputNotice, session: Identity) {
+    guard !isPreview, let notificationClient else { return }
+    let key = session.runtimeEpoch + ":" + input.id
+    notificationClient.settings { status in
+      guard [.authorized, .provisional, .ephemeral].contains(status) else {
+        Task { @MainActor in self.checkNotificationStatus() }
+        return
+      }
+      notificationClient.post(id: key, title: "Pi 需要输入", body: "请回到原会话处理。原通知与自动化保持不变。") { error in
+        if error != nil { Task { @MainActor in self.notificationStatus = "系统通知发送失败；原入口兜底不受影响" } }
       }
     }
   }
@@ -135,7 +179,7 @@ struct DeskSettings: Codable {
   var inputCount: Int {
     sessions.filter { $0.connection == .connected }.reduce(0) { $0 + $1.snapshot.inputs.count }
   }
-  init() {
+  init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil) {
     let home = FileManager.default.homeDirectoryForCurrentUser
     let args = CommandLine.arguments
     func argument(_ key: String) -> String? {
@@ -151,6 +195,7 @@ struct DeskSettings: Codable {
         ?? home.appendingPathComponent("Library/Application Support/PiDesk/settings.json").path)
     let fixturePath = argument("--visual-fixture")
     isPreview = fixturePath != nil
+    self.notificationClient = notificationClient ?? (!isPreview && Bundle.main.bundleURL.pathExtension == "app" ? SystemNotificationClient() : nil)
     if let fixturePath = fixturePath {
       diagnostic = "合成视觉预览 · 不连接真实会话"
       do {
@@ -180,13 +225,23 @@ struct DeskSettings: Codable {
         }
         store.tick(now: Date().timeIntervalSince1970 * 1000)
         selected = sessions.first?.snapshot.identity.sessionKey
-        if argument("--visual-page") == "Token" { page = "Token"; refreshUsage() }
+        if let previewPage = argument("--visual-page"), ["会话", "Token", "设置"].contains(previewPage) { page = previewPage }
+        if page == "Token" {
+          refreshUsage()
+          if args.contains("--invalid-custom-preview") {
+            usagePreset = .custom
+            var calendar = Calendar(identifier: .gregorian); calendar.timeZone = .current
+            usageCustomEnd = calendar.startOfDay(for: Date())
+            usageCustomStart = calendar.date(byAdding: .day, value: 1, to: usageCustomEnd)!
+            refreshUsage()
+          }
+        }
       } catch { diagnostic = "合成预览文件不可用；未连接真实会话" }
       return
     }
     loadSettings()
     let usageRoot = argument("--usage-path").map { URL(fileURLWithPath: $0) } ?? (argument("--socket-path").map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("usage-v1") })
-    ledger = UsageLedger(root: usageRoot)
+    ledger = usageLedger ?? UsageLedger(root: usageRoot)
     refreshUsage(); checkNotificationStatus()
     server = SocketServer(path: socketPath) { [weak self] event in
       if Thread.isMainThread {
@@ -341,18 +396,8 @@ struct DeskSettings: Codable {
         guard !notified.contains(key) else { continue }
         if notified.count >= 1024 { notified.removeAll() }
         notified.insert(key)
-        guard settings.notifications, Bundle.main.bundleURL.pathExtension == "app" else { continue }
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { permission in
-          guard permission.authorizationStatus == .authorized else { Task { @MainActor in self.checkNotificationStatus() }; return }
-          let content = UNMutableNotificationContent()
-          content.title = "Pi 需要输入"
-          content.body = "请回到原会话处理。原通知与自动化保持不变。"
-          let request = UNNotificationRequest(identifier: key, content: content, trigger: nil)
-          UNUserNotificationCenter.current().add(request) { error in
-            if error != nil { Task { @MainActor in self.notificationStatus = "系统通知发送失败；原入口兜底不受影响" } }
-          }
-        }
+        guard settings.notifications else { continue }
+        sendNotification(for: input, session: s.snapshot.identity)
       }
     }
   }

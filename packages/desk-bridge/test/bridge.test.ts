@@ -230,3 +230,48 @@ test("Fleet key is not a runId and does not unlock control", () => {
 	assert.ok(runs[0].actions.includes("run.stop"));
 	assert.ok(!JSON.stringify(runs).includes("PRIVATE"));
 });
+
+const delay = () => new Promise(r => setTimeout(r, 20));
+function owner(h: ReturnType<typeof harness>, ping: unknown) {
+  h.bus.on("subagents:rpc:v1:request", (r: { requestId: string; method: string }) => {
+    h.bus.emit("subagents:rpc:v1:reply:" + r.requestId, { version: 1, requestId: r.requestId, success: true,
+      data: r.method === "ping" ? ping : { asyncSnapshot: { runs: [{ id: "synthetic-run", state: "running", kind: "single" }], omitted: { runs: 0, children: 0 } }, fleet: { entries: [], omitted: 0 } } });
+  });
+  h.bus.on("schedule:rpc:v1:request", (r: { requestId: string }) => h.bus.emit("schedule:rpc:v1:reply:" + r.requestId, { version: 1, requestId: r.requestId, success: false, error: { code: "unsupported_method" } }));
+}
+test("old/absent owner disables only owner controls, native messages/abort and host loadout remain", async () => {
+  const h = harness("legacy-owner"); owner(h, { version: 0, capabilities: {} });
+  h.emit("session_start"); await delay();
+  const snapshot = h.wires.at(-1)!.snapshot!, identity = snapshot.identity;
+  assert.ok(snapshot.capabilities.actions.includes("session.message"));
+  assert.ok(snapshot.capabilities.actions.includes("session.abort-current"));
+  assert.equal(snapshot.capabilities.actions.some(a => a.startsWith("run.")), false);
+  assert.equal(snapshot.runs.length, 0);
+  h.receive({ version: 1, kind: "action", identity, issuedAt: Date.now(), requestId: "old-owner-control", action: "run.stop", target: { owner: "subagents", runId: "synthetic-run" } });
+  h.receive({ version: 1, kind: "action", identity, issuedAt: Date.now(), requestId: "native-still-available", action: "session.message", target: { owner: "pi" }, parameters: { text: "synthetic follow up", mode: "followUp" } });
+  await delay();
+  assert.equal(h.messages.length, 1); assert.equal(h.aborts(), 0);
+  assert.equal(h.wires.find(r => r.requestId === "old-owner-control")?.result?.status, "rejected");
+  assert.equal(h.wires.find(r => r.requestId === "native-still-available")?.result?.status, "requested");
+  h.emit("session_shutdown");
+});
+test("read-only owner status exposes runs but no unsupported controls; unrelated native session continues", async () => {
+  const h = harness("limited-owner"), other = harness("unaffected-native");
+  owner(h, { packageVersion: "old-fixed", capabilities: { fleetStatus: { version: 1 }, stop: false, resume: false, nonRecoveringSteer: false } });
+  owner(other, { capabilities: {} });
+  h.emit("session_start"); other.emit("session_start");
+  const end = Date.now() + 2000;
+  while (Date.now() < end && !h.wires.some(r => r.snapshot?.runs.length === 1)) await new Promise(r => setTimeout(r, 5));
+  const snapshot = h.wires.find(r => r.snapshot?.runs.length === 1)?.snapshot!;
+  assert.ok(snapshot, "read-only owner status was not observed");
+  assert.equal(snapshot.runs.length, 1); assert.deepEqual(snapshot.runs[0].actions, []);
+  assert.equal(snapshot.capabilities.actions.some(a => a.startsWith("run.")), false);
+  const identity = other.wires.at(-1)!.identity;
+  other.receive({ version: 1, kind: "action", identity, issuedAt: Date.now(), requestId: "independent-control", action: "session.abort-current", target: { owner: "pi" } });
+  const replyEnd = Date.now() + 1000;
+  while (Date.now() < replyEnd && !other.wires.some(r => r.requestId === "independent-control")) await new Promise(r => setTimeout(r, 5));
+  assert.equal(other.wires.find(r => r.requestId === "independent-control")?.result?.status, "requested");
+  assert.equal(other.aborts(), 1); assert.equal(h.aborts(), 0);
+  assert.equal(subagentCapabilities({ capabilities: { fleetStatus: { version: 2 }, cost: { version: 9 } } }).status, false);
+  h.emit("session_shutdown"); other.emit("session_shutdown");
+});

@@ -242,6 +242,8 @@ function owner(h: ReturnType<typeof harness>, ping: unknown) {
 test("old/absent owner disables only owner controls, native messages/abort and host loadout remain", async () => {
   const h = harness("legacy-owner"); owner(h, { version: 0, capabilities: {} });
   h.emit("session_start"); await delay();
+  h.receive({ version: 1, kind: "query", identity: h.wires.at(-1)!.identity, requestId: "explicit-old-owner-interest", query: "refresh" });
+  await delay();
   const snapshot = h.wires.at(-1)!.snapshot!, identity = snapshot.identity;
   assert.ok(snapshot.capabilities.actions.includes("session.message"));
   assert.ok(snapshot.capabilities.actions.includes("session.abort-current"));
@@ -259,7 +261,8 @@ test("read-only owner status exposes runs but no unsupported controls; unrelated
   const h = harness("limited-owner"), other = harness("unaffected-native");
   owner(h, { packageVersion: "old-fixed", capabilities: { fleetStatus: { version: 1 }, stop: false, resume: false, nonRecoveringSteer: false } });
   owner(other, { capabilities: {} });
-  h.emit("session_start"); other.emit("session_start");
+  h.emit("session_start"); other.emit("session_start"); await delay();
+  h.receive({ version: 1, kind: "query", identity: h.wires.at(-1)!.identity, requestId: "explicit-current-session-interest", query: "refresh" });
   const end = Date.now() + 2000;
   while (Date.now() < end && !h.wires.some(r => r.snapshot?.runs.length === 1)) await new Promise(r => setTimeout(r, 5));
   const snapshot = h.wires.find(r => r.snapshot?.runs.length === 1)?.snapshot!;
@@ -274,4 +277,20 @@ test("read-only owner status exposes runs but no unsupported controls; unrelated
   assert.equal(other.aborts(), 1); assert.equal(h.aborts(), 0);
   assert.equal(subagentCapabilities({ capabilities: { fleetStatus: { version: 2 }, cost: { version: 9 } } }).status, false);
   h.emit("session_shutdown"); other.emit("session_shutdown");
+});
+
+test("turn boundaries and async completion do not poll expensive owner status/cost", async () => {
+  const h = harness("no-automatic-owner-work"), calls: string[] = [];
+  owner(h, { capabilities: { fleetStatus: { version: 1 }, cost: { version: 1 } } });
+  h.bus.on("subagents:rpc:v1:request", (r: {method:string}) => calls.push(r.method));
+  h.emit("session_start"); h.emit("agent_settled", {aborted:false});
+  h.bus.emit("subagent:async-complete", {}); h.bus.emit("subagent:foreground-complete", {});
+  await delay(); assert.deepEqual(calls, []);
+  const query = { version: 1, kind: "query", identity: h.wires.at(-1)!.identity, requestId: "explicit-cost-only", query: "usage.refresh" };
+  h.receive(query); await delay();
+  assert.equal(calls.filter(m => m === "cost").length, 1);
+  h.receive({...query, requestId:"throttled-cost"}); await delay();
+  assert.equal(calls.filter(m => m === "cost").length, 1);
+  assert.equal(h.messages.length, 0); assert.equal(h.aborts(), 0);
+  h.emit("session_shutdown");
 });

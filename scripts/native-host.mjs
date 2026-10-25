@@ -1,7 +1,9 @@
 import { createRequire, registerHooks } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readdir, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { hostname } from "node:os";
 const require = createRequire(import.meta.url);
 export const sdkRoot =
 	process.env.PI_DESK_SDK ??
@@ -48,7 +50,7 @@ export function bindFixturePeerImports() {
 export async function createHost(
 	root,
 	label,
-	{ bridge, extensions = [], transport, tools = [], bindings = {} } = {},
+	{ bridge, extensions = [], transport, tools = [], bindings = {}, provider = "desk-fixture-" + label, modelId = "faux" } = {},
 ) {
 	const cwd = join(root, label);
 	const agentDir = join(cwd, "agent");
@@ -63,8 +65,8 @@ export async function createHost(
 		{ mode: 0o600 },
 	);
 	const faux = ai.fauxProvider({
-		provider: "desk-fixture-" + label,
-		models: [{ id: "faux" }],
+		provider,
+		models: [{ id: modelId }],
 		tokensPerSecond: 100000,
 	});
 	const runtime = await sdk.ModelRuntime.create({
@@ -75,10 +77,7 @@ export async function createHost(
 		allowModelNetwork: false,
 	});
 	runtime.registerNativeProvider(faux.provider);
-	await runtime.setRuntimeApiKey(
-		"desk-fixture-" + label,
-		"synthetic-fixture-only",
-	);
+	await runtime.setRuntimeApiKey(provider, "synthetic-fixture-only");
 	const settings = sdk.SettingsManager.inMemory({
 		packages: [],
 		retry: { enabled: false },
@@ -111,7 +110,7 @@ export async function createHost(
 		cwd,
 		agentDir,
 		modelRuntime: runtime,
-		model: faux.getModel(),
+		model: faux.getModel(modelId),
 		thinkingLevel: "high",
 		noTools: "builtin",
 		customTools: tools,
@@ -136,6 +135,21 @@ export async function createHost(
 				reason: "quit",
 			});
 			session.dispose();
+			// Tests own this spool. Let the nonblocking observer finish its async close
+			// before a fixture removes its directory; Pi shutdown itself still never waits.
+			if (bridge) {
+				const sha = value => createHash("sha256").update(value).digest("hex");
+				const host = sha(hostname() + ":" + String(process.getuid?.())).slice(0, 32);
+				const key = sha(host + ":" + session.sessionId);
+				await until(async () => {
+					for (const file of await readdir(join(root, "usage-v1/recorders")).catch(() => [])) {
+						if (!/^[a-f0-9]{64}\.json$/.test(file)) continue;
+						const state = JSON.parse(await readFile(join(root, "usage-v1/recorders", file), "utf8"));
+						if (state.session === key && state.closed === true && state.pending === 0) return true;
+					}
+					return false;
+				}, 6000);
+			}
 		},
 	};
 }

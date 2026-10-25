@@ -173,6 +173,10 @@ try {
 	});
 	const runId = second.details.asyncId;
 	assert.ok(runId);
+	// The GUI now queries only its explicitly viewed current workflow. Turn
+	// boundaries must not silently read owner artifacts for this projection.
+	await new Promise(r => setTimeout(r, 1600));
+	receive({version:1,kind:"query",identity:records.at(-1).identity,requestId:"selected-held-workflow",query:"refresh",target:{owner:"subagents",runId}});
 	await until(
 		() =>
 			records.some((r) =>
@@ -254,6 +258,8 @@ try {
 	);
 	await until(() => completionEvents.has(runId), 15000);
 	await own.session.waitForIdle();
+	await new Promise(r => setTimeout(r,1600));
+	receive({version:1,kind:"query",identity,requestId:"selected-stopped-workflow",query:"refresh",target:{owner:"subagents",runId}});
 	await independent.session.prompt(
 		"Independent session continues after other run stop",
 	);
@@ -319,6 +325,8 @@ try {
 	await until(() => completionEvents.has(pausedId), 15000);
 	await own.session.waitForIdle();
 	await rm(join(root, "hold"));
+	await new Promise(r => setTimeout(r,1600));
+	receive({version:1,kind:"query",identity,requestId:"selected-paused-run",query:"refresh",target:{owner:"subagents",runId:pausedId}});
 	await until(
 		() =>
 			records.some((r) =>

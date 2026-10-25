@@ -29,6 +29,29 @@ struct AggregateTokenPage: View {
             Text("本地时区：" + usage.timeZoneID + " · 原始记录：UTC").font(.caption2).foregroundStyle(.secondary)
           }.accessibilityElement(children: .combine)
         }
+        HStack {
+          Picker("模型", selection: $model.usageModel) {
+            Text("所有已记录模型").tag("")
+            ForEach(Array(Set(usage.availableModels + model.sessions.compactMap { $0.snapshot.display.model } + (model.usageModel.isEmpty ? [] : [model.usageModel]))).sorted(), id: \.self) { name in Text(name + (usage.availableModels.contains(name) ? "" : "（尚未采集）")).tag(name) }
+          }.frame(maxWidth: 480)
+          Spacer()
+          Text("只按已记录final筛选，不把未采集填0").font(.caption2).foregroundStyle(.secondary)
+        }
+        let uncovered = model.sessions.filter { $0.connection == .connected && $0.snapshot.usageRecorder == nil }
+        if !uncovered.isEmpty {
+          DeskCard {
+            VStack(alignment: .leading, spacing: 8) {
+              Label("旧桥接未纳入：\(uncovered.count) 个在线会话", systemImage: "exclamationmark.triangle").font(.subheadline.weight(.medium)).foregroundStyle(.orange)
+              Text("这些会话当前没有final持久采集器。新Pi会话正常启动时自动加载新版；正在工作的旧会话不强制重载，先前用量无法按日期补记。")
+              Text("未采集模型：" + Array(Set(uncovered.compactMap { $0.snapshot.display.model })).sorted().joined(separator: "、")).lineLimit(2)
+              DisclosureGroup("查看未纳入会话") {
+                ForEach(uncovered, id: \.snapshot.identity) { session in
+                  Text(session.snapshot.display.name + " · " + (session.snapshot.display.model ?? "模型未知")).font(.caption2)
+                }
+              }.font(.caption)
+            }.font(.caption).fixedSize(horizontal: false, vertical: true)
+          }
+        }
         if model.usagePreset == .custom {
           HStack {
             DatePicker("开始日期", selection: $model.usageCustomStart, displayedComponents: .date)
@@ -108,7 +131,7 @@ struct AggregateTokenPage: View {
             if usage.totals.metric(metric).known {
               UsageTrendChart(usage: usage, metric: metric).frame(height: 175)
             } else {
-              ContentUnavailableView(usage.recordCount > 0 ? "此视图的用量字段未知" : "所选时间尚未采集", systemImage: "chart.bar.xaxis", description: Text("仅从启用记录后累计；未采集不是零消费。"))
+              ContentUnavailableView(usage.recordCount > 0 ? "此视图的用量字段未知" : "所选时间尚未采集", systemImage: "chart.bar.xaxis", description: Text(model.usageModel.isEmpty ? "仅从启用记录后累计；未采集不是零消费。" : "此时间尚未采集所选模型，不表示它消耗为0；旧桥接需等待自然加载。"))
                 .frame(minHeight: 150)
             }
             if !usage.buckets.filter({ $0.state != .data }).isEmpty {
@@ -162,6 +185,7 @@ struct AggregateTokenPage: View {
       }.padding(24)
     }.onAppear { model.refreshUsage() }
       .onChange(of: model.usagePreset) { _, _ in model.refreshUsage() }
+      .onChange(of: model.usageModel) { _, _ in model.refreshUsage() }
       .onChange(of: model.usageCustomStart) { _, _ in model.refreshUsage() }
       .onChange(of: model.usageCustomEnd) { _, _ in model.refreshUsage() }
   }

@@ -52,6 +52,10 @@ export class DeskSession {
 	private refreshAgain = false;
 	private refreshScheduled = false;
 	private refreshCost = false;
+	private refreshExplicit = false;
+	private refreshRunId?: string;
+	private refreshScope = "refresh";
+	private ownerRefreshTimes = new Map<string, number>();
 	private receiving = 0;
 	private off: (() => void)[] = [];
 	private cap = absentOwner();
@@ -156,18 +160,30 @@ export class DeskSession {
 			pi.events.on("schedule:rpc:v1:ready", () => this.deferRefresh(false)),
 		);
 		this.off.push(
-			pi.events.on("subagent:async-complete", () => this.deferRefresh(true)),
+			pi.events.on("subagent:async-complete", () => this.deferRefresh(false)),
 		);
 		this.off.push(
 			pi.events.on("subagent:foreground-complete", () =>
-				this.deferRefresh(true),
+				this.deferRefresh(false),
 			),
 		);
 		this.off.push(
 			pi.events.on("subagent:async-started", () => this.deferRefresh(false)),
 		);
 		this.off.push(
-			pi.events.on("subagent:child-status", () => this.deferRefresh(false)),
+			pi.events.on("subagent:child-status", (raw) => {
+				if (object(raw) && raw.version === 1 && safeId(raw.childRunId) && safeId(raw.runId) && ["started", "stopping", "stopped"].includes(String(raw.status))) {
+					const runId = raw.childRunId;
+					const state = raw.status === "started" ? "running" : String(raw.status);
+					const existing = this.snapshot.runs.find(r => r.runId === runId);
+					this.snapshot.runs = [...this.snapshot.runs.filter(r => r.runId !== runId), {
+						key: existing?.key ?? "event-" + runId, runId, parentRunId: raw.runId,
+						owner: "subagents", state, agent: text(raw.agent, 128), actions: [],
+					}].slice(-64);
+					this.snapshot.childCoverage = "partial";
+					this.changed();
+				}
+			}),
 		);
 		this.off.push(
 			pi.events.on("subagent:process-terminal", (r) => {
@@ -312,7 +328,7 @@ export class DeskSession {
 								)
 							? "waiting-children"
 							: "settled";
-			this.deferRefresh(true);
+			// No automatic owner cost/status/artifact read at a Pi turn boundary.
 		}
 		this.changed();
 	}
@@ -438,21 +454,24 @@ export class DeskSession {
 		];
 		this.changed();
 	}
-	private deferRefresh(cost: boolean) {
+	private deferRefresh(cost: boolean, explicit = false, runId?: string, scope = "refresh") {
 		if (this.stopped) return;
-		this.refreshCost ||= cost;
+		this.refreshCost ||= cost && explicit;
+		this.refreshExplicit ||= explicit;
+		if (explicit) { this.refreshScope = scope; this.refreshRunId = safeId(runId) ? runId : undefined; }
+		if (this.refreshing) { this.refreshAgain = true; return; }
 		if (this.refreshScheduled) return;
 		this.refreshScheduled = true;
 		setImmediate(() => {
 			this.refreshScheduled = false;
-			const includeCost = this.refreshCost;
-			this.refreshCost = false;
-			void this.refresh(includeCost).catch(() => {
+			const includeCost = this.refreshCost, explicit = this.refreshExplicit, runId = this.refreshRunId, scope = this.refreshScope;
+			this.refreshCost = false; this.refreshExplicit = false; this.refreshRunId = undefined; this.refreshScope = "refresh";
+			void this.refresh(includeCost, explicit, runId, scope).catch(() => {
 				this.observationDrops++;
 			});
 		}).unref();
 	}
-	async refresh(cost: boolean) {
+	async refresh(cost: boolean, explicit = false, runId?: string, scope = "refresh") {
 		if (this.stopped) return;
 		try {
 			this.snapshot.display.name = text(this.pi.getSessionName()) ?? "Pi";
@@ -469,6 +488,11 @@ export class DeskSession {
 				this.changed();
 			});
 		}
+		// Owner RPC dispatch can perform synchronous artifact work on this same
+		// event loop. Only an explicit current-session UI query may enter it.
+		if (!explicit) { this.changed(); return; }
+		const queryKey = scope + ":" + (runId ?? "session");
+		if (this.now() - (this.ownerRefreshTimes.get(queryKey) ?? Number.NEGATIVE_INFINITY) < (cost ? 5000 : 1500)) return;
 		try {
 			const usage = this.ctx?.getContextUsage();
 			this.snapshot.contextTokens =
@@ -480,11 +504,14 @@ export class DeskSession {
 		} catch {
 			this.snapshot.contextTokens = null;
 		}
+
 		if (this.refreshing) {
 			this.refreshAgain ||= cost;
 			return;
 		}
 		this.refreshing = true;
+		if (this.ownerRefreshTimes.size >= 16 && !this.ownerRefreshTimes.has(queryKey)) this.ownerRefreshTimes.delete(this.ownerRefreshTimes.keys().next().value!);
+		this.ownerRefreshTimes.set(queryKey, this.now());
 		try {
 			if (!this.cap.status) {
 				try {
@@ -508,7 +535,7 @@ export class DeskSession {
 									)
 									.slice(-4)
 							: [];
-					for (const root of roots) {
+					for (const root of roots.filter(r => runId !== undefined && object(r) && r.id === runId)) {
 						if (!object(root) || !safeId(root.id)) continue;
 						try {
 							const detail = await this.subagents.call("status", {
@@ -684,7 +711,7 @@ export class DeskSession {
 			this.refreshing = false;
 			if (this.refreshAgain) {
 				this.refreshAgain = false;
-				this.deferRefresh(true);
+				this.deferRefresh(false);
 			}
 		}
 	}
@@ -722,7 +749,7 @@ export class DeskSession {
 			sameIdentity(r.identity, this.snapshot.identity)
 		) {
 			this.changed();
-			this.deferRefresh(r.query === "usage.refresh");
+			this.deferRefresh(r.query === "usage.refresh", true, r.target?.owner === "subagents" ? r.target.runId : undefined, r.query);
 		}
 	}
 	close() {

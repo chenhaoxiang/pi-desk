@@ -323,6 +323,7 @@ struct RunsSection: View {
             }
             if let runId = r.runId {
               let target = Target(owner: r.owner, runId: runId)
+              Button("刷新此运行状态") { model.refresh(identity: session.snapshot.identity, runId: r.parentRunId ?? runId) }.font(.caption).disabled(session.connection != .connected)
               if session.connection == .connected && (r.actions.contains(.steer) || r.actions.contains(.resume)) {
                 TextField(
                   "向此子任务递送的要求",

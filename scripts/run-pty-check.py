@@ -24,8 +24,9 @@ env.update({"PI_CODING_AGENT_DIR": str(run / "agent"), "PI_OFFLINE": "1", "PI_DE
 master, slave = pty.openpty()
 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
 soak = "--soak" in sys.argv
-args = ["node", "--import", "tsx", "scripts/check-lifecycle-soak.mjs", "--tui"] if soak else ["node", "--import", "tsx", "scripts/check-interactive-pty.mjs"]
-limit = 960 if soak else 45
+performance = "--performance" in sys.argv
+args = ["node", "--import", "tsx", "scripts/check-lifecycle-soak.mjs", "--tui"] if soak else (["node", "--import", "tsx", "scripts/check-owner-performance.mjs", "--tui"] if performance else ["node", "--import", "tsx", "scripts/check-interactive-pty.mjs"])
+limit = 960 if soak else 90 if performance else 45
 child = subprocess.Popen(args, cwd=root, env=env, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
 os.close(slave)
 start, received = time.monotonic(), 0

@@ -102,6 +102,7 @@ export class UsageWriter {
   private scheduled = false;
   private running = false;
   private dirty = true;
+  private revision = 0;
   private timer?: NodeJS.Timeout;
   private stopped = false;
   private readonly now: () => number;
@@ -121,16 +122,16 @@ export class UsageWriter {
   enqueue(entry: UsageEntry): boolean {
     if (this.stopped || !validUsage(entry) || entry.occurredAt > this.now()) { this.mark("invalid-time"); return false; }
     if (this.queue.length >= this.maximum) { this.state.dropped++; this.mark("queue-full"); return false; }
-    this.queue.push(entry); this.dirty = true; this.schedule(); return true;
+    this.queue.push(entry); this.dirty = true; this.revision++; this.schedule(); return true;
   }
   mark(reason: string) {
     if (reasons.has(reason) && !this.state.reasons.includes(reason)) this.state.reasons.push(reason);
-    this.dirty = true; this.schedule();
+    this.dirty = true; this.revision++; this.schedule();
   }
   status() { return { version: 1, pending: this.queue.length, dropped: this.state.dropped,
     writeFailures: this.state.writeFailures, lastSuccessAt: this.state.lastSuccessAt,
     reasons: [...this.state.reasons] }; }
-  close() { this.stopped = true; this.state.closed = true; this.dirty = true; this.schedule(); }
+  close() { this.stopped = true; this.state.closed = true; this.dirty = true; this.revision++; this.schedule(); }
   private schedule() {
     if (this.running || this.scheduled || this.timer) return;
     this.scheduled = true;
@@ -165,12 +166,13 @@ export class UsageWriter {
           if (code === "receipt-conflict") { this.queue.shift(); this.state.dropped++; continue; }
           break;
         }
-        this.queue.shift(); this.state.accepted++; this.state.lastSuccessAt = this.now(); this.dirty = true;
+        this.queue.shift(); this.state.accepted++; this.state.lastSuccessAt = this.now(); this.dirty = true; this.revision++;
       }
       if (this.dirty) {
         this.state.updatedAt = this.now(); this.state.pending = this.queue.length;
+        const revision = this.revision;
         await atomic(join(this.root, "recorders", this.state.id + ".json"), JSON.stringify(this.state) + "\n", true);
-        this.dirty = false;
+        if (revision === this.revision) this.dirty = false;
       }
     } catch { this.state.writeFailures++; if (!this.state.reasons.includes("write-failed")) this.state.reasons.push("write-failed"); this.dirty = true; }
     finally {

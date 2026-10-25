@@ -136,14 +136,15 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 1. 普通扩展没有ctx.getSessionStats。以`attachment-window`为诚实默认：只累计接入后的final usage，流式累计值不逐帧相加。标明windowId、startedAt、coverage。
 2. 以稳定entry/owner receipt identity去重；没有稳定ID时不猜测重放是否新消费，标partial。扩展重载新窗口不拼成全历史总数。
 3. 现有native宿主可给`native-session-total`时保留原语义；TUI不为取数改成裸SDK/RPC，不导入内部AgentSession。
-4. Subagents `cost`由原owner定向读取当前分支和关联运行产物，在settled、async完成或用户刷新时有界请求，不定时扫描。它可提供parent/children/childTotal/total和unresolvedAsyncChildren，直接保留来源与下界，不在App重算一份相冲突的总账。
+4. Subagents `cost`由原owner读取当前分支和关联产物，底层RPC可能同步占Pi事件循环；因此只有用户显式查看/刷新准确会话的usage时才有界调用，settled/async完成、App缺席或收起不自动扫owner cost。普通状态查询也按用户当前对象合并/限频，workflow detail仅定向所选runId。它可提供parent/children/childTotal/total和unresolvedAsyncChildren，直接保留来源与下界，不在App重算一份相冲突的总账。
 5. `usage`、compaction、branch summary及nested tool usage必须与宿主归一规则对照。首阶段先建立合成合同，未覆盖的附加消耗明确标partial，不把只看assistant消息称完整账单。
 6. same child既作为独立Pi注册又在父报告出现，显示可以两处关联，汇总只取一个owner归属；无可证明不重叠关系则不展示精确全局合计。
 7. Context usage是上下文占用，不是花费；缺失/未结算值为null。无权威价格/费用结果不推算金额。
 8. 时间总览新增最小本机持久元数据链：bridge在final handler只投递标量到有界队列，异步写0700/0600原子spool；App后台导入SQLite，以不含epoch的稳定receipt hash唯一去重。App离线仍写入；不新增Agent/daemon、同步handler I/O或历史扫描。
 9. 时间记录只收Pi assistant final自身usage，不收流式中间值、父owner累计或不可证明不重叠的工具聚合；子会话自己的final可独立计入，未接入孩子/工具/压缩等附加量明确缺口。日期使用原始request UTC时间，绝不把累计到达日当消费日；无时间的记录只标缺口。
 10. 按用户本地Gregorian日历及显式IANA时区算今日/近7天/本月/自定义日期；结束日转下一天零点，查询[start,end)。跨DST用Calendar加天，不按24小时推算。未来与采集起点之前的桶分别显示尚未发生/尚未采集，缺字段聚合已知量并标下界，不以0伪装未知。
-11. SQLite索引仅服务用量查询/去重，事务提交后才清理已导入spool，崩溃重导幂等；预算/失败保留可见coverage，不把记录失败扩为Pi执行门禁。旧bridge不支持持久记录时局部提示，不将其显示快照补记为今天。
+11. SQLite索引仅服务用量查询/去重，事务提交后才清理已导入spool，崩溃重导幂等；utility queue持有连接，schema/quick_check只初始化，metadata dirty代际/DB data_version未变时复用范围结果，新rowid只增量归桶，刷新仅单一在途/最新合并。预算/失败保留coverage，不把失败扩为Pi门禁。旧bridge不支持持久记录时明确提示未纳入，不将显示快照补记为今天。
+12. hard-link publish后进程崩溃留下双链接时，只在本工具私有spool证明最终ID文件和准确`.usage-UUID`临时项同inode/device/owner/mode、结构及SHA256内容相同且nlink恰2后移除临时链接，再沿原严格reader导入；未知第二链接不放行、不删除。
 
 ## 8. 隐私、展示与诊断
 

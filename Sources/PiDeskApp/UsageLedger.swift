@@ -1,4 +1,5 @@
 import Darwin
+import CryptoKit
 import Foundation
 import SQLite3
 
@@ -176,6 +177,10 @@ public struct UsageAggregate: Equatable {
   public var totals = UsageTokenTotals()
   public var buckets: [UsageBucket] = []
   public var models: [UsageModelTotal] = []
+  public var availableModels: [String] = []
+  public var selectedModel: String?
+  public var modelBuckets: [String: [Date: UsageTokenTotals]] = [:]
+  public var modelRecordCounts: [String: Int] = [:]
   public var recordCount = 0
   public var collectedSince: Date?
   public var pendingRecords = 0
@@ -184,6 +189,20 @@ public struct UsageAggregate: Equatable {
   public var coverageReasons: [String] = []
   public var error: String?
   public var refreshedAt: Date?
+
+  public func filtered(model: String?) -> UsageAggregate {
+    guard let model else { return self }
+    var result = self
+    result.selectedModel = model
+    result.totals = models.first(where: { $0.model == model })?.tokens ?? UsageTokenTotals()
+    result.models = models.filter { $0.model == model }
+    result.recordCount = modelRecordCounts[model] ?? 0
+    let values = modelBuckets[model] ?? [:]
+    result.buckets = buckets.map { bucket in
+      UsageBucket(day: bucket.day, state: bucket.state == .future ? .future : (values[bucket.day] == nil ? .uncollected : .data), tokens: values[bucket.day] ?? UsageTokenTotals())
+    }
+    return result
+  }
 
   public static func empty(_ range: UsageDateRange, preview: Bool = false) -> UsageAggregate {
     var result = UsageAggregate(range: range, timeZoneID: range.timeZone.identifier)
@@ -206,6 +225,10 @@ public struct UsageAggregate: Equatable {
             t.add(input: input, output: output, cacheRead: cacheRead, cacheWrite: cacheWrite); byBucket[range.bucket(for: time)] = t
             var m = byModel[name] ?? UsageTokenTotals()
             m.add(input: input, output: output, cacheRead: cacheRead, cacheWrite: cacheWrite); byModel[name] = m
+            var mt = result.modelBuckets[name]?[range.bucket(for: time)] ?? UsageTokenTotals()
+            mt.add(input: input, output: output, cacheRead: cacheRead, cacheWrite: cacheWrite)
+            result.modelBuckets[name, default: [:]][range.bucket(for: time)] = mt
+            result.modelRecordCounts[name, default: 0] += 1
             result.recordCount += 1
           }
         }
@@ -214,6 +237,7 @@ public struct UsageAggregate: Equatable {
         UsageBucket(day: date, state: date > range.bucket(for: now) ? .future : (byBucket[date] == nil ? .uncollected : .data), tokens: byBucket[date] ?? UsageTokenTotals())
       }
       result.models = byModel.map { UsageModelTotal(model: $0.key, tokens: $0.value) }.sorted { $0.tokens.totalLowerBound > $1.tokens.totalLowerBound }
+      result.availableModels = result.models.map(\.model).sorted()
       result.collectedSince = calendar.date(byAdding: .day, value: -5, to: today)
       result.coverageReasons = ["纯合成预览；工具/子任务附加量可能未覆盖"]
       result.refreshedAt = Date()
@@ -251,12 +275,23 @@ private struct DiskRecorder: Decodable {
 
 protocol UsageLedgerClient: AnyObject {
   func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void)
+  func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void)
+}
+extension UsageLedgerClient {
+  func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void) {
+    refresh(range: range) { completion($0.filtered(model: model)) }
+  }
 }
 
 public final class UsageLedger: UsageLedgerClient {
   private let queue = DispatchQueue(label: "io.github.chenhaoxiang.pi-desk.usage-ledger", qos: .utility)
   private let root: URL
-  private var request = 0
+  private var database: Database?
+  private var cachedRange: UsageDateRange?
+  private var cachedGeneration: String?
+  private var cachedAggregate: UsageAggregate?
+  private var cacheBucket: Date?
+  private var counters = ["databaseOpens": 0, "importScans": 0, "aggregateScans": 0, "cacheHits": 0]
 
   public init(root: URL? = nil) {
     if let root {
@@ -269,32 +304,51 @@ public final class UsageLedger: UsageLedgerClient {
     }
   }
 
-  public func refresh(
-    range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void
-  ) {
-    request += 1
-    let requestID = request
-    queue.async { [root] in
-      let result = Self.read(root: root, range: range)
+  private var pendingRefresh: (range: UsageDateRange, model: String?, completion: (UsageAggregate) -> Void)?
+  private var isRefreshing = false
+  public func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void) {
+    refresh(range: range, model: nil, completion: completion)
+  }
+  public func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void) {
+    pendingRefresh = (range, model, completion)
+    if !isRefreshing { runNextRefresh() }
+  }
+  private func runNextRefresh() {
+    guard let work = pendingRefresh else { isRefreshing = false; return }
+    pendingRefresh = nil; isRefreshing = true
+    queue.async { [weak self] in
+      guard let self else { return }
+      let result = self.readIncremental(range: work.range).filtered(model: work.model)
       DispatchQueue.main.async {
-        guard requestID == self.request else { return }
-        completion(result)
+        if self.pendingRefresh != nil { self.runNextRefresh() }
+        else { self.isRefreshing = false; work.completion(result) }
       }
     }
   }
-
-  private static func read(root: URL, range: UsageDateRange) -> UsageAggregate {
+  private func readIncremental(range: UsageDateRange) -> UsageAggregate {
     do {
-      try secureDirectory(root)
-      let db = try Database(root: root)
+      try Self.secureDirectory(root)
+      if database == nil { database = try Database(root: root); counters["databaseOpens", default: 0] += 1 }
+      let db = database!
+      let generation = try metadataGeneration(db: db)
+      if let cachedAggregate, cachedRange == range, cachedGeneration == generation, cacheBucket == range.bucket(for: Date()) {
+        counters["cacheHits", default: 0] += 1
+        var value = cachedAggregate; value.refreshedAt = Date(); return value
+      }
+      counters["importScans", default: 0] += 1
       let importResult = try db.importSpool()
+      counters["aggregateScans", default: 0] += 1
       var aggregate = try db.aggregate(range: range)
+      counters["aggregateRows", default: 0] += db.lastAggregateRows
       aggregate.pendingRecords = importResult.pending
       aggregate.malformed = importResult.malformed
       aggregate.conflicts = importResult.conflicts
       if aggregate.conflicts > 0 { aggregate.coverageReasons.append("重复receipt内容冲突，保留首次记录") }
       aggregate.coverageReasons = Array(Set(aggregate.coverageReasons + importResult.reasons)).sorted()
       aggregate.refreshedAt = Date()
+      // Bind the pre-import generation: any concurrent publish is necessarily
+      // dirty on the next refresh (our own unlink may cause one cheap extra pass).
+      cachedRange = range; cachedGeneration = generation; cachedAggregate = aggregate; cacheBucket = range.bucket(for: Date())
       return aggregate
     } catch {
       var aggregate = UsageAggregate.empty(range)
@@ -305,6 +359,20 @@ public final class UsageLedger: UsageLedgerClient {
     }
   }
 
+  public func diagnostics(_ completion: @escaping ([String: Int]) -> Void) {
+    queue.async { let value = self.counters; DispatchQueue.main.async { completion(value) } }
+  }
+  private func metadataGeneration(db: Database) throws -> String {
+    let spool = root.appendingPathComponent("spool")
+    let dirs = ((try? FileManager.default.contentsOfDirectory(at: spool, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []).filter { $0.lastPathComponent.range(of: "^[a-f0-9]{2}$", options: .regularExpression) != nil }.prefix(256)
+    var parts = [String(try db.scalar("PRAGMA data_version"))]
+    for url in [spool, root.appendingPathComponent("recorders")] + Array(dirs) {
+      var info = stat()
+      guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR, info.st_uid == getuid(), info.st_mode & 0o077 == 0 else { throw LedgerError.unsafeStorage }
+      parts.append(url.lastPathComponent + ":" + String(info.st_ino) + ":" + String(info.st_mtimespec.tv_sec) + ":" + String(info.st_mtimespec.tv_nsec))
+    }
+    return parts.sorted().joined(separator: "|")
+  }
   private static func errorText(_ error: Error) -> String {
     let text = String(describing: error)
     return text.count <= 120 ? text : String(text.prefix(120))
@@ -338,7 +406,58 @@ public final class UsageLedger: UsageLedgerClient {
     guard count >= 0, count <= 4096 else { throw LedgerError.unsafeStorage }
     return Data(bytes.prefix(count))
   }
-  public static func inspect(root: URL, range: UsageDateRange) -> UsageAggregate { read(root: root, range: range) }
+  public static func inspect(root: URL, range: UsageDateRange) -> UsageAggregate { UsageLedger(root: root).readIncremental(range: range) }
+
+  private static func recoverOwnPublishLink(_ file: URL) throws -> Bool {
+    let dir = file.deletingLastPathComponent()
+    var quick = stat()
+    guard lstat(file.path, &quick) == 0, quick.st_nlink == 2, quick.st_mode & S_IFMT == S_IFREG else { return false }
+    let fd = open(file.path, O_RDONLY | O_NOFOLLOW)
+    guard fd >= 0 else { return false }
+    defer { Darwin.close(fd) }
+    var final = stat()
+    guard fstat(fd, &final) == 0, final.st_mode & S_IFMT == S_IFREG, final.st_uid == getuid(),
+      final.st_mode & 0o077 == 0, final.st_nlink == 2, final.st_size > 0, final.st_size <= 4096 else { return false }
+    var bytes = [UInt8](repeating: 0, count: 4097)
+    let n = Darwin.read(fd, &bytes, bytes.count)
+    guard n > 0, n <= 4096 else { return false }
+    let data = Data(bytes.prefix(n))
+    guard let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(raw.keys) == Set(["version", "kind", "id", "session", "occurredAt", "model", "source", "tokens"]),
+      let rawTokens = raw["tokens"] as? [String: Any], Set(rawTokens.keys) == Set(["input", "output", "cacheRead", "cacheWrite"]),
+      let entry = try? JSONDecoder().decode(DiskUsageEntry.self, from: data),
+      entry.version == 1, entry.kind == "usage", entry.source == "pi.assistant.final",
+      entry.id.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+      entry.id + ".json" == file.lastPathComponent,
+      entry.session.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+      entry.model.range(of: "^[A-Za-z0-9._:/+@ -]{1,128}$", options: .regularExpression) != nil,
+      entry.occurredAt >= 946684800000, entry.occurredAt <= Int64(Date().timeIntervalSince1970 * 1000),
+      [entry.tokens.input, entry.tokens.output, entry.tokens.cacheRead, entry.tokens.cacheWrite].allSatisfy({ $0 == nil || ($0! >= 0 && $0! <= 9_007_199_254_740_991) }) else { return false }
+    let children = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+    var matches: [URL] = []
+    for child in children.prefix(1024) where child.lastPathComponent.range(of: "^\\.usage-[0-9a-fA-F-]{36}$", options: .regularExpression) != nil {
+      guard UUID(uuidString: String(child.lastPathComponent.dropFirst(7))) != nil else { continue }
+      let other = open(child.path, O_RDONLY | O_NOFOLLOW)
+      guard other >= 0 else { continue }
+      var info = stat()
+      if fstat(other, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_uid == final.st_uid,
+        info.st_mode & 0o077 == 0, info.st_nlink == 2, info.st_ino == final.st_ino, info.st_dev == final.st_dev, info.st_size == final.st_size {
+        var temp = [UInt8](repeating: 0, count: 4097)
+        let count = Darwin.read(other, &temp, temp.count)
+        if count == n, SHA256.hash(data: Data(temp.prefix(count))) == SHA256.hash(data: data) { matches.append(child) }
+      }
+      Darwin.close(other)
+    }
+    guard matches.count == 1 else { return false }
+    var latest = stat(), tempInfo = stat()
+    guard lstat(file.path, &latest) == 0, lstat(matches[0].path, &tempInfo) == 0,
+      latest.st_nlink == 2, tempInfo.st_nlink == 2, latest.st_ino == final.st_ino, tempInfo.st_ino == final.st_ino,
+      latest.st_dev == final.st_dev, tempInfo.st_dev == final.st_dev else { return false }
+    guard unlink(matches[0].path) == 0 else { return false }
+    let d = open(dir.path, O_RDONLY | O_NOFOLLOW)
+    if d >= 0 { _ = fsync(d); Darwin.close(d) }
+    return true
+  }
   private final class Database {
     let root: URL
     var handle: OpaquePointer?
@@ -425,6 +544,7 @@ public final class UsageLedger: UsageLedgerClient {
       try exec("BEGIN IMMEDIATE")
       do {
         for file in batch {
+          _ = try? UsageLedger.recoverOwnPublishLink(file)
           let data: Data
           do { data = try UsageLedger.readPrivate(file) }
           catch LedgerError.fileMissing { continue }
@@ -505,41 +625,54 @@ public final class UsageLedger: UsageLedgerClient {
       default: return "部分来源覆盖不完整"
       }
     }
+    private(set) var lastAggregateRows = 0
+    private var aggregateCache: (range: UsageDateRange, version: Int64, cursor: Int64, value: UsageAggregate)?
+    private var aggregateDays: [Date: UsageTokenTotals] = [:]
     func aggregate(range: UsageDateRange) throws -> UsageAggregate {
-      let s = try prepare("SELECT occurred,model,input,output,cache_read,cache_write FROM usage_entries WHERE occurred>=? AND occurred<? ORDER BY occurred,id LIMIT 500001")
-      defer { sqlite3_finalize(s) }
-      bind(Int64(range.start.timeIntervalSince1970 * 1000), s, 1)
-      // The selected interval remains half-open; clipping a future end to now never includes a future record.
-      bind(min(Int64(range.end.timeIntervalSince1970 * 1000), Int64(Date().timeIntervalSince1970 * 1000)), s, 2)
-      var result = UsageAggregate(range: range, timeZoneID: range.timeZone.identifier)
-      var byDay: [Date: UsageTokenTotals] = [:], byModel: [String: UsageTokenTotals] = [:]
-      var step = sqlite3_step(s)
-      while step == SQLITE_ROW {
-        guard result.recordCount < 500000 else { result.coverageReasons.append("范围记录过多，请缩小时间范围；当前显示下界"); break }
-        let date = Date(timeIntervalSince1970: Double(int(s, 0) ?? 0) / 1000)
-        let day = range.bucket(for: date), model = string(s, 1)
-        let a = int(s, 2), b = int(s, 3), c = int(s, 4), d = int(s, 5)
-        result.totals.add(input: a, output: b, cacheRead: c, cacheWrite: d)
-        var dayTotal = byDay[day] ?? UsageTokenTotals(); dayTotal.add(input: a, output: b, cacheRead: c, cacheWrite: d); byDay[day] = dayTotal
-        let modelKey = byModel[model] != nil || byModel.count < 128 ? model : "其他模型"
-        var modelTotal = byModel[modelKey] ?? UsageTokenTotals(); modelTotal.add(input: a, output: b, cacheRead: c, cacheWrite: d); byModel[modelKey] = modelTotal
-        result.recordCount += 1
-        step = sqlite3_step(s)
+      let version = try scalar("PRAGMA data_version")
+      let maximum = try scalar("SELECT COALESCE(max(rowid),0) FROM usage_entries")
+      let reusable = aggregateCache.map { $0.range == range && $0.version == version && $0.cursor <= maximum } ?? false
+      var result = reusable ? aggregateCache!.value : UsageAggregate(range: range, timeZoneID: range.timeZone.identifier)
+      let cursor = reusable ? aggregateCache!.cursor : 0
+      if !reusable { aggregateDays = [:] }
+      var modelTotals = Dictionary(uniqueKeysWithValues: result.models.map { ($0.model, $0.tokens) })
+      let visible = Set(range.days)
+      var processed = 0
+      if cursor < maximum {
+        let statement = try prepare("SELECT rowid,occurred,model,input,output,cache_read,cache_write FROM usage_entries WHERE rowid>? AND occurred>=? AND occurred<? ORDER BY rowid")
+        defer { sqlite3_finalize(statement) }
+        bind(cursor, statement, 1)
+        bind(Int64(range.start.timeIntervalSince1970 * 1000), statement, 2)
+        bind(min(Int64(range.end.timeIntervalSince1970 * 1000), Int64(Date().timeIntervalSince1970 * 1000) + 1), statement, 3)
+        var step = sqlite3_step(statement)
+        while step == SQLITE_ROW {
+          let date = Date(timeIntervalSince1970: Double(int(statement, 1) ?? 0) / 1000)
+          let day = range.bucket(for: date), rawModel = string(statement, 2)
+          let model = modelTotals[rawModel] != nil || modelTotals.count < 128 ? rawModel : "其他模型"
+          let a = int(statement, 3), b = int(statement, 4), c = int(statement, 5), d = int(statement, 6)
+          result.totals.add(input: a, output: b, cacheRead: c, cacheWrite: d)
+          var total = modelTotals[model] ?? UsageTokenTotals(); total.add(input: a, output: b, cacheRead: c, cacheWrite: d); modelTotals[model] = total
+          result.modelRecordCounts[model, default: 0] += 1
+          if visible.contains(day) {
+            var daily = aggregateDays[day] ?? UsageTokenTotals(); daily.add(input: a, output: b, cacheRead: c, cacheWrite: d); aggregateDays[day] = daily
+            var md = result.modelBuckets[model]?[day] ?? UsageTokenTotals(); md.add(input: a, output: b, cacheRead: c, cacheWrite: d); result.modelBuckets[model, default: [:]][day] = md
+          }
+          result.recordCount += 1; processed += 1
+          step = sqlite3_step(statement)
+        }
+        guard step == SQLITE_DONE else { throw LedgerError.databaseUnavailable }
       }
-      guard step == SQLITE_DONE || result.recordCount == 500000 else { throw LedgerError.databaseUnavailable }
       let earliest = try scalar("SELECT COALESCE(min(occurred),0) FROM usage_entries")
       if earliest > 0 { result.collectedSince = Date(timeIntervalSince1970: Double(earliest) / 1000) }
-      result.models = byModel.map { UsageModelTotal(model: $0.key, tokens: $0.value) }.sorted { $0.tokens.totalLowerBound > $1.tokens.totalLowerBound }
+      result.models = modelTotals.map { UsageModelTotal(model: $0.key, tokens: $0.value) }.sorted { $0.tokens.totalLowerBound > $1.tokens.totalLowerBound }
+      result.availableModels = result.models.map(\.model).sorted()
       let currentBucket = range.bucket(for: Date())
-      result.buckets = range.days.map { day in
-        UsageBucket(day: day, state: day > currentBucket ? .future : (byDay[day] == nil ? .uncollected : .data), tokens: byDay[day] ?? UsageTokenTotals())
-      }
-      if range.days.last.map({ range.timeZoneCalendar.date(byAdding: range.hourly ? .hour : .day, value: 1, to: $0)! < range.end }) == true {
-        result.coverageReasons.append("图表最多显示400个桶；总量仍覆盖所选范围")
-      }
-      result.coverageReasons += ["仅含启用采集后的Pi assistant final；工具/子任务附加量可能未覆盖"]
+      result.buckets = range.days.map { day in UsageBucket(day: day, state: day > currentBucket ? .future : (aggregateDays[day] == nil ? .uncollected : .data), tokens: aggregateDays[day] ?? UsageTokenTotals()) }
+      result.coverageReasons = ["仅含启用采集后的Pi assistant final；工具/子任务附加量可能未覆盖"]
       if result.totals.overflow { result.coverageReasons.append("计数超出安全范围，仅显示已知下界") }
       if !result.totals.seen { result.coverageReasons.append("该时间范围尚未采集用量，不代表零消费") }
+      lastAggregateRows = processed
+      aggregateCache = (range, version, maximum, result)
       return result
     }
   }

@@ -171,6 +171,14 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 新增通知按钮只在用户显式点击时调用标准系统`requestAuthorization`；启动仅读取状态。custom结束日期早于开始日期时不发新ledger查询，也不替换上一次有效聚合。
 
+### GPT漏采诊断与性能定向修复
+
+真实在线GPT会话的metadata诊断证明仍持有早期无usage spool的bridge；App更新不强reload业务Pi，因此已有GPT会话的接入窗口/owner累计不能按日期补记到新账。当前UI显式显示“旧桥接未纳入”、未采集模型与自然加载提示；没有真实GPT final前不伪造模型账或把unknown填0。隔离fresh GPT-named faux原生链已证明final receipt→异步spool→SQLite distinct model→真实App模型分布，明确synthetic而非真实GPT provider调用。
+
+性能根因是Pi事件总线同步派发OwnerRPC：把`cost`包在setImmediate不隔离owner的branch/artifact I/O。已移除session_start/settled/async完成等自动owner扫描，只有当前用户显式兴趣/刷新才限频合并查询，workflow detail只对所选runId。实际固定Subagents owner的10,128条合成branch/128 children cost RPC同步约0.59–6.06ms，不能声称免费。相同30回合实际InteractiveMode/PTY对照：未接入dispatch p95/p99约0.0051/0.0055ms，接入约0.0238/0.0265ms；turn中位数约1.914/1.894ms，RSS增量约13.2/12.4MB，pending/drop0、新增模型/确认0。仅显式cost刷新触发一次owner读取，不推导零开销或全平台性能。
+
+App ledger现以utility queue持久连接、metadata generation/DB data_version缓存、rowid增量归桶与单一合并刷新代替每轮quick_check/DDL/全范围聚合；定向检查证明10次无变化刷新不增加aggregate扫描，新final只增量读1row；模型过滤与空态仍保留unknown。生产writer实际link后SIGKILL的隔离复现已验证准确自有临时链接恢复；未知第二链接依旧拒绝。真实数据/hash/原件只记本机tmp，不在公开Git暴露真实用量。
+
 ### 保留的未完成项
 
 完整v0.1未验收、Change未归档。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整VoiceOver、系统通知许可/交付与长时间真实TUI/多显示器组合仍待验证。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

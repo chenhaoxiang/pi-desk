@@ -259,6 +259,12 @@ struct SessionDiagnostics: View {
     DisclosureGroup("诊断信息") {
       VStack(alignment: .leading, spacing: 9) {
         line("桥接源码", session.snapshot.capabilities.owners["pi-desk-bridge"] ?? "未提供")
+        if let recorder = session.snapshot.usageRecorder {
+          line("用量采集器", "final持久记录已启用 · 待落盘 \(recorder.pending) · 丢弃 \(recorder.dropped) · 写盘失败 \(recorder.writeFailures)")
+          line("采集说明", recorder.reasons.joined(separator: ", "))
+        } else {
+          line("用量采集器", "旧桥接未纳入持久时间统计；等待新Pi正常启动时自然加载，不强制重载当前工作")
+        }
         line("会话ID", session.snapshot.identity.nativeSessionId)
         line("运行代际", session.snapshot.identity.runtimeEpoch)
         line("原始状态", session.snapshot.execution.rawValue + " / " + session.connection.rawValue)

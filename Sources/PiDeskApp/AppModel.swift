@@ -49,6 +49,7 @@ struct DeskSettings: Codable {
   @Published var hiddenSessions: Set<String> = []
   @Published var usagePreset: UsagePreset = .today
   @Published var usageMetric: UsageMetric = .interaction
+  @Published var usageModel = ""
   @Published var usageCustomStart = Date()
   @Published var usageCustomEnd = Date()
   @Published var aggregate = UsageAggregate.empty(.make(preset: .today))
@@ -58,6 +59,7 @@ struct DeskSettings: Codable {
   private let notificationClient: NotificationClient?
   private var ledger: UsageLedgerClient?
   private var lastUsageRefresh = Date.distantPast
+  private var ownerQueryTimes: [String: Date] = [:]
   let isPreview: Bool
   var showManager: () -> Void = {}
   var showIsland: () -> Void = {}
@@ -75,6 +77,7 @@ struct DeskSettings: Codable {
       hiddenSessions.remove(identity.sessionKey)
     }
     selected = identity.sessionKey
+    refresh(identity: identity)
   }
   private var notified: Set<String> = []
   private var server: SocketServer!
@@ -115,15 +118,16 @@ struct DeskSettings: Codable {
       return
     }
     let range = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)
-    if isPreview { aggregate = .empty(range, preview: true); return }
+    if isPreview { aggregate = UsageAggregate.empty(range, preview: true).filtered(model: usageModel.isEmpty ? nil : usageModel); return }
     guard !usageLoading, let ledger else { return }
     usageLoading = true; lastUsageRefresh = Date()
-    ledger.refresh(range: range) { [weak self] result in
+    let filter = usageModel.isEmpty ? nil : usageModel
+    ledger.refresh(range: range, model: filter) { [weak self] result in
       guard let self else { return }
       self.usageLoading = false
       guard self.customRangeIsValid else { return }
       let expected = UsageDateRange.make(preset: self.usagePreset, customStart: self.usageCustomStart, customEnd: self.usageCustomEnd)
-      guard expected == result.range else { self.refreshUsage(); return }
+      guard expected == result.range, (self.usageModel.isEmpty ? nil : self.usageModel) == result.selectedModel else { self.refreshUsage(); return }
       if result.error != nil, self.aggregate.totals.seen, self.aggregate.range == result.range {
         self.aggregate.error = result.error
         self.aggregate.coverageReasons = result.coverageReasons
@@ -283,13 +287,19 @@ struct DeskSettings: Codable {
     timer?.invalidate()
     server?.stop()
   }
-  func refresh(usage: Bool = false, identity: Identity? = nil) {
+  func refresh(usage: Bool = false, identity: Identity? = nil, runId: String? = nil) {
     guard !isPreview, let s = identity.flatMap({ store.sessions[$0.sessionKey] }) ?? current,
       s.connection == .connected, identity == nil || s.snapshot.identity == identity
     else { return }
+    let key = s.snapshot.identity.runtimeEpoch + (usage ? ":cost" : ":status") + (runId ?? "")
+    let now = Date()
+    guard now.timeIntervalSince(ownerQueryTimes[key] ?? .distantPast) >= (usage ? 5 : 2) else { return }
+    if ownerQueryTimes.count >= 128 { ownerQueryTimes.removeAll(keepingCapacity: true) }
+    ownerQueryTimes[key] = now
     server.send(
       WireRecord(
         kind: "query", identity: s.snapshot.identity, requestId: UUID().uuidString,
+        target: runId.map { Target(owner: "subagents", runId: $0) },
         query: usage ? "usage.refresh" : "refresh"), to: s.connectionId)
   }
   @discardableResult

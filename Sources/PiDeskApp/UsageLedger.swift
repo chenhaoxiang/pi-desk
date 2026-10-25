@@ -68,6 +68,23 @@ public struct UsageDateRange: Equatable {
   }
 }
 
+public enum UsageMetric: String, CaseIterable, Identifiable {
+  case interaction, cache, processing
+  public var id: String { rawValue }
+  public var selector: String { switch self { case .interaction: return "交互"; case .cache: return "缓存"; case .processing: return "全部" } }
+  public var title: String { switch self { case .interaction: return "交互 Token"; case .cache: return "缓存用量"; case .processing: return "记录总处理量" } }
+  public var explanation: String { switch self {
+    case .interaction: return "输入 + 输出，不含缓存复用"
+    case .cache: return "缓存读取 + 缓存写入，表示上下文复用/写入量"
+    case .processing: return "输入 + 输出 + 缓存读取 + 缓存写入；四桶下界，不是新输入或账单"
+  } }
+  public var indices: [Int] { switch self { case .interaction: return [0, 1]; case .cache: return [2, 3]; case .processing: return [0, 1, 2, 3] } }
+}
+public struct UsageMetricValue: Equatable {
+  public var value: Int64
+  public var known: Bool
+  public var complete: Bool
+}
 public struct UsageTokenTotals: Equatable {
   public var input: Int64 = 0
   public var output: Int64 = 0
@@ -116,6 +133,18 @@ public struct UsageTokenTotals: Equatable {
     return result
   }
 
+  public func metric(_ metric: UsageMetric) -> UsageMetricValue {
+    let values = [input, output, cacheRead, cacheWrite]
+    let known = [inputKnown, outputKnown, cacheReadKnown, cacheWriteKnown]
+    let complete = [inputComplete, outputComplete, cacheReadComplete, cacheWriteComplete]
+    var sum: Int64 = 0, sumOverflow = false
+    for index in metric.indices {
+      let next = sum.addingReportingOverflow(values[index])
+      if next.overflow { sum = Int64.max; sumOverflow = true } else { sum = next.partialValue }
+    }
+    return UsageMetricValue(value: sum, known: metric.indices.contains { known[$0] },
+      complete: seen && !sumOverflow && metric.indices.allSatisfy { known[$0] && complete[$0] })
+  }
   public var anyKnown: Bool { inputKnown || outputKnown || cacheReadKnown || cacheWriteKnown }
   public var complete: Bool {
     seen && inputComplete && outputComplete && cacheReadComplete && cacheWriteComplete && !overflow

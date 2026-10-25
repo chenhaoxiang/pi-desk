@@ -73,7 +73,7 @@ struct SessionCard: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           Text(session.snapshot.display.name).font(
             .system(size: island ? 15 : 14, weight: .semibold)
-          ).lineLimit(1).help(session.snapshot.display.name)
+          ).lineLimit(island ? 1 : 2).fixedSize(horizontal: false, vertical: true).help(session.snapshot.display.name)
           Spacer(minLength: 0)
           StatusPill(status: Presentation.status(session))
         }

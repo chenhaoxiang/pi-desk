@@ -45,9 +45,10 @@ struct DeskSettings: Codable {
   @Published var muted = false
   @Published var drafts: [Identity: String] = [:]
   @Published var search = ""
-  @Published var sessionFilter = "全部"
+  @Published var sessionFilter = "在线"
   @Published var hiddenSessions: Set<String> = []
   @Published var usagePreset: UsagePreset = .today
+  @Published var usageMetric: UsageMetric = .interaction
   @Published var usageCustomStart = Date()
   @Published var usageCustomEnd = Date()
   @Published var aggregate = UsageAggregate.empty(.make(preset: .today))
@@ -68,6 +69,11 @@ struct DeskSettings: Codable {
   }
   func select(_ identity: Identity) {
     guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
+    if !visibleSessions.contains(where: { $0.snapshot.identity == identity }) {
+      search = ""
+      sessionFilter = "全部"
+      hiddenSessions.remove(identity.sessionKey)
+    }
     selected = identity.sessionKey
   }
   private var notified: Set<String> = []
@@ -82,12 +88,12 @@ struct DeskSettings: Codable {
       return a == b ? $0.snapshot.display.name < $1.snapshot.display.name : a < b
     }
   }
-  var current: SessionView? { selected.flatMap { store.sessions[$0] } }
+  var current: SessionView? { selected.flatMap { key in visibleSessions.first { $0.snapshot.identity.sessionKey == key } } }
   var visibleSessions: [SessionView] {
     sessions.filter { s in
       let snap = s.snapshot
       let matchesSearch = search.isEmpty || [snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
-      let matchesState = sessionFilter == "全部" || (sessionFilter == "运行中" && s.connection == .connected && [.running, .waitingChildren, .retrying, .compacting].contains(snap.execution)) || (sessionFilter == "需输入" && !snap.inputs.isEmpty) || (sessionFilter == "断连" && s.connection != .connected)
+      let matchesState = sessionFilter == "在线" ? s.connection == .connected : sessionFilter == "全部" || (sessionFilter == "运行中" && s.connection == .connected && [.running, .waitingChildren, .retrying, .compacting].contains(snap.execution)) || (sessionFilter == "需输入" && !snap.inputs.isEmpty) || (sessionFilter == "断连" && s.connection != .connected)
       return matchesSearch && matchesState && (!hiddenSessions.contains(snap.identity.sessionKey) || s.connection == .connected)
     }
   }

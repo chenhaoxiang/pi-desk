@@ -70,7 +70,19 @@ import SQLite3
     }
     group.wait()
     assert(concurrent.count == 2 && concurrent.allSatisfy { $0.error == nil && $0.recordCount == 4 }, "two index clients serialize without double counting")
+    var arithmetic = UsageTokenTotals()
+    arithmetic.add(input: 844_557, output: 365_793, cacheRead: 43_735_808, cacheWrite: 0)
+    assert(arithmetic.metric(.interaction).value == 1_210_350, "interaction means input plus output only")
+    assert(arithmetic.metric(.cache).value == 43_735_808, "cache is separately visible, not new input")
+    assert(arithmetic.metric(.processing).value == 44_946_158, "four bucket processing total includes cache exactly once")
+    var missing = UsageTokenTotals(); missing.add(input: 10, output: 5, cacheRead: nil, cacheWrite: nil)
+    assert(missing.metric(.interaction).value == 15 && missing.metric(.interaction).complete, "missing cache does not poison known interaction sum")
+    assert(!missing.metric(.cache).known && missing.metric(.processing).value == 15 && !missing.metric(.processing).complete, "unknown cache is not zero")
     let sample = UsageAggregate.empty(UsageDateRange.make(preset: .last7), preview: true)
+    for metric in UsageMetric.allCases {
+      assert(sample.models.reduce(0) { $0 + $1.tokens.metric(metric).value } == sample.totals.metric(metric).value, "all model distributions use the selected semantic")
+      assert(sample.buckets.reduce(0) { $0 + $1.tokens.metric(metric).value } == sample.totals.metric(metric).value, "all trend buckets use the selected semantic")
+    }
     assert(sample.models.reduce(0) { $0 + $1.tokens.totalLowerBound } == sample.totals.totalLowerBound, "synthetic model/total consistency")
     assert(sample.buckets.reduce(0) { $0 + $1.tokens.totalLowerBound } == sample.totals.totalLowerBound, "synthetic chart/total consistency")
     let future = UsageDateRange.make(preset: .today, now: date("2099-01-01T00:00:00Z"), timeZone: sh)

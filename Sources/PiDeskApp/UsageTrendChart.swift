@@ -3,18 +3,16 @@ import SwiftUI
 
 struct UsageTrendChart: View {
   let usage: UsageAggregate
+  let metric: UsageMetric
   private let labels = ["输入", "输出", "缓存读取", "缓存写入"]
   private let colors: [Color] = [.blue, .green, .purple, .orange]
   var body: some View {
     Chart {
       ForEach(usage.buckets.filter { $0.state == .data }) { bucket in
-        marks(for: bucket, index: 0)
-        marks(for: bucket, index: 1)
-        marks(for: bucket, index: 2)
-        marks(for: bucket, index: 3)
+        ForEach(metric.indices, id: \.self) { index in marks(for: bucket, index: index) }
       }
     }
-    .chartForegroundStyleScale(domain: labels, range: colors)
+    .chartForegroundStyleScale(domain: metric.indices.map { labels[$0] }, range: metric.indices.map { colors[$0] })
     .chartXScale(domain: usage.range.start...usage.range.end)
     .chartXAxis {
       AxisMarks(values: .automatic(desiredCount: 7)) { value in
@@ -26,14 +24,14 @@ struct UsageTrendChart: View {
     }
     .chartYAxis { AxisMarks(position: .leading) { AxisGridLine(); AxisValueLabel(format: FloatingPointFormatStyle<Double>.number.notation(.compactName)) } }
     .environment(\.timeZone, usage.range.timeZone)
-    .accessibilityLabel("所选时间已记录Token趋势，空白桶为尚未采集或未来时间")
+    .accessibilityLabel(metric.title + "趋势，空白桶为尚未采集或未来时间")
   }
   @ChartContentBuilder private func marks(for bucket: UsageBucket, index: Int) -> some ChartContent {
     let values = [bucket.tokens.input, bucket.tokens.output, bucket.tokens.cacheRead, bucket.tokens.cacheWrite]
     let interval = usage.range.bucketEnd(bucket.day).timeIntervalSince(bucket.day)
     let start = bucket.day.addingTimeInterval(interval * 0.12)
     let end = bucket.day.addingTimeInterval(interval * 0.88)
-    let lower = values.prefix(index).reduce(0.0) { $0 + Double($1) }
+    let lower = metric.indices.prefix(while: { $0 != index }).reduce(0.0) { $0 + Double(values[$1]) }
     let upper = lower + Double(values[index])
     RectangleMark(
       xStart: .value("开始", start), xEnd: .value("结束", end),

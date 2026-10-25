@@ -65,15 +65,24 @@ import PiDeskCore
     model.search = "visual-target-b"
     model.search = "合成" // Fixture names are source metadata, not an execution target.
     model.search = "NO_MATCH_123"
-    precondition(model.visibleSessions.isEmpty)
+    precondition(model.visibleSessions.isEmpty && model.current == nil)
     model.search = ""
     model.sessionFilter = "断连"
     precondition(model.visibleSessions.isEmpty)
     model.store.disconnect(targetConnection)
     precondition(model.visibleSessions.count == 1)
+    model.sessionFilter = "在线"
+    precondition(model.visibleSessions.count == 1 && model.visibleSessions[0].snapshot.identity == b.identity)
+    model.sessionFilter = "全部"
+    precondition(model.visibleSessions.count == 2)
+    model.sessionFilter = "断连"
     model.hideDisconnected(a.identity)
     precondition(model.visibleSessions.isEmpty && model.store.sessions[a.identity.sessionKey] != nil)
     precondition(model.drafts[a.identity] == "Draft A")
+    let countBeforeSelect = model.store.requests.count
+    model.select(a.identity)
+    precondition(model.current?.snapshot.identity == a.identity && model.sessionFilter == "全部")
+    precondition(model.store.requests.count == countBeforeSelect)
     print(
       "AppModel draft checks passed: unavailable, duplicate/pending, disconnected preserve input; only admitted request clears."
     )

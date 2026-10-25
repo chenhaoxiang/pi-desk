@@ -111,7 +111,7 @@ struct DeskWindow: View {
           HStack {
             Label(page, systemImage: icon(page))
             Spacer()
-            if page == "会话" { Text("\(model.sessions.count)").foregroundStyle(.secondary) }
+            if page == "会话" { Text("\(model.visibleSessions.count)").foregroundStyle(.secondary) }
             if page == "重要事项" && model.inputCount > 0 {
               Text("\(model.inputCount)").foregroundStyle(.orange)
             }
@@ -180,12 +180,12 @@ struct SessionList: View {
       HStack {
         Text("我的会话").font(.subheadline.weight(.semibold))
         Spacer()
-        Text("按状态排序").font(.caption2).foregroundStyle(.secondary)
+        Text("显示 \(model.visibleSessions.count) / 共 \(model.sessions.count)").font(.caption2).foregroundStyle(.secondary)
       }.padding(17)
       VStack(spacing: 10) {
         TextField("搜索会话、项目或模型", text: $model.search).textFieldStyle(.roundedBorder).accessibilityLabel("搜索已接入会话")
         Picker("状态筛选", selection: $model.sessionFilter) {
-          ForEach(["全部", "运行中", "需输入", "断连"], id: \.self) { Text($0).tag($0) }
+          ForEach(["在线", "全部", "运行中", "需输入", "断连"], id: \.self) { Text($0).tag($0) }
         }.pickerStyle(.segmented).accessibilityLabel("按状态筛选会话")
         if !model.hiddenSessions.isEmpty { Button("显示已隐藏卡片（不改变运行）") { model.hiddenSessions.removeAll() }.font(.caption2) }
       }.padding(.horizontal, 13).padding(.bottom, 12)
@@ -196,7 +196,13 @@ struct SessionList: View {
               "尚无已接入会话", systemImage: "rectangle.stack",
               description: Text("新 Pi 自然加载桥接后即可显示，不扫描历史。"))
           }
-          if model.visibleSessions.isEmpty && !model.sessions.isEmpty { Text("没有匹配的会话；可调整搜索或筛选。").font(.caption).foregroundStyle(.secondary).padding() }
+          if model.visibleSessions.isEmpty && !model.sessions.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+              Text(model.sessionFilter == "在线" && model.search.isEmpty ? "当前没有在线会话；断连记录可在“断连”或“全部”查看。" : "没有匹配的会话；可调整搜索或筛选。")
+              Button("清除搜索与筛选") { model.search = ""; model.sessionFilter = "在线" }.buttonStyle(.borderless)
+              Text("这里只隐藏显示，不会停止或删除原Pi工作。").foregroundStyle(.secondary)
+            }.font(.caption).padding()
+          }
           ForEach(model.visibleSessions, id: \.snapshot.identity) { s in
             Button {
               model.select(s.snapshot.identity)
@@ -275,7 +281,10 @@ struct SessionDetail: View {
           }
         }
         DeskCard { UsageTiles(snapshot: snap) }
-        if model.page == "子任务" || !snap.runs.isEmpty { RunsSection(session: session) }
+        if model.page == "子任务" { RunsSection(session: session) }
+        else if !snap.runs.isEmpty {
+          DisclosureGroup("子任务 \(snap.runs.count) · 展开查看与操作") { RunsSection(session: session) }.font(.caption)
+        }
         if model.page == "计划" { SchedulesSection(session: session) }
         if !model.actionNote.isEmpty {
           Label(model.actionNote, systemImage: "info.circle").font(.caption).foregroundStyle(
@@ -314,7 +323,7 @@ struct RunsSection: View {
             }
             if let runId = r.runId {
               let target = Target(owner: r.owner, runId: runId)
-              if r.actions.contains(.steer) || r.actions.contains(.resume) {
+              if session.connection == .connected && (r.actions.contains(.steer) || r.actions.contains(.resume)) {
                 TextField(
                   "向此子任务递送的要求",
                   text: Binding(get: { texts[r.key] ?? "" }, set: { texts[r.key] = $0 })

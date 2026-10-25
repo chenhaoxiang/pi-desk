@@ -125,7 +125,7 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 实际对照使用 Pi `1.4.0-fork.1`、Subagents `0.80.0-fork.1` 和上述 Schedule 源码提交；默认开发依赖 Pi `1.4.0` 的 SDK 基线也跑过。真实 provider/账号/密钥调用均为0，未改全局Pi设置、模型/思考档/原工具或业务会话。原生helper和 App 为本仓代码，没有复用 CodeIsland 文件或素材。
 
-首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有42个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝/准确目标负例；usage handler 10,000次合成入队p95/p99分别约0.004/0.008ms，队列满只显示下界不阻塞Pi。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
+首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有43个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝/准确目标负例；usage handler 10,000次合成入队p95/p99分别约0.004/0.008ms，队列满只显示下界不阻塞Pi。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
 
 性能证据限于合成标量：10,000次观察handler的p95/p99均低于0.01ms（候选机实测），慢socket/10万次离线投影保持有界；同一简单SDK任务的开启/关闭轨迹一致，另有1,000次真实SDK事件dispatch对照（包含宿主派发，实测p95/p99仍满足1ms/5ms预算，不与纯handler数值混标）。一次任务耗时不是通用性能结论，不宣称零开销。CI仅有配置、没有远端运行记录；本机无XCTest，改用同样可失败的Foundation检查runner，未安装Xcode或降低行为断言。
 
@@ -145,7 +145,7 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 用户要求参考CodeIsland顶部区域，重点转为给人看、给人操作的可视化。沿同一Change已实现原生顶部compact/expanded panel、safeArea/无刘海fallback、中文分层卡片、按需消息输入与后置诊断；不改变wire/owner/模型或工具。显式合成预览真实显示了compact、expanded、空态、长名、断连、状态较旧、多会话和浅色管理窗；pin与Escape退出编辑保留草稿已用原生控件验真。核心检查增加中文状态、几何/交互和两个目标切换后的准确epoch管理断言；Reduce Motion路径禁用动效。Escape退出编辑与草稿保留有原生状态回读；Tab有一次精确窗口前台投递失败，最终显式合成窗口投递后原生responder回读为SwiftUI.KeyViewProxy，但没有证明完整焦点顺序。完整键盘遍历与系统辅助技术资格留在2.4/6.3，不冒称全验。预览不连接真实会话、不发送管理动作、不改系统设置。
 
-总用量候选 `cb139bd70ff9b44e9133501ac3f21225c883f255` 已构建为本机 `0.1.0` build `12` 并完成安装/verify、签名与运行验真；App SHA256=`2ec6e9bae1806caed122d1b65e3fedff44e1038cd0d90581b6cccd535b0a3a80`，bridge digest=`4036a6287d28e05dbfc8ed05eeecab802a21087f69554404c3552b0be4c064a8`；上一版 `83926f3d24f7acdae7fca1ad10ccf8e71ec287a3` build `11` 的准确回退保留。新版稳定App真实读回：默认“在线”不把断连卡挤入主列表；真实搜索无匹配时可见计数归零且详情进入选择空态；Token页默认交互口径、缓存/全部可切换，采集覆盖从实际最早记录起，明确本地时区和原始UTC。真实metadata-only聚合和UI对应数值只保存在本机ignored tmp，不将用户具体用量放入公开Git。前述隔离faux-native持久重开3116及旧build5 A追加证据继续有效，动作边界未改。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
+总用量候选 `40bce160ae601de4114bac9337ea6b5f72d69766` 已构建为本机 `0.1.0` build `16` 并完成安装/verify、签名与运行验真；App SHA256=`780af972adfb49a27d667e9832c6f7103fb448c23fb886fb07062a357b700fa4`，bridge digest=`ac9a3adfd5c8c43a4ec22ecd04cac4d6458451bfd67d4b985396f846d54817f6`；上一版 `9b88a0e517f721557098816d312240a25e5c0447` build `15` 的准确回退及此前build12安装仍保留。新版稳定App真实读回：默认“在线”不把断连卡挤入主列表；真实搜索无匹配时可见计数归零且详情进入选择空态；Token页默认交互口径、缓存/全部可切换，采集覆盖从实际最早记录起，明确本地时区和原始UTC。真实metadata-only聚合和UI对应数值只保存在本机ignored tmp，不将用户具体用量放入公开Git。前述隔离faux-native持久重开3116及旧build5 A追加证据继续有效，动作边界未改。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
 
 ### A1–A11 / 6.1–6.2 逐项覆盖与缺口
 
@@ -173,7 +173,7 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 ### GPT漏采诊断与性能定向修复
 
-真实在线GPT会话的metadata诊断证明仍持有早期无usage spool的bridge；App更新不强reload业务Pi，因此已有GPT会话的接入窗口/owner累计不能按日期补记到新账。当前UI显式显示“旧桥接未纳入”、未采集模型与自然加载提示；没有真实GPT final前不伪造模型账或把unknown填0。隔离fresh GPT-named faux原生链已证明final receipt→异步spool→SQLite distinct model→真实App模型分布，明确synthetic而非真实GPT provider调用。
+真实在线GPT会话的metadata诊断证明仍持有早期无usage spool的bridge；App更新不强reload业务Pi，因此已有GPT会话的接入窗口/owner累计不能按日期补记到新账。当前UI显式显示“旧桥接未纳入”、未采集模型与自然加载提示；没有真实GPT final前不伪造模型账或把unknown填0。隔离fresh GPT-named faux原生链已证明final receipt→异步spool→SQLite distinct model→真实App模型分布，明确synthetic而非真实GPT provider调用。本轮随后自然启动的真实GPT会话已自行加载含collector的新bridge；metadata-only证明canonical SQLite出现独立GPT模型记录，实际稳定App的模型过滤/分布已显示GPT。旧会话缺口仍单独提示，不把它误写为整个GPT模型未采集；真实用量、会话ID与路径只存本机tmp。
 
 性能根因是Pi事件总线同步派发OwnerRPC：把`cost`包在setImmediate不隔离owner的branch/artifact I/O。已移除session_start/settled/async完成等自动owner扫描，只有当前用户显式兴趣/刷新才限频合并查询，workflow detail只对所选runId。实际固定Subagents owner的10,128条合成branch/128 children cost RPC同步约0.59–6.06ms，不能声称免费。相同30回合实际InteractiveMode/PTY对照：未接入dispatch p95/p99约0.0051/0.0055ms，接入约0.0238/0.0265ms；turn中位数约1.914/1.894ms，RSS增量约13.2/12.4MB，pending/drop0、新增模型/确认0。仅显式cost刷新触发一次owner读取，不推导零开销或全平台性能。
 

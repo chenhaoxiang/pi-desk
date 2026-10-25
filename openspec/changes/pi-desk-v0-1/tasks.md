@@ -86,7 +86,7 @@
 - [x] 11.1 metadata-only核真实在线GPT旧bridge、usageRecorder与拒绝边界；补fresh GPT-named faux final→spool→SQLite→model分布，旧会话未自然加载时明示不纳入。
 - [x] 11.2 移除settled/async自动owner cost扫描，按当前对象/显式刷新限频，补固定owner大branch同步RPC耗时和同faux/PTY dispatch/turn/RSS/pending对照。
 - [x] 11.3 App保持单utility ledger连接/dirty cache/rowid增量/model filter；复现并严格恢复自有hard-link crash temp，未知第二链接不删。
-- [ ] 11.4 新build安装后继续保留真实GPT旧bridge、Herdr/VoiceOver/OS consent与完整provider链缺口，不强reload业务Pi。
+- [x] 11.4 已安装40bce16/build16，实际canonical GPT final/recorders/SQLite与模型过滤分布可见；旧GPT会话仍有缺口，Herdr/VoiceOver/OS consent和长期provider资格未冒称，不强reload业务Pi。
 
 ## Workflow follow-up
 

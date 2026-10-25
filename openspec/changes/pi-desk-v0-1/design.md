@@ -2,7 +2,7 @@
 
 ## Context
 
-动机与capability见[proposal](proposal.md)。当前仓为空仓新项目，只有规划候选；用户已确定Pi-only、无历史会话扫描、Token统计和自动化不退化。主要源码事实与固定基线见[接口矩阵](../../../docs/integration-matrix.md)，不把源码存在当作已安装兼容。
+动机与capability见[proposal](proposal.md)。初始仓为空仓规划，现已实现本机稳定候选并继续时间统计增量；用户已确定Pi-only、无历史会话扫描、Token统计和自动化不退化。主要源码事实与固定基线见[接口矩阵](../../../docs/integration-matrix.md)，不把源码存在当作已安装兼容。
 
 ## Goals / Non-Goals
 
@@ -14,7 +14,7 @@
 
 1. **独立小客户端，不完整fork。** 选择SwiftUI/AppKit、SPM和TS宿主扩展；只在确定收益与MIT归属后局部借用CodeIsland。替代方案是全fork关开关，但多工具配置/Discovery/审批/大AppState仍带来维护与行为风险。
 2. **只连接既有宿主。** 扩展从session_start登记，session_shutdown幂等清理。没有App仍运行原Pi，不由App启动/持有RPC子进程。替代方案是统一裸SDK/RPC，会改变资源加载、TUI自定义交互和生命周期，不满足非退化。
-3. **本机UDS与封闭记录。** 每个连接有nativeSessionId/epoch/seq；后台读取、白名单投影和有界队列。不开网络端口或服务端，不新增持久业务库。详细预算、peer校验和协议表见[架构§4–5](../../../docs/architecture.md)。
+3. **本机UDS与封闭记录。** 每个连接有nativeSessionId/epoch/seq；后台读取、白名单投影和有界队列。不开网络端口或服务端，不新增持久业务库；本轮明确需求新增usage-only异步spool与本机SQLite唯一索引，只记录final标量和coverage，App关闭后仍可采集。详细预算、peer校验和协议表见[架构§4–5](../../../docs/architecture.md)。
 4. **管理能力由owner宣布。** 直接Pi消息/abort-current与Subagents RPC复用原接口；缺少Schedule/Intercom seam就补在对应owner或明确不支持，不能从旧字段猜语义。相同动作由GUI和原工具并列调用，不增加授权规则。
 5. **传输成功不是执行完成。** 同epoch短期去重只防重复调用，未知回复/新epoch后不自动重发；保留owner操作引用并对账，不承诺外部副作用exactly-once。
 6. **统计范围先于数字。** TUI没有ctx.getSessionStats，默认接入窗口；可用时显示owner原生累计/cost。父子不重复、未覆盖为partial、零不替代未知。原owner读当前关联产物不等于Pi Desk广泛历史扫描。

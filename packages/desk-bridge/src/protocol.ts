@@ -107,6 +107,7 @@ export type Snapshot = {
 	evidence: Evidence[];
 	dropped: number;
 	contextTokens: number | null;
+	usageRecorder?: { version: number; pending: number; dropped: number; writeFailures: number; lastSuccessAt: number | null; reasons: string[] };
 };
 export type Target = {
 	owner: string;

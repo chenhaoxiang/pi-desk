@@ -36,7 +36,7 @@ verification_scope: 指定公开源码基线、隔离Pi1.4与Subagents0.80及Sch
 | 直接消息 | `pi.sendUserMessage(content,{deliverAs:'steer'|'followUp'})`返回void | 需bridge；提交不等于模型接收/任务完成，不承诺native durable requestId |
 | 中止当前回合 | `ctx.abort():void` | 只对当前身份/epoch；读后续生命周期，不等同清队列/停计划/停所有孩子 |
 | 独立RPC宿主 | `get_state`、`get_session_stats`、`prompt`、`abort`等 | 只能复用已有owner宿主，不把所有TUI迁成RPC，不新开同session竞争writer |
-| 扩展统计 | ExtensionContext有`getContextUsage`但无`getSessionStats` | 默认接入窗口；全量native统计须owner提供，不访问内部私有实例 |
+| 扩展统计 | ExtensionContext有`getContextUsage`但无`getSessionStats` | 会话次级报告保持接入窗口；时间总览使用已接入final增量专用持久记录，不拿owner累计反推日期，不访问内部私有实例 |
 | 稳定usage来源 | `turn_end`提供`messageEntryId/toolResultEntryIds`；原生SessionStats累计usage、compaction、summary及工具usage | 用标量、稳定引用去重；不直接复制全量messages/entries到App |
 | Subagents查询与管理 | `subagents:rpc:v1:request`与reply channel；ping/status/steer/interrupt/stop/resume/cost/manage | 需bridge；在原owner会话内调用，进程内总线不是可由Swift直接调用的网络端点 |
 | 子任务能力发现 | ping.capabilities：managementActions、resume、fleetStatus、nonRecoveringSteer等 | 每runtime查验；未知/旧版仅禁相关UI动作，不升级/重启原会话 |

@@ -128,7 +128,7 @@ struct DeskWindow: View {
         if model.page == "设置" {
           ScrollView { SettingsPage().padding(24) }
         } else if model.page == "Token" {
-          TokenPage().padding(24)
+          AggregateTokenPage()
         } else if model.page == "重要事项" {
           AttentionPage().padding(24)
         } else {
@@ -143,7 +143,7 @@ struct DeskWindow: View {
   var header: some View {
     HStack {
       VStack(alignment: .leading, spacing: 5) {
-        Text(model.page == "会话" ? "工作概览" : model.page).font(.system(size: 21, weight: .semibold))
+        Text(model.page == "会话" ? "工作概览" : (model.page == "Token" ? "用量总览" : model.page)).font(.system(size: 21, weight: .semibold))
         Text("查看正在发生的事，不改变原来的推进方式").font(.caption).foregroundStyle(.secondary)
       }
       Spacer()
@@ -160,10 +160,10 @@ struct DeskWindow: View {
         ).foregroundStyle(StatusTone.amber.ink(dark: scheme == .dark))
       }
       Button {
-        model.refresh()
+        if model.page == "Token" { model.refreshUsage() } else { model.refresh() }
       } label: {
         Image(systemName: "arrow.clockwise")
-      }.buttonStyle(.borderless).help("刷新选定会话")
+      }.buttonStyle(.borderless).help(model.page == "Token" ? "刷新本机用量记录" : "刷新选定会话").accessibilityLabel("刷新当前页面")
     }.padding(.horizontal, 25).padding(.vertical, 20)
   }
   func icon(_ p: String) -> String {
@@ -182,6 +182,13 @@ struct SessionList: View {
         Spacer()
         Text("按状态排序").font(.caption2).foregroundStyle(.secondary)
       }.padding(17)
+      VStack(spacing: 10) {
+        TextField("搜索会话、项目或模型", text: $model.search).textFieldStyle(.roundedBorder).accessibilityLabel("搜索已接入会话")
+        Picker("状态筛选", selection: $model.sessionFilter) {
+          ForEach(["全部", "运行中", "需输入", "断连"], id: \.self) { Text($0).tag($0) }
+        }.pickerStyle(.segmented).accessibilityLabel("按状态筛选会话")
+        if !model.hiddenSessions.isEmpty { Button("显示已隐藏卡片（不改变运行）") { model.hiddenSessions.removeAll() }.font(.caption2) }
+      }.padding(.horizontal, 13).padding(.bottom, 12)
       ScrollView {
         LazyVStack(spacing: 9) {
           if model.sessions.isEmpty {
@@ -189,7 +196,8 @@ struct SessionList: View {
               "尚无已接入会话", systemImage: "rectangle.stack",
               description: Text("新 Pi 自然加载桥接后即可显示，不扫描历史。"))
           }
-          ForEach(model.sessions, id: \.snapshot.identity) { s in
+          if model.visibleSessions.isEmpty && !model.sessions.isEmpty { Text("没有匹配的会话；可调整搜索或筛选。").font(.caption).foregroundStyle(.secondary).padding() }
+          ForEach(model.visibleSessions, id: \.snapshot.identity) { s in
             Button {
               model.select(s.snapshot.identity)
             } label: {
@@ -198,6 +206,9 @@ struct SessionList: View {
                 onSelect: { model.select(s.snapshot.identity) })
             }.buttonStyle(.plain).focusable().accessibilityLabel(
               s.snapshot.display.name + " · " + Presentation.status(s).title)
+              .contextMenu {
+                if s.connection != .connected { Button("仅隐藏卡片（不停止工作）") { model.hideDisconnected(s.snapshot.identity) } }
+              }
           }
         }.padding(.horizontal, 12).padding(.bottom, 16)
       }
@@ -540,6 +551,8 @@ struct SettingsPage: View {
         VStack(alignment: .leading, spacing: 12) {
           Text("提醒表现").font(.subheadline.weight(.semibold))
           Toggle("使用系统已授权的通知", isOn: $model.settings.notifications)
+          Text(model.notificationStatus).font(.caption).foregroundStyle(.secondary)
+          Button("检查系统通知状态") { model.checkNotificationStatus() }.font(.caption)
           Text("不弹出新的许可请求；未授权或发送失败时保留原入口兜底。").font(.caption).foregroundStyle(.secondary)
           Button("保存本 App 设置") { model.saveSettings() }.buttonStyle(.bordered)
         }

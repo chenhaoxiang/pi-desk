@@ -74,6 +74,7 @@ export function harness(id = "session-a") {
 		dropped: 0,
 	});
 	registerBridge(pi, {
+		usageRoot: false,
 		transport: (_hello, recv) => {
 			receive = recv;
 			return transport();

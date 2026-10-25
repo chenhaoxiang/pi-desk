@@ -12,7 +12,7 @@ Pi Desk SHALL 为Token显示来源、统计范围、窗口及覆盖，区分接�
 
 #### Scenario: TUI only exposes observed usage
 - **WHEN** 当前桥接只能提供接入后的final usage
-- **THEN** 显示attachment-window及起点，不标成整个会话或今日累计
+- **THEN** 单会话仍注明attachment-window及起点；只有持久化的稳定final时间记录参与Pi总用量，不拿该窗口快照冒充今日累计
 
 #### Scenario: Context occupancy is available
 - **WHEN** Pi只提供当前上下文占用估计
@@ -49,6 +49,26 @@ Pi Desk SHALL 不重复累加流式累计值、同一usage重放或已包含的�
 #### Scenario: Runtime reload creates a new observation window
 - **WHEN** 扩展重载且不能恢复完整统计归属
 - **THEN** 明确新窗口/覆盖，不能把不相容窗口拼成原生完整累计
+
+### Requirement: Durable time aggregate usage
+
+Pi Desk SHALL 默认展示跨所有已记录Pi会话的时间总用量，支持今日、含今日的近7天、本月与自定义起止日期，并提供趋势、input/output/cache四桶及模型分布。记录从启用采集起累计，不代表套餐余额、估价或真实账单。
+
+#### Scenario: Local calendar crosses DST or month
+- **WHEN** 用户在明确的本地IANA时区选择日期范围
+- **THEN** 用日历日边界与内部半开区间归桶，DST/跨月/跨日保持精确，自定义结束日含整天，未来和未采集日期不伪装成零消费
+
+#### Scenario: UI is closed and reopened
+- **WHEN** 原Pi继续产生final usage而App退出或崩溃
+- **THEN** bridge只入有界异步标量记录队列，App重开恢复持久总量，记录不依赖内存快照或同步handler磁盘I/O
+
+#### Scenario: Duplicate or conflicting receipts arrive
+- **WHEN** 重连/重载/多窗口带来重复或同ID内容冲突
+- **THEN** 稳定receipt只累计一次，冲突不覆盖旧值并呈现覆盖缺口；不把父owner累计或归属不明工具聚合加到时间总账
+
+#### Scenario: Old bridge or storage fails
+- **WHEN** 来源不支持记录、字段缺失、文件/数据库损坏或队列/磁盘满
+- **THEN** 保留已知量、旧库及明确错误/partial，不清空伪成功，不增加执行确认、不改变Pi工作
 
 ### Requirement: Actual attention without extra work
 

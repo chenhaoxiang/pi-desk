@@ -73,7 +73,7 @@ PI_DESK_PEER_CHECK="$PWD/tmp/candidate/Pi Desk.app/Contents/Helpers/PiDeskPeerCh
 - 中止当前回合不清空后续队列、不停止独立子任务或外部副作用。Subagents stop 受理与进程终态分开。
 - Subagents Fleet key 只展示；后台孩子控制从 owner 的公开定向状态取得真实 runId。resume 由 owner 验证资格，拒绝后不偷开替代任务。
 - 计划按 owner 分开。Schedule seam 只复用现有 list/pause/resume/delete 和 event-job trigger，不新增计划库、CRUD 或常驻服务。暂停未来触发不撤销正在执行的工作。
-- Token 是接入窗口或 owner 当前会话报告，不是每日/账户账单；缺失为 unknown，附加消耗/归属不全为 partial，不把父子报告或不同窗口重复相加。
+- Token主页面为跨已记录会话的“Pi总用量”：今日/近7天/本月/自定义时间、趋势和模型分布。从启用记录起异步持久化final标量，App关闭仍记录，重开恢复；不扫历史JSONL，不将owner累计补记为今天，不重复父子/工具聚合。缺失保留已知下界与覆盖缺口，不等于套餐额度/账单。
 - owner执行后失败/超时为 unknown，不解释成确定未执行、不自动重试。本地请求未能提交时保留草稿。
 - 提醒已读/静音只改表现，不回答问题、不阻断执行。原 producer 通知从不被本客户端静默抑制。
 - Herdr 跳转只在精确当前会话文件与实时 owner 快照匹配时开放；未配置或失败不打开同名对象。管理页仅允许用户配置的无凭据、无 query/fragment 的精确 HTTPS 地址。

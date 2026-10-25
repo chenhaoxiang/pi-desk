@@ -114,17 +114,17 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 | 入口 | 已证明 | 不代表 |
 |---|---|---|
-| `npm run check` | 类型、共享协议/usage黄金、过载/去重/旧对象、字段白名单、可选提示/evidence、公开源码检查 | 真实账号/计费/全模式验收 |
-| `bash scripts/check-native.sh` | 本机Swift构建、Core reducer/导航/链接、原生 framing；可执行测试不依赖 XCTest | VoiceOver/系统通知/Herdr实机 |
+| `npm run check` | 类型、共享协议/usage黄金、过载/去重/旧对象、字段白名单、可选提示/evidence、持久usage writer、公开源码检查 | 真实账号/计费/全模式验收 |
+| `bash scripts/check-native.sh` | 本机Swift构建、Core reducer/导航/链接、原生 framing、持久usage ledger日期/去重/坏库/overflow；可执行测试不依赖 XCTest | VoiceOver/系统通知/Herdr实机 |
 | `npm run test:native-sdk` | 实际SDK基线/桥接轨迹与loadout一致；新增模型调用/人工确认0；双会话、忙时follow-up/steer、abort终态、实际原生UI输入生命周期 | 业务模型执行或授权所有旧TUI会话升级 |
 | `scripts/check-socket-host.mjs` | 实际Swift UDS↔Node两原生会话，双端peer UID、重复请求只执行一次，SIGKILL接收器后Pi继续，重连不重放 | GUI所有显示器/系统行为组合 |
 | `scripts/check-subagents-native.mjs` | 固定0.80 owner：真实native child与前台Fleet、精准后台child steer、stop受理/终态、paused恢复成功、stopped恢复拒绝、现有计划暂停与cost | 所有历史owner/runner/远程模式 |
 | `scripts/check-schedule-native.mjs` | 固定Schedule候选经真实SDK暂停/恢复、事件触发一次、外会话拒绝；查询新增模型调用0、显式faux触发1 | 已安装/启用常驻监督 |
-| 原生GUI/CUA | 双会话主动接入、原生AX控件、后台发送只命中选定会话，界面requested；截图只在ignored tmp | 完整TUI/系统通知/Herdr现场交付 |
+| `scripts/check-usage-native.mjs` | 实际Pi SDK两个隔离会话的final usage异步记录；App/UDS接收器缺席时仍写盘，App关闭期间续行，loadout不变、真实provider0 | 真实历史账单/未接入旧会话/所有owner附加usage |\n| 原生GUI/CUA | 双会话主动接入、原生AX控件、后台发送只命中选定会话，界面requested；总用量页今日/近7天/本月合成预览、搜索与状态过滤、64卡片缩放均读回；截图只在ignored tmp | 完整TUI/系统通知/Herdr现场交付 |
 
 实际对照使用 Pi `1.4.0-fork.1`、Subagents `0.80.0-fork.1` 和上述 Schedule 源码提交；默认开发依赖 Pi `1.4.0` 的 SDK 基线也跑过。真实 provider/账号/密钥调用均为0，未改全局Pi设置、模型/思考档/原工具或业务会话。原生helper和 App 为本仓代码，没有复用 CodeIsland 文件或素材。
 
-首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有33个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝/准确目标负例。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
+首轮独立只读审计绑定 `f4d7481` / `85c58cd`，结论为 OK with notes，不是首版实机验收。后续同面修复保留了明确未入副作用阶段与结果不明的区别：执行后失败只标unknown并保留owner引用、不盲重发；本地未提交的管理草稿不清空；显示按完整UTF-8码点截断；未知子覆盖为null而非0/1。当前有40个Node用例、owner221个用例及直接编译生产AppModel的草稿拒绝/准确目标负例；usage handler 10,000次合成入队p95/p99分别约0.004/0.008ms，队列满只显示下界不阻塞Pi。旧中断socket日志不当成功原件使用，当前成功原件在ignored tmp按实际head重新绑定，CI native job也接入真实socket检查。
 
 性能证据限于合成标量：10,000次观察handler的p95/p99均低于0.01ms（候选机实测），慢socket/10万次离线投影保持有界；同一简单SDK任务的开启/关闭轨迹一致，另有1,000次真实SDK事件dispatch对照（包含宿主派发，实测p95/p99仍满足1ms/5ms预算，不与纯handler数值混标）。一次任务耗时不是通用性能结论，不宣称零开销。CI仅有配置、没有远端运行记录；本机无XCTest，改用同样可失败的Foundation检查runner，未安装Xcode或降低行为断言。
 
@@ -132,11 +132,11 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 用户随后明确授权本机安装、正常启动与安全验证。`scripts/install-local.mjs` 的 install/verify/rollback 只管理固定用户域App、以source commit命名的bridge和独立自动发现入口；不修改原Pi settings，不升级可选Schedule或启动服务，不强reload旧业务会话。新的 `check-installed-native.mjs` 先用公共resolver确认真实入口可发现，再把同一入口字节放入隔离agent profile，以原生SDK常规自动发现而非 `--extension`/注入registerBridge启用；检查默认helper/socket与实际加载source。具体安装路径、hash、当前进程和本机一次性原件只保存在本机manifest与ignored tmp，不进入公开Git。
 
-### 原生视觉交互增量
+### 持久时间总用量与原生可操作性增量\n\n用户将Token主页面改为跨所有已记录会话的Pi总用量。桥接只在`turn_end`取得assistant final的稳定entry ID、UTC occurrence、model和input/output/cache四个白名单标量，使用有界异步writer落到用户域0700目录；不将reasoning/cacheWrite1h子集再相加，不记父owner生命周期累计或归属不明tool usage。App后台通过SQLite `usage_entries`唯一键索引spool，WAL/忙时等待、重开恢复、冲突表、坏库保留、提交后删spool；数据库只存不含prompt/output/path/凭据的元数据。旧桥接只在总览页显示未纳入持久采集，不强reload。\n\n日期总览按本地Gregorian日历和当前IANA时区计算今日、含今日近7天、本月、自定义含结束日范围，内部查询使用`[start,end)`；DST用日历加法，未来桶和未采集桶留空/文字标记，不用0伪装。合成检查覆盖同日双会话、跨日/时区/DST、重复/conflict、缺字段、owner/tool边界、App缺席续行、坏库/符号链接/overflow/队列满。原生总览已读回四桶、趋势、模型分布、搜索和状态筛选；图表与表格数据均有可读label。\n\n视觉优化仍不声称完整现场资格：系统通知仅展示权限/失败状态，不自动申请；真实Herdr/VoiceOver和长时真实TUI继续待现场。\n\n### 原生视觉交互增量
 
 用户要求参考CodeIsland顶部区域，重点转为给人看、给人操作的可视化。沿同一Change已实现原生顶部compact/expanded panel、safeArea/无刘海fallback、中文分层卡片、按需消息输入与后置诊断；不改变wire/owner/模型或工具。显式合成预览真实显示了compact、expanded、空态、长名、断连、状态较旧、多会话和浅色管理窗；pin与Escape退出编辑保留草稿已用原生控件验真。核心检查增加中文状态、几何/交互和两个目标切换后的准确epoch管理断言；Reduce Motion路径禁用动效。Escape退出编辑与草稿保留有原生状态回读；Tab有一次精确窗口前台投递失败，最终显式合成窗口投递后原生responder回读为SwiftUI.KeyViewProxy，但没有证明完整焦点顺序。完整键盘遍历与系统辅助技术资格留在2.4/6.3，不冒称全验。预览不连接真实会话、不发送管理动作、不改系统设置。
 
-已验证视觉源码 `4f8846f69aab02e7ebc93f0dc89a5cdb7883341f` 构建为本机 `0.1.0` build `5`，稳定App/固定bridge的安装、签名、字节清单与实际运行source均回读一致；上一版 `027572e36fc9143f1c8ade44156ded44d417c5f2` build `4` 的准确回退保留。新管理窗通过真实安装入口自动发现的两个隔离faux-native会话验证：在A卡片追加要求后，A调用数1→2、B保持1，真实provider调用0。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
+视觉代码首个build5安装事实仍保留。当前持久用量候选在build6源码前由本次实现继续构建，尚未替换稳定App；只有在最终release/安装verify后更新本段installed事实。已验证视觉源码 `4f8846f69aab02e7ebc93f0dc89a5cdb7883341f` 构建为本机 `0.1.0` build `5`，稳定App/固定bridge的安装、签名、字节清单与实际运行source均回读一致；上一版 `027572e36fc9143f1c8ade44156ded44d417c5f2` build `4` 的准确回退保留。新管理窗通过真实安装入口自动发现的两个隔离faux-native会话验证：在A卡片追加要求后，A调用数1→2、B保持1，真实provider调用0。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
 
 ### 保留的未完成项
 

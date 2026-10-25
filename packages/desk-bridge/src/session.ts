@@ -17,6 +17,7 @@ import {
 	type Action,
 } from "./protocol.ts";
 import { AttachmentUsage, costProjection } from "./usage.ts";
+import { UsageWriter, usageEntry } from "./usage-store.ts";
 import {
 	OwnerRPC,
 	absentOwner,
@@ -41,6 +42,7 @@ export type SessionOptions = {
 	) => TransportLike;
 	now?: () => number;
 	sourceRevision?: string;
+	usageRoot?: string | false;
 };
 export class DeskSession {
 	private ctx?: ExtensionContext;
@@ -59,6 +61,7 @@ export class DeskSession {
 	private router: ActionRouter;
 	private transport: TransportLike;
 	private usage: AttachmentUsage;
+	private usageWriter?: UsageWriter;
 	private nativePrompts = new Map<string, { count: number; id: string }>();
 	private tools = new Map<string, string>();
 	private inputs = new Map<string, InputNotice>();
@@ -121,6 +124,10 @@ export class DeskSession {
 			dropped: 0,
 			contextTokens: null,
 		};
+		if (options.usageRoot !== false) {
+			this.usageWriter = new UsageWriter(identity, { root: options.usageRoot, now: this.now, onChange: () => this.changed() });
+			this.usageWriter.start();
+		}
 		this.subagents = new OwnerRPC(pi.events, "subagents:rpc:v1");
 		this.schedules = new OwnerRPC(pi.events, "schedule:rpc:v1");
 		this.router = new ActionRouter(
@@ -230,6 +237,7 @@ export class DeskSession {
 			identity: this.snapshot.identity,
 			snapshot: displayBudget({
 				...this.snapshot,
+				usageRecorder: this.usageWriter?.status(),
 				usage: [
 					...this.usage.reports(),
 					...this.snapshot.usage.filter((u) => u.source !== "pi.turn_end"),
@@ -280,6 +288,7 @@ export class DeskSession {
 	observationFault() {
 		this.observationDrops++;
 		this.usage.markPartial("observation-fault");
+		this.usageWriter?.mark("observation-fault");
 		this.changed();
 	}
 	lifecycle(kind: string, ctx: ExtensionContext, aborted = false) {
@@ -319,6 +328,11 @@ export class DeskSession {
 	turn(event: TurnEndEvent, ctx: ExtensionContext) {
 		this.observe(ctx);
 		if (event.message.role === "assistant") {
+			const entry = usageEntry(this.snapshot.identity, event.messageEntryId, event.message, this.now());
+			if (entry) {
+				this.usageWriter?.enqueue(entry);
+				if (Object.values(entry.tokens).some(v => v === null)) this.usageWriter?.mark("missing-usage");
+			} else this.usageWriter?.mark(safeId(event.messageEntryId) ? "invalid-time" : "missing-receipt");
 			this.usage.settle(
 				event.messageEntryId,
 				event.message.usage,
@@ -330,6 +344,7 @@ export class DeskSession {
 		const results = event.toolResults.slice(0, 256);
 		for (let i = 0; i < results.length; i++) {
 			const r = results[i];
+			if (r.usage) this.usageWriter?.mark("tool-usage-unattributed");
 			if (r.usage)
 				this.usage.settle(
 					event.toolResultEntryIds[i],
@@ -342,7 +357,7 @@ export class DeskSession {
 				.slice(0, 64)
 				.some((e) => e.type === "compaction" || e.type === "context_edit")
 		)
-			this.usage.markPartial("boundary-usage-not-covered");
+		{ this.usage.markPartial("boundary-usage-not-covered"); this.usageWriter?.mark("boundary-usage-not-covered"); }
 		this.changed();
 	}
 	prompt(start: boolean, kind: string) {
@@ -642,6 +657,7 @@ export class DeskSession {
 				owners: {
 					pi: "extension-api-1.4",
 					"pi-desk-bridge": this.bridgeSource,
+					"pi-desk-usage": this.usageWriter ? "spool-v1" : "unavailable",
 					subagents: this.cap.version,
 					"schedule-prompt": this.scheduleActions.length
 						? "rpc-v1"
@@ -712,6 +728,7 @@ export class DeskSession {
 	close() {
 		if (this.stopped) return;
 		this.stopped = true;
+		this.usageWriter?.close();
 		this.ctx = undefined;
 		for (const off of this.off) off();
 		this.off = [];

@@ -129,6 +129,7 @@ test("white-list producer synchronous budget on 10k metadata events", async () =
 		getThinkingLevel: () => "high",
 	} as unknown as ExtensionAPI;
 	registerBridge(pi, {
+		usageRoot: false,
 		transport: () => ({
 			start() {},
 			publish() {},

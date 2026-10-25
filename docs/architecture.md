@@ -34,7 +34,7 @@ verification_scope: Swift/TS源码、UDS/隔离真实SDK与owner组合；不含�
 
 - **macOS 14+，SwiftUI + AppKit**：SwiftUI管理窗口/列表，AppKit顶栏/浮层/窗口焦点；SPM管理，先arm64验证，再依据发行需求补Intel构建。菜单栏入口始终可用，无刘海/外接屏不损功能。
 - **TypeScript薄扩展，Node标准库**：宿主SDK作为type/peer，不打包另一套Pi；起点对照Pi 1.4.0-fork.1，兼容资格按隔离测试而非版本字符串猜测。
-- **UDS + 有界LF-JSON协议**：无HTTP端口、WebSocket服务、跨网发现和数据库。Native socket读取在后台串行队列，UI只接收合并后的不可变快照。
+- **UDS + 有界LF-JSON协议**：无HTTP端口、WebSocket服务和跨网发现；本机usage专用SQLite索引只存白名单元数据，不是业务任务数据库。Native socket读取在后台串行队列，UI只接收合并后的不可变快照。
 - 不引入通用plugin框架、事件代理平台或OTel Collector。增加一个具体owner适配器不代表支持所有工具。
 
 已建目录（实现为本地候选，非安装声明）：
@@ -140,7 +140,10 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 5. `usage`、compaction、branch summary及nested tool usage必须与宿主归一规则对照。首阶段先建立合成合同，未覆盖的附加消耗明确标partial，不把只看assistant消息称完整账单。
 6. same child既作为独立Pi注册又在父报告出现，显示可以两处关联，汇总只取一个owner归属；无可证明不重叠关系则不展示精确全局合计。
 7. Context usage是上下文占用，不是花费；缺失/未结算值为null。无权威价格/费用结果不推算金额。
-8. App只保留当前接入显示缓存；不做每日/历史账单数据库。重启后从已接入owner快照恢复当前scope，无法恢复的窗口明确重置。
+8. 时间总览新增最小本机持久元数据链：bridge在final handler只投递标量到有界队列，异步写0700/0600原子spool；App后台导入SQLite，以不含epoch的稳定receipt hash唯一去重。App离线仍写入；不新增Agent/daemon、同步handler I/O或历史扫描。
+9. 时间记录只收Pi assistant final自身usage，不收流式中间值、父owner累计或不可证明不重叠的工具聚合；子会话自己的final可独立计入，未接入孩子/工具/压缩等附加量明确缺口。日期使用原始request UTC时间，绝不把累计到达日当消费日；无时间的记录只标缺口。
+10. 按用户本地Gregorian日历及显式IANA时区算今日/近7天/本月/自定义日期；结束日转下一天零点，查询[start,end)。跨DST用Calendar加天，不按24小时推算。未来与采集起点之前的桶分别显示尚未发生/尚未采集，缺字段聚合已知量并标下界，不以0伪装未知。
+11. SQLite索引仅服务用量查询/去重，事务提交后才清理已导入spool，崩溃重导幂等；预算/失败保留可见coverage，不把记录失败扩为Pi执行门禁。旧bridge不支持持久记录时局部提示，不将其显示快照补记为今天。
 
 ## 8. 隐私、展示与诊断
 
@@ -155,6 +158,8 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 不整库fork、不导入AppState/ConfigInstaller/HookServer/多工具Discovery。对照快照中NotchPanelView约5764行、PanelWindowController约735行，不能假定抽文件即独立可用。优先以系统API重做小型外壳；ScreenDetector/动画/Herdr路由仅在依赖、维护收益和许可检查通过后局部复用。
 
 真实复用时再增加归属与上游MIT许可，不现在预建空第三方体系。纯原创外壳与适配不假称继承上游签名、公证、自动更新或Buddy支持。
+
+时间总览还参考[ccusage日期报告](https://ccusage.com/guide/daily-reports)的跨会话时间视角与四桶口径、[CodexIsland usage-only持久记录说明](https://github.com/ericjypark/codex-island/blob/main/docs/USAGE-HISTORY.md)的稳定ID/SQLite/陈旧值边界，以及[CodexBar](https://github.com/steipete/CodexBar)的原生状态反馈。只借鉴展示和统计边界，未复制代码/素材，不接它们的历史扫描、登录凭据、额度/定价或多provider层。Pi Desk仍从当前Pi final事件记录，不因此引入历史恢复。
 
 ## 10. 验证与退出策略
 

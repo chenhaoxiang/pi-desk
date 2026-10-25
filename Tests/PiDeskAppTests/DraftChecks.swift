@@ -62,6 +62,18 @@ import PiDeskCore
     model.setDraft("Draft A", for: a.identity)
     model.setDraft("Draft B", for: b.identity)
     precondition(model.drafts[a.identity] == "Draft A" && model.drafts[b.identity] == "Draft B")
+    model.search = "visual-target-b"
+    model.search = "合成" // Fixture names are source metadata, not an execution target.
+    model.search = "NO_MATCH_123"
+    precondition(model.visibleSessions.isEmpty)
+    model.search = ""
+    model.sessionFilter = "断连"
+    precondition(model.visibleSessions.isEmpty)
+    model.store.disconnect(targetConnection)
+    precondition(model.visibleSessions.count == 1)
+    model.hideDisconnected(a.identity)
+    precondition(model.visibleSessions.isEmpty && model.store.sessions[a.identity.sessionKey] != nil)
+    precondition(model.drafts[a.identity] == "Draft A")
     print(
       "AppModel draft checks passed: unavailable, duplicate/pending, disconnected preserve input; only admitted request clears."
     )

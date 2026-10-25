@@ -135,6 +135,14 @@ public struct Evidence: Codable, Equatable, Identifiable, Sendable {
   public var observedAt: Double
   public var nature: String
 }
+public struct UsageRecorder: Codable, Equatable, Sendable {
+  public var version: Int
+  public var pending: Int
+  public var dropped: Int
+  public var writeFailures: Int
+  public var lastSuccessAt: Double?
+  public var reasons: [String]
+}
 public struct Snapshot: Codable, Equatable, Sendable {
   public var omitted: [String: Int]?
   public var identity: Identity
@@ -153,6 +161,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var evidence: [Evidence]
   public var dropped: Int
   public var contextTokens: Double?
+  public var usageRecorder: UsageRecorder?
   public var valid: Bool {
     identity.valid && seq >= 0 && observedAt.isFinite && observedAt > 0 && dropped >= 0
       && display.name.utf8.count <= 512 && (display.cwd?.utf8.count ?? 0) <= 512

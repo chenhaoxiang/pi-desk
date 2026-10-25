@@ -94,7 +94,7 @@ export async function createHost(
 		...extensions,
 	];
 	if (bridge)
-		factories.push((pi) => bridge(pi, transport ? { transport } : {}));
+		factories.push((pi) => bridge(pi, { ...(transport ? { transport } : {}), usageRoot: join(root, "usage-v1") }));
 	const loader = new sdk.DefaultResourceLoader({
 		cwd,
 		agentDir,

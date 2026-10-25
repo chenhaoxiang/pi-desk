@@ -44,6 +44,17 @@ struct DeskSettings: Codable {
   @Published var dismissed: Set<String> = []
   @Published var muted = false
   @Published var drafts: [Identity: String] = [:]
+  @Published var search = ""
+  @Published var sessionFilter = "全部"
+  @Published var hiddenSessions: Set<String> = []
+  @Published var usagePreset: UsagePreset = .today
+  @Published var usageCustomStart = Date()
+  @Published var usageCustomEnd = Date()
+  @Published var aggregate = UsageAggregate.empty(.make(preset: .today))
+  @Published var usageLoading = false
+  @Published var notificationStatus = "尚未检查系统通知状态"
+  private var ledger: UsageLedger?
+  private var lastUsageRefresh = Date.distantPast
   let isPreview: Bool
   var showManager: () -> Void = {}
   var showIsland: () -> Void = {}
@@ -70,6 +81,51 @@ struct DeskSettings: Codable {
     }
   }
   var current: SessionView? { selected.flatMap { store.sessions[$0] } }
+  var visibleSessions: [SessionView] {
+    sessions.filter { s in
+      let snap = s.snapshot
+      let matchesSearch = search.isEmpty || [snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
+      let matchesState = sessionFilter == "全部" || (sessionFilter == "运行中" && s.connection == .connected && [.running, .waitingChildren, .retrying, .compacting].contains(snap.execution)) || (sessionFilter == "需输入" && !snap.inputs.isEmpty) || (sessionFilter == "断连" && s.connection != .connected)
+      return matchesSearch && matchesState && (!hiddenSessions.contains(snap.identity.sessionKey) || s.connection == .connected)
+    }
+  }
+  func hideDisconnected(_ identity: Identity) {
+    guard let s = store.sessions[identity.sessionKey], s.snapshot.identity == identity, s.connection != .connected else { return }
+    hiddenSessions.insert(identity.sessionKey)
+    if selected == identity.sessionKey { selected = visibleSessions.first?.snapshot.identity.sessionKey }
+    actionNote = "仅隐藏断连卡片，未停止或删除任何Pi工作"
+  }
+  func refreshUsage() {
+    let range = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)
+    if isPreview { aggregate = .empty(range, preview: true); return }
+    guard !usageLoading, let ledger else { return }
+    usageLoading = true; lastUsageRefresh = Date()
+    ledger.refresh(range: range) { [weak self] result in
+      guard let self else { return }
+      self.usageLoading = false
+      if result.error != nil, self.aggregate.totals.seen, self.aggregate.range == result.range {
+        self.aggregate.error = result.error
+        self.aggregate.coverageReasons = result.coverageReasons
+      } else { self.aggregate = result }
+      let expected = UsageDateRange.make(preset: self.usagePreset, customStart: self.usageCustomStart, customEnd: self.usageCustomEnd)
+      if expected != result.range { self.refreshUsage() }
+    }
+  }
+  func checkNotificationStatus() {
+    guard !isPreview, Bundle.main.bundleURL.pathExtension == "app" else {
+      notificationStatus = isPreview ? "合成预览：未请求系统许可" : "未打包运行，未访问通知服务"; return
+    }
+    UNUserNotificationCenter.current().getNotificationSettings { permission in
+      Task { @MainActor in
+        switch permission.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: self.notificationStatus = "系统通知已授权；发送失败仍保留原入口兜底"
+        case .denied: self.notificationStatus = "系统通知已拒绝；Pi原通知和自动化不受影响"
+        case .notDetermined: self.notificationStatus = "系统通知尚未授权；本App不自动申请许可"
+        @unknown default: self.notificationStatus = "系统通知许可状态未知"
+        }
+      }
+    }
+  }
   var activeCount: Int {
     sessions.filter {
       $0.connection == .connected && $0.snapshot.inputs.isEmpty
@@ -113,12 +169,25 @@ struct DeskSettings: Codable {
             store.disconnect(connection)
           }
         }
+        if args.contains("--large-list-preview"), let first = preview.records.first, let base = first.snapshot {
+          for index in 1..<64 {
+            var snap = base
+            snap.identity.nativeSessionId = "synthetic-list-\(index)"
+            snap.identity.runtimeEpoch = "synthetic-epoch-\(index)"
+            snap.display.name = "合成项目 \(index) · 长会话名称的搜索与键盘导航检查"
+            _ = store.apply(WireRecord(kind: "hello", identity: snap.identity, snapshot: snap), connection: UUID(), now: Date().timeIntervalSince1970 * 1000)
+          }
+        }
         store.tick(now: Date().timeIntervalSince1970 * 1000)
         selected = sessions.first?.snapshot.identity.sessionKey
+        if argument("--visual-page") == "Token" { page = "Token"; refreshUsage() }
       } catch { diagnostic = "合成预览文件不可用；未连接真实会话" }
       return
     }
     loadSettings()
+    let usageRoot = argument("--usage-path").map { URL(fileURLWithPath: $0) } ?? (argument("--socket-path").map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("usage-v1") })
+    ledger = UsageLedger(root: usageRoot)
+    refreshUsage(); checkNotificationStatus()
     server = SocketServer(path: socketPath) { [weak self] event in
       if Thread.isMainThread {
         MainActor.assumeIsolated { self?.consume(event) }
@@ -131,6 +200,7 @@ struct DeskSettings: Codable {
       Task { @MainActor in
         guard let self = self else { return }
         self.store.tick(now: Date().timeIntervalSince1970 * 1000)
+        if Date().timeIntervalSince(self.lastUsageRefresh) >= (self.page == "Token" ? 5 : 30) { self.refreshUsage() }
       }
     }
   }
@@ -274,13 +344,13 @@ struct DeskSettings: Codable {
         guard settings.notifications, Bundle.main.bundleURL.pathExtension == "app" else { continue }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { permission in
-          guard permission.authorizationStatus == .authorized else { return }
+          guard permission.authorizationStatus == .authorized else { Task { @MainActor in self.checkNotificationStatus() }; return }
           let content = UNMutableNotificationContent()
           content.title = "Pi 需要输入"
           content.body = "请回到原会话处理。原通知与自动化保持不变。"
           let request = UNNotificationRequest(identifier: key, content: content, trigger: nil)
-          UNUserNotificationCenter.current().add(request) {
-            _ in /* Failure is display-only; never suppress the producer. */
+          UNUserNotificationCenter.current().add(request) { error in
+            if error != nil { Task { @MainActor in self.notificationStatus = "系统通知发送失败；原入口兜底不受影响" } }
           }
         }
       }

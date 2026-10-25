@@ -7,6 +7,6 @@ mkdir -p tmp
 run="$(mktemp -d "$PWD/tmp/draft-check-XXXXXX")"
 trap 'rm -rf "$run"' EXIT
 swiftc -swift-version 5 -parse-as-library -module-name PiDeskDraftChecks \
-  -I "$bin/Modules" Sources/PiDeskApp/AppModel.swift Tests/PiDeskAppTests/DraftChecks.swift \
+  -I "$bin/Modules" Sources/PiDeskApp/AppModel.swift Sources/PiDeskApp/UsageLedger.swift Tests/PiDeskAppTests/DraftChecks.swift \
   "$bin"/PiDeskCore.build/*.o "$bin"/PiDeskTransport.build/*.o -o "$run/DraftChecks"
 "$run/DraftChecks" --socket-path "$run/desk.sock" --settings-path "$run/settings.json"

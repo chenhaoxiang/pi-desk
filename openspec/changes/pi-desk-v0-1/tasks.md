@@ -42,15 +42,15 @@
 
 ## 6. M5 完整首版验收与候选打包
 
-- [ ] 6.1 运行实施方案A1–A11组合矩阵，验证相同fixture的新增模型调用/人工确认0、原参数/执行结果不变，记录UI断联/崩溃/背压/更新影响与实际性能。
-- [ ] 6.2 核验固定Pi/owner版本及缺少owner/混合版本模式，验证TUI现有能力不因接入被降级，不强reload真实业务会话。
+- [x] 6.1 运行实施方案A1–A11组合矩阵，验证相同fixture的新增模型调用/人工确认0、原参数/执行结果不变，记录UI断联/崩溃/背压/更新影响与实际性能。
+- [x] 6.2 核验固定Pi/owner版本及缺少owner/混合版本模式，验证TUI现有能力不因接入被降级，不强reload真实业务会话。
 - [ ] 6.3 在已授权的精确隔离本机目标中做原生多会话/输入/跳转/通知验收，区分合成与真实证据，不读取真实历史日志充当fixture。
 - [x] 6.4 构建旁路候选、验证卸载/回退只移除本App与本扩展，记录独立App身份、许可、签名/公证/更新源及尚未执行项；无授权不安装/发布。
 - [x] 6.5 核对所有首版范围、管理能力与证据层级，更新README和产品状态；验证没有把观察里程碑、source通过或静态预览冒称完整首版/已上线。
 
 ### 当前仍未满足的组合验收
 
-2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整VoiceOver/系统组合未验；6.1–6.3 仍不是全矩阵通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
+2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整键盘/VoiceOver/实体显示器及6.3实际OS通知仍未验。6.1–6.2已按原A1–A11、固定支持版本及代表性旧/缺失/混合cap补齐；不以所有历史owner、长期provider或24x7另造前置，亦不把软件通过冒称现场系统通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
 
 ## 7. Native visual and interaction refinement
 
@@ -87,6 +87,14 @@
 - [x] 11.2 移除settled/async自动owner cost扫描，按当前对象/显式刷新限频，补固定owner大branch同步RPC耗时和同faux/PTY dispatch/turn/RSS/pending对照。
 - [x] 11.3 App保持单utility ledger连接/dirty cache/rowid增量/model filter；复现并严格恢复自有hard-link crash temp，未知第二链接不删。
 - [x] 11.4 已安装40bce16/build16，实际canonical GPT final/recorders/SQLite与模型过滤分布可见；旧GPT会话仍有缺口，Herdr/VoiceOver/OS consent和长期provider资格未冒称，不强reload业务Pi。
+
+## 12. 一次性Pi历史usage元数据补采
+
+- [x] 12.1 实现canonical Pi JSONL只读preview/apply/rollback worker：冻结文件dev/inode/size/prefix hash与source-set hash；低优先级单worker、分块流式、有界行/内存、节流；stage/收据只保存usage标量、模型/时间/消费fingerprint和安全摘要，不保存/输出正文、工具参数/结果、原路径或原会话ID。
+- [x] 12.2 与实时共用host/session/entry消费键；覆盖所有分支、assistant final、explicit usage kind、compaction/branch summary，reasoning/cacheWrite1h不重复；fork/clone沿父链和fingerprint建alias，短ID不全局化，缺父/循环/冲突保守跳过，unknown不猜物理模型。
+- [x] 12.3 apply前正常退出App但不停止Pi，使用SQLite backup API含WAL的一致快照、私有owner-only补充备份和receipt；新增provenance/import/alias/conflict表保持旧八列兼容，重复apply无变化，目标回退只移除本import新增且保留后续实时确认/审计事实。
+- [x] 12.4 Swift Ledger/UI支持实时记录、一次性历史补采、去重合计来源切换；来源覆盖日期、缺字段/未知模型/跳过原因、模型/趋势/四桶口径一致；启动/刷新不自动扫JSONL。实际canonical preview/apply、数据库quick_check、私有备份、重复apply、fixture全套与来源分区回读已验真。
+- [x] 12.5 对原A1–A11/6.1–6.2补齐实际Pi 1.4.0-fork.1/Subagents 0.80.0-fork.1/代表性旧缺失混合cap：native retry/threshold compaction/queued continuation bridge开关对照、loadout/模型调用/确认/settled边界不变；2.4/6.3的Herdr/VoiceOver/OS consent/实体多屏仍分别标未知，不作为历史补采阻断。
 
 ## Workflow follow-up
 

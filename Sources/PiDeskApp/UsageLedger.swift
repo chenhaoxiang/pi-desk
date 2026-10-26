@@ -69,6 +69,11 @@ public struct UsageDateRange: Equatable {
   }
 }
 
+public enum UsageOrigin: String, CaseIterable, Identifiable {
+  case combined, realtime, history
+  public var id: String { rawValue }
+  public var title: String { switch self { case .combined: return "合计"; case .realtime: return "实时记录"; case .history: return "一次性历史补采" } }
+}
 public enum UsageMetric: String, CaseIterable, Identifiable {
   case interaction, cache, processing
   public var id: String { rawValue }
@@ -122,6 +127,17 @@ public struct UsageTokenTotals: Equatable {
     guard let increment else { return (value, false) }
     let result = value.addingReportingOverflow(increment)
     return result.overflow || increment < 0 ? (value, true) : (result.partialValue, false)
+  }
+
+  public mutating func add(_ other: UsageTokenTotals) {
+    guard other.seen else { return }
+    add(input: other.inputKnown ? other.input : nil, output: other.outputKnown ? other.output : nil,
+      cacheRead: other.cacheReadKnown ? other.cacheRead : nil, cacheWrite: other.cacheWriteKnown ? other.cacheWrite : nil)
+    inputComplete = inputComplete && other.inputComplete
+    outputComplete = outputComplete && other.outputComplete
+    cacheReadComplete = cacheReadComplete && other.cacheReadComplete
+    cacheWriteComplete = cacheWriteComplete && other.cacheWriteComplete
+    overflow = overflow || other.overflow
   }
 
   public var totalLowerBound: Int64 {
@@ -179,6 +195,18 @@ public struct UsageAggregate: Equatable {
   public var models: [UsageModelTotal] = []
   public var availableModels: [String] = []
   public var selectedModel: String?
+  public var selectedOrigin: UsageOrigin = .combined
+  public var originTotals: [String: UsageTokenTotals] = [:]
+  public var originCounts: [String: Int] = [:]
+  public var originCollectedSince: [String: Date] = [:]
+  public var originModels: [String: [String: UsageTokenTotals]] = [:]
+  public var originBuckets: [String: [Date: UsageTokenTotals]] = [:]
+  public var originModelBuckets: [String: [String: [Date: UsageTokenTotals]]] = [:]
+  public var originModelCounts: [String: [String: Int]] = [:]
+  public var historyImportedAt: Date?
+  public var historyMinDate: Date?
+  public var historyMaxDate: Date?
+  public var historyReasons: [String] = []
   public var modelBuckets: [String: [Date: UsageTokenTotals]] = [:]
   public var modelRecordCounts: [String: Int] = [:]
   public var recordCount = 0
@@ -190,6 +218,20 @@ public struct UsageAggregate: Equatable {
   public var error: String?
   public var refreshedAt: Date?
 
+  public func filtered(origin: UsageOrigin, model: String?) -> UsageAggregate {
+    if origin == .combined { var value = filtered(model: model); value.selectedOrigin = .combined; return value }
+    var value = self
+    value.selectedOrigin = origin
+    value.totals = originTotals[origin.rawValue] ?? UsageTokenTotals()
+    value.recordCount = originCounts[origin.rawValue] ?? 0
+    value.collectedSince = originCollectedSince[origin.rawValue]
+    value.models = (originModels[origin.rawValue] ?? [:]).map { UsageModelTotal(model: $0.key, tokens: $0.value) }
+    value.modelBuckets = originModelBuckets[origin.rawValue] ?? [:]
+    value.modelRecordCounts = originModelCounts[origin.rawValue] ?? [:]
+    let totals = originBuckets[origin.rawValue] ?? [:]
+    value.buckets = buckets.map { b in UsageBucket(day:b.day,state:b.state == .future ? .future : (totals[b.day] == nil ? .uncollected : .data),tokens:totals[b.day] ?? UsageTokenTotals()) }
+    return value.filtered(model: model)
+  }
   public func filtered(model: String?) -> UsageAggregate {
     guard let model else { return self }
     var result = self
@@ -197,6 +239,10 @@ public struct UsageAggregate: Equatable {
     result.totals = models.first(where: { $0.model == model })?.tokens ?? UsageTokenTotals()
     result.models = models.filter { $0.model == model }
     result.recordCount = modelRecordCounts[model] ?? 0
+    for origin in ["realtime","history"] {
+      result.originTotals[origin] = originModels[origin]?[model] ?? UsageTokenTotals()
+      result.originCounts[origin] = originModelCounts[origin]?[model] ?? 0
+    }
     let values = modelBuckets[model] ?? [:]
     result.buckets = buckets.map { bucket in
       UsageBucket(day: bucket.day, state: bucket.state == .future ? .future : (values[bucket.day] == nil ? .uncollected : .data), tokens: values[bucket.day] ?? UsageTokenTotals())
@@ -240,6 +286,11 @@ public struct UsageAggregate: Equatable {
       result.availableModels = result.models.map(\.model).sorted()
       result.collectedSince = calendar.date(byAdding: .day, value: -5, to: today)
       result.coverageReasons = ["纯合成预览；工具/子任务附加量可能未覆盖"]
+      result.originTotals["realtime"]=result.totals;result.originCounts["realtime"]=result.recordCount
+      result.originCollectedSince["realtime"]=result.collectedSince
+      result.originModels["realtime"]=Dictionary(uniqueKeysWithValues:result.models.map{($0.model,$0.tokens)})
+      result.originBuckets["realtime"]=Dictionary(uniqueKeysWithValues:result.buckets.filter{$0.state == .data}.map{($0.day,$0.tokens)})
+      result.originModelBuckets["realtime"]=result.modelBuckets;result.originModelCounts["realtime"]=result.modelRecordCounts
       result.refreshedAt = Date()
     } else {
       result.buckets = range.days.map { UsageBucket(day: $0, state: .uncollected, tokens: UsageTokenTotals()) }
@@ -276,8 +327,12 @@ private struct DiskRecorder: Decodable {
 protocol UsageLedgerClient: AnyObject {
   func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void)
   func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void)
+  func refresh(range: UsageDateRange, model: String?, origin: UsageOrigin, completion: @escaping (UsageAggregate) -> Void)
 }
 extension UsageLedgerClient {
+  func refresh(range: UsageDateRange, model: String?, origin: UsageOrigin, completion: @escaping (UsageAggregate) -> Void) {
+    refresh(range: range) { completion($0.filtered(origin: origin, model: model)) }
+  }
   func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void) {
     refresh(range: range) { completion($0.filtered(model: model)) }
   }
@@ -304,13 +359,16 @@ public final class UsageLedger: UsageLedgerClient {
     }
   }
 
-  private var pendingRefresh: (range: UsageDateRange, model: String?, completion: (UsageAggregate) -> Void)?
+  private var pendingRefresh: (range: UsageDateRange, model: String?, origin: UsageOrigin, completion: (UsageAggregate) -> Void)?
   private var isRefreshing = false
   public func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void) {
     refresh(range: range, model: nil, completion: completion)
   }
   public func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void) {
-    pendingRefresh = (range, model, completion)
+    refresh(range:range,model:model,origin:.combined,completion:completion)
+  }
+  public func refresh(range: UsageDateRange, model: String?, origin: UsageOrigin, completion: @escaping (UsageAggregate) -> Void) {
+    pendingRefresh = (range, model, origin, completion)
     if !isRefreshing { runNextRefresh() }
   }
   private func runNextRefresh() {
@@ -318,7 +376,7 @@ public final class UsageLedger: UsageLedgerClient {
     pendingRefresh = nil; isRefreshing = true
     queue.async { [weak self] in
       guard let self else { return }
-      let result = self.readIncremental(range: work.range).filtered(model: work.model)
+      let result = self.readIncremental(range: work.range).filtered(origin:work.origin, model: work.model)
       DispatchQueue.main.async {
         if self.pendingRefresh != nil { self.runNextRefresh() }
         else { self.isRefreshing = false; work.completion(result) }
@@ -495,6 +553,10 @@ public final class UsageLedger: UsageLedgerClient {
           CREATE INDEX IF NOT EXISTS usage_time ON usage_entries(occurred);
           CREATE TABLE IF NOT EXISTS usage_conflicts(id TEXT PRIMARY KEY);
           CREATE TABLE IF NOT EXISTS usage_meta(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
+          CREATE TABLE IF NOT EXISTS usage_provenance(id TEXT PRIMARY KEY,origin TEXT NOT NULL,import_id TEXT NOT NULL,kind TEXT NOT NULL,coverage TEXT NOT NULL,has_realtime INTEGER NOT NULL DEFAULT 0);
+          CREATE TABLE IF NOT EXISTS history_imports(import_id TEXT PRIMARY KEY,source_set_hash TEXT NOT NULL,applied INTEGER NOT NULL,status TEXT NOT NULL,summary_json TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS usage_aliases(alias_id TEXT PRIMARY KEY,canonical_id TEXT NOT NULL,fingerprint TEXT NOT NULL,kind TEXT NOT NULL,import_id TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS history_conflicts(id TEXT NOT NULL,import_id TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(id,import_id));
           PRAGMA user_version=1; PRAGMA application_id=1346978901;
           """)
       } catch { sqlite3_close(db); handle = nil; throw error }
@@ -562,6 +624,7 @@ public final class UsageLedger: UsageLedgerClient {
             [entry.tokens.input, entry.tokens.output, entry.tokens.cacheRead, entry.tokens.cacheWrite].allSatisfy({
               $0 == nil || ($0! >= 0 && $0! <= 9_007_199_254_740_991)
             }) else { malformed += 1; reasons.insert("坏记录保留待诊断"); continue }
+          if try acceptKnownAlias(entry) { accepted.append((file,data)); continue }
           let statement = try prepare("INSERT OR IGNORE INTO usage_entries VALUES(?,?,?,?,?,?,?,?)")
           defer { sqlite3_finalize(statement) }
           bind(entry.id, statement, 1); bind(entry.session, statement, 2); bind(entry.occurredAt, statement, 3)
@@ -570,6 +633,7 @@ public final class UsageLedger: UsageLedgerClient {
           guard sqlite3_step(statement) == SQLITE_DONE else { throw LedgerError.databaseUnavailable }
           if sqlite3_changes(handle) == 0 {
             if try conflict(entry) { reasons.insert("重复receipt内容冲突") }
+            else { try markRealtimeReceipt(entry.id) }
           }
           accepted.append((file, data))
         }
@@ -584,6 +648,20 @@ public final class UsageLedger: UsageLedgerClient {
       if files.count > 1024 { reasons.insert("尚有记录等待索引") }
       return (max(0, files.count - accepted.count), malformed + recorders.malformed,
         Int(try scalar("SELECT count(*) FROM usage_conflicts")), Array(reasons))
+    }
+    private func markRealtimeReceipt(_ id: String) throws {
+      let s=try prepare("UPDATE usage_provenance SET has_realtime=1 WHERE id=?")
+      defer { sqlite3_finalize(s) };bind(id,s,1)
+      guard sqlite3_step(s)==SQLITE_DONE else { throw LedgerError.databaseUnavailable }
+    }
+    private func acceptKnownAlias(_ entry: DiskUsageEntry) throws -> Bool {
+      let s=try prepare("SELECT e.id,e.occurred,e.model,e.input,e.output,e.cache_read,e.cache_write FROM usage_aliases a JOIN usage_entries e ON e.id=a.canonical_id WHERE a.alias_id=?")
+      defer { sqlite3_finalize(s) };bind(entry.id,s,1)
+      guard sqlite3_step(s)==SQLITE_ROW else { return false }
+      let same=int(s,1)==entry.occurredAt && string(s,2)==entry.model && int(s,3)==entry.tokens.input && int(s,4)==entry.tokens.output && int(s,5)==entry.tokens.cacheRead && int(s,6)==entry.tokens.cacheWrite
+      if same { try markRealtimeReceipt(string(s,0)); return true }
+      let c=try prepare("INSERT OR IGNORE INTO usage_conflicts VALUES(?)");defer { sqlite3_finalize(c) };bind(entry.id,c,1)
+      guard sqlite3_step(c)==SQLITE_DONE else { throw LedgerError.databaseUnavailable };return true
     }
     private func conflict(_ entry: DiskUsageEntry) throws -> Bool {
       let s = try prepare("SELECT session,occurred,model,input,output,cache_read,cache_write FROM usage_entries WHERE id=?")
@@ -628,6 +706,7 @@ public final class UsageLedger: UsageLedgerClient {
     private(set) var lastAggregateRows = 0
     private var aggregateCache: (range: UsageDateRange, version: Int64, cursor: Int64, value: UsageAggregate)?
     private var aggregateDays: [Date: UsageTokenTotals] = [:]
+    private var coverageCache: (version: Int64, cursor: Int64, values: [String: Date])?
     func aggregate(range: UsageDateRange) throws -> UsageAggregate {
       let version = try scalar("PRAGMA data_version")
       let maximum = try scalar("SELECT COALESCE(max(rowid),0) FROM usage_entries")
@@ -639,7 +718,7 @@ public final class UsageLedger: UsageLedgerClient {
       let visible = Set(range.days)
       var processed = 0
       if cursor < maximum {
-        let statement = try prepare("SELECT rowid,occurred,model,input,output,cache_read,cache_write FROM usage_entries WHERE rowid>? AND occurred>=? AND occurred<? ORDER BY rowid")
+        let statement = try prepare("SELECT e.rowid,e.occurred,e.model,e.input,e.output,e.cache_read,e.cache_write,COALESCE(p.origin,'realtime') FROM usage_entries e LEFT JOIN usage_provenance p ON p.id=e.id WHERE e.rowid>? AND e.occurred>=? AND e.occurred<? AND NOT EXISTS(SELECT 1 FROM usage_aliases a JOIN usage_entries canonical ON canonical.id=a.canonical_id WHERE a.alias_id=e.id) ORDER BY e.rowid")
         defer { sqlite3_finalize(statement) }
         bind(cursor, statement, 1)
         bind(Int64(range.start.timeIntervalSince1970 * 1000), statement, 2)
@@ -653,7 +732,14 @@ public final class UsageLedger: UsageLedgerClient {
           result.totals.add(input: a, output: b, cacheRead: c, cacheWrite: d)
           var total = modelTotals[model] ?? UsageTokenTotals(); total.add(input: a, output: b, cacheRead: c, cacheWrite: d); modelTotals[model] = total
           result.modelRecordCounts[model, default: 0] += 1
+          let origin=string(statement,7)=="history" ? "history" : "realtime"
+          var originTotal=result.originTotals[origin] ?? UsageTokenTotals();originTotal.add(input:a,output:b,cacheRead:c,cacheWrite:d);result.originTotals[origin]=originTotal
+          result.originCounts[origin,default:0] += 1
+          var om=result.originModels[origin]?[model] ?? UsageTokenTotals();om.add(input:a,output:b,cacheRead:c,cacheWrite:d);result.originModels[origin,default:[:]][model]=om
+          result.originModelCounts[origin,default:[:]][model,default:0] += 1
           if visible.contains(day) {
+            var od=result.originBuckets[origin]?[day] ?? UsageTokenTotals();od.add(input:a,output:b,cacheRead:c,cacheWrite:d);result.originBuckets[origin,default:[:]][day]=od
+            var omd=result.originModelBuckets[origin]?[model]?[day] ?? UsageTokenTotals();omd.add(input:a,output:b,cacheRead:c,cacheWrite:d);result.originModelBuckets[origin,default:[:]][model,default:[:]][day]=omd
             var daily = aggregateDays[day] ?? UsageTokenTotals(); daily.add(input: a, output: b, cacheRead: c, cacheWrite: d); aggregateDays[day] = daily
             var md = result.modelBuckets[model]?[day] ?? UsageTokenTotals(); md.add(input: a, output: b, cacheRead: c, cacheWrite: d); result.modelBuckets[model, default: [:]][day] = md
           }
@@ -662,13 +748,50 @@ public final class UsageLedger: UsageLedgerClient {
         }
         guard step == SQLITE_DONE else { throw LedgerError.databaseUnavailable }
       }
-      let earliest = try scalar("SELECT COALESCE(min(occurred),0) FROM usage_entries")
-      if earliest > 0 { result.collectedSince = Date(timeIntervalSince1970: Double(earliest) / 1000) }
+      let coverageReusable = coverageCache.map { $0.version == version && $0.cursor <= maximum } ?? false
+      var firstDates = coverageReusable ? coverageCache!.values : [:]
+      let coverageCursor = coverageReusable ? coverageCache!.cursor : 0
+      if coverageCursor < maximum {
+        let first = try prepare("SELECT COALESCE(p.origin,'realtime'),min(e.occurred) FROM usage_entries e LEFT JOIN usage_provenance p ON p.id=e.id WHERE e.rowid>? AND NOT EXISTS(SELECT 1 FROM usage_aliases a JOIN usage_entries canonical ON canonical.id=a.canonical_id WHERE a.alias_id=e.id) GROUP BY COALESCE(p.origin,'realtime')")
+        defer { sqlite3_finalize(first) }; bind(coverageCursor, first, 1)
+        var step = sqlite3_step(first)
+        while step == SQLITE_ROW {
+          let origin = string(first, 0) == "history" ? "history" : "realtime"
+          let date = Date(timeIntervalSince1970: Double(int(first, 1) ?? 0) / 1000)
+          firstDates[origin] = min(firstDates[origin] ?? date, date)
+          step = sqlite3_step(first)
+        }
+        guard step == SQLITE_DONE else { throw LedgerError.databaseUnavailable }
+      }
+      coverageCache = (version, maximum, firstDates)
+      result.originCollectedSince = firstDates
+      result.collectedSince = firstDates.values.min()
       result.models = modelTotals.map { UsageModelTotal(model: $0.key, tokens: $0.value) }.sorted { $0.tokens.totalLowerBound > $1.tokens.totalLowerBound }
       result.availableModels = result.models.map(\.model).sorted()
       let currentBucket = range.bucket(for: Date())
       result.buckets = range.days.map { day in UsageBucket(day: day, state: day > currentBucket ? .future : (aggregateDays[day] == nil ? .uncollected : .data), tokens: aggregateDays[day] ?? UsageTokenTotals()) }
-      result.coverageReasons = ["仅含启用采集后的Pi assistant final；工具/子任务附加量可能未覆盖"]
+      result.historyReasons = []; result.historyImportedAt = nil; result.historyMinDate = nil; result.historyMaxDate = nil
+      let history=try prepare("SELECT applied,summary_json FROM history_imports WHERE status='applied' ORDER BY applied DESC LIMIT 1")
+      if sqlite3_step(history)==SQLITE_ROW {
+        result.historyImportedAt=Date(timeIntervalSince1970:Double(int(history,0) ?? 0)/1000)
+        if let data=string(history,1).data(using:.utf8),let receipt=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] {
+          if let minimum=receipt["minUTCms"] as? Double { result.historyMinDate=Date(timeIntervalSince1970:minimum/1000) }
+          if let maximum=receipt["maxUTCms"] as? Double { result.historyMaxDate=Date(timeIntervalSince1970:maximum/1000) }
+          if let coverage=receipt["coverage"] as? [String:Int] {
+            if (coverage["non-pi-or-unsupported-header"] ?? 0)>0 { result.historyReasons.append("非Pi SessionHeader格式的旁路JSONL未纳入") }
+            if (coverage["ambiguous-candidates"] ?? 0)>0 { result.historyReasons.append("父链缺失/冲突继承项保守跳过") }
+            for (key, label) in [
+              ("usage-not-provided", "旧记录未提供usage"), ("summary-model-unknown", "压缩/摘要物理模型未知"),
+              ("oversized-lines", "超出单行上限"), ("malformed-lines", "不可解析记录"),
+              ("incomplete-tail", "未完成的文件尾"), ("missing-stable-entry-id", "缺稳定消费ID"),
+              ("missing-valid-occurrence", "缺有效消费时间")
+            ] { if let count = coverage[key], count > 0 { result.historyReasons.append("\(label)：\(count)项，未猜测或补0") } }
+          }
+          if let conflicts = receipt["conflicts"] as? Int, conflicts > 0 { result.historyReasons.append("导入内容冲突：\(conflicts)项，保留原记录") }
+        }
+      }
+      sqlite3_finalize(history)
+      result.coverageReasons = ["实时final与用户授权的一次性历史补采按同一消费键去重；owner累计/工具聚合不拼入"] + result.historyReasons
       if result.totals.overflow { result.coverageReasons.append("计数超出安全范围，仅显示已知下界") }
       if !result.totals.seen { result.coverageReasons.append("该时间范围尚未采集用量，不代表零消费") }
       lastAggregateRows = processed

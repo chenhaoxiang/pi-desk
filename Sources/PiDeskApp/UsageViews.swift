@@ -12,7 +12,7 @@ struct AggregateTokenPage: View {
         HStack(alignment: .top) {
           VStack(alignment: .leading, spacing: 5) {
             Text("Pi 总用量").font(.system(size: 25, weight: .semibold))
-            Text("所有已记录会话 · 不扫描旧会话，不是套餐额度或真实账单").font(.caption).foregroundStyle(.secondary)
+            Text("实时记录 + 已授权的一次性历史补采 · 非套餐额度或真实账单").font(.caption).foregroundStyle(.secondary)
           }
           Spacer()
           Button { model.refreshUsage() } label: {
@@ -29,19 +29,22 @@ struct AggregateTokenPage: View {
             Text("本地时区：" + usage.timeZoneID + " · 原始记录：UTC").font(.caption2).foregroundStyle(.secondary)
           }.accessibilityElement(children: .combine)
         }
+        Picker("记录来源", selection:$model.usageOrigin) {
+          ForEach(UsageOrigin.allCases) { Text($0.title).tag($0) }
+        }.pickerStyle(.segmented).accessibilityLabel("实时记录、一次性历史补采或去重合计")
         HStack {
           Picker("模型", selection: $model.usageModel) {
             Text("所有已记录模型").tag("")
             ForEach(Array(Set(usage.availableModels + model.sessions.compactMap { $0.snapshot.display.model } + (model.usageModel.isEmpty ? [] : [model.usageModel]))).sorted(), id: \.self) { name in Text(name + (usage.availableModels.contains(name) ? "" : "（尚未采集）")).tag(name) }
           }.frame(maxWidth: 480)
           Spacer()
-          Text("只按已记录final筛选，不把未采集填0").font(.caption2).foregroundStyle(.secondary)
+          Text("按已记录消费筛选，不把未采集填0").font(.caption2).foregroundStyle(.secondary)
         }
         let uncovered = model.sessions.filter { $0.connection == .connected && $0.snapshot.usageRecorder == nil }
-        if !uncovered.isEmpty {
+        if model.usageOrigin != .history && !uncovered.isEmpty {
           DisclosureGroup {
             VStack(alignment: .leading, spacing: 7) {
-              Text("这些旧会话当前没有final持久采集器；新Pi正常启动时自动加载新版，不强制重载正在进行的工作，旧窗口累计不能补记日期。")
+              Text("这些旧会话当前没有实时final采集器；新Pi正常启动时自动加载新版，不强制重载正在进行的工作。一次性补采只覆盖冻结文件中已存在的usage，不从旧窗口累计猜日期。")
               Text("同一模型的新会话已记录数据仍单独计入总览；这里表示会话覆盖缺口，不表示整个模型都未采集。")
               ForEach(uncovered, id: \.snapshot.identity) { session in
                 Text(session.snapshot.display.name + " · " + (session.snapshot.display.model ?? "模型未知")).font(.caption2)
@@ -65,11 +68,29 @@ struct AggregateTokenPage: View {
           Image(systemName: "internaldrive")
           Text(coverageStart).fixedSize(horizontal: false, vertical: true)
           Spacer()
-          Text("\(usage.recordCount) 条结算").monospacedDigit()
+          Text("\(usage.recordCount) 条唯一消费").monospacedDigit()
         }.font(.caption).foregroundStyle(.secondary).accessibilityElement(children: .combine)
         if let error = usage.error {
           Label("用量索引暂不可用 · 已保留旧数据（" + error + "）", systemImage: "externaldrive.badge.exclamationmark")
             .font(.caption).foregroundStyle(.orange)
+        }
+        HStack(spacing:18) {
+          ForEach([UsageOrigin.realtime,.history,.combined]) { source in
+            VStack(alignment:.leading,spacing:4) {
+              Text(source.title).font(.caption).foregroundStyle(.secondary)
+              Text(source == .combined ? combinedSourceValue : value((usage.originTotals[source.rawValue] ?? UsageTokenTotals()).metric(metric))).font(.subheadline.monospacedDigit())
+              if source != .combined { Text("\(usage.originCounts[source.rawValue] ?? 0) 条唯一消费").font(.caption2).foregroundStyle(.secondary) }
+            }.frame(maxWidth:.infinity,alignment:.leading)
+          }
+        }.accessibilityElement(children:.contain)
+        if let imported=usage.historyImportedAt {
+          DisclosureGroup("一次性历史补采收据 · " + imported.formatted(date:.numeric,time:.shortened)) {
+            VStack(alignment:.leading,spacing:6) {
+              if let from=usage.historyMinDate, let to=usage.historyMaxDate { Text("文件已知usage覆盖："+dateText(from,format:"yyyy/M/d")+" — "+dateText(to,format:"yyyy/M/d")) }
+              ForEach(usage.historyReasons,id:\.self){Text($0)}
+              Text("仅恢复元数据；实时重叠记录沿用原来源，fork继承按原消费去重。未知模型不归入GPT，缺字段不补0，不代表所有旧会话完整。导入只执行一次，不在启动或刷新时再扫JSONL。")
+            }.font(.caption).foregroundStyle(.secondary).padding(.top,6)
+          }.font(.caption)
         }
         DeskCard {
           VStack(alignment: .leading, spacing: 15) {
@@ -130,7 +151,7 @@ struct AggregateTokenPage: View {
             if usage.totals.metric(metric).known {
               UsageTrendChart(usage: usage, metric: metric).frame(height: 175)
             } else {
-              ContentUnavailableView(usage.recordCount > 0 ? "此视图的用量字段未知" : "所选时间尚未采集", systemImage: "chart.bar.xaxis", description: Text(model.usageModel.isEmpty ? "仅从启用记录后累计；未采集不是零消费。" : "此时间尚未采集所选模型，不表示它消耗为0；旧桥接需等待自然加载。"))
+              ContentUnavailableView(usage.recordCount > 0 ? "此视图的用量字段未知" : "所选时间尚未采集", systemImage: "chart.bar.xaxis", description: Text(model.usageModel.isEmpty ? "仅展示所选来源已有记录；未采集不是零消费。" : "此时间与来源尚无所选模型记录，不表示它消耗为0。"))
                 .frame(minHeight: 150)
             }
             if !usage.buckets.filter({ $0.state != .data }).isEmpty {
@@ -168,7 +189,7 @@ struct AggregateTokenPage: View {
         VStack(alignment: .leading, spacing: 7) {
           if let date = usage.refreshedAt { Text("索引更新 " + date.formatted(date: .omitted, time: .standard)).font(.caption).foregroundStyle(.secondary) }
           let old = model.sessions.filter { $0.connection == .connected && $0.snapshot.usageRecorder == nil }.count
-          if old > 0 { Label("\(old) 个在线会话仍用旧桥接，未纳入持久时间统计；等待自然加载，不强制重载。", systemImage: "info.circle").font(.caption).foregroundStyle(.orange) }
+          if model.usageOrigin != .history && old > 0 { Label("\(old) 个在线会话仍用旧桥接，实时采集有缺口；等待自然加载，不强制重载。",  systemImage: "info.circle").font(.caption).foregroundStyle(.orange) }
           if usage.conflicts > 0 || usage.malformed > 0 { Label("记录有冲突或不可读项，已保留原数据；当前为已知下界", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
           if usage.pendingRecords > 0 { Text("\(usage.pendingRecords) 条记录待索引或需检查").font(.caption).foregroundStyle(.orange) }
           DisclosureGroup("统计边界与记录状态") {
@@ -176,7 +197,7 @@ struct AggregateTokenPage: View {
               ForEach(usage.coverageReasons, id: \.self) { Text($0).font(.caption) }
               Text("原始时间使用UTC；以上按本地日历 " + usage.timeZoneID + " 分桶。" + utcRange).font(.caption)
               Text("四桶使用Pi归一语义。reasoning已含在输出，cacheWrite1h已含在缓存写入，不再相加。父owner累计、归属不明工具聚合不入时间账。")
-              Text("记录总处理量含缓存复用，不代表新增输入、套餐余额或账单；未接入和采集启用前的消费未覆盖。")
+              Text("记录总处理量含缓存复用，不代表新增输入、套餐余额或账单；未接入实时采集、冻结补采文件之外或缺usage的消费仍未覆盖。")
             }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
           }.font(.caption)
         }
@@ -185,14 +206,23 @@ struct AggregateTokenPage: View {
     }.onAppear { model.refreshUsage() }
       .onChange(of: model.usagePreset) { _, _ in model.refreshUsage() }
       .onChange(of: model.usageModel) { _, _ in model.refreshUsage() }
+      .onChange(of: model.usageOrigin) { _, _ in model.refreshUsage() }
       .onChange(of: model.usageCustomStart) { _, _ in model.refreshUsage() }
       .onChange(of: model.usageCustomEnd) { _, _ in model.refreshUsage() }
   }
+  private var combinedSourceValue: String {
+    var total=UsageTokenTotals()
+    for source in ["realtime","history"] {
+      let t=usage.originTotals[source] ?? UsageTokenTotals()
+      total.add(t)
+    }
+    return value(total.metric(metric))
+  }
   private var coverageStart: String {
-    guard let since = usage.collectedSince else { return "已有记录覆盖：尚未开始；启用前未采集，不以0补齐" }
+    guard let since = usage.collectedSince else { return "\(model.usageOrigin.title)尚无记录；未知消费不以0补齐" }
     var calendar = Calendar(identifier: .gregorian); calendar.timeZone = usage.range.timeZone
     let day = calendar.isDateInToday(since) ? "今日起" : calendar.isDateInYesterday(since) ? "昨日起" : dateText(since, format: "yyyy/M/d") + "起"
-    return "已有记录覆盖：" + day + "（" + dateText(since, format: "M/d HH:mm") + "）；启用前未采集"
+    return "\(model.usageOrigin.title)已有记录覆盖：" + day + "（" + dateText(since, format: "M/d HH:mm") + "）；未覆盖日期不补0"
   }
   private var rangeDates: String { dateText(usage.range.start, format: "yyyy/M/d") + " — " + dateText(usage.range.endDate, format: "yyyy/M/d") }
   private var utcRange: String {

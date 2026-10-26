@@ -7,7 +7,7 @@ release_scope: 本地实现候选；完整首版验收仍未完成
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-24
+verified: 2026-10-26
 verification_scope: Swift/TS源码、UDS/隔离真实SDK与owner组合；不含业务会话/Herdr实机和长时可靠性
 ---
 
@@ -140,11 +140,21 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 5. `usage`、compaction、branch summary及nested tool usage必须与宿主归一规则对照。首阶段先建立合成合同，未覆盖的附加消耗明确标partial，不把只看assistant消息称完整账单。
 6. same child既作为独立Pi注册又在父报告出现，显示可以两处关联，汇总只取一个owner归属；无可证明不重叠关系则不展示精确全局合计。
 7. Context usage是上下文占用，不是花费；缺失/未结算值为null。无权威价格/费用结果不推算金额。
-8. 时间总览新增最小本机持久元数据链：bridge在final handler只投递标量到有界队列，异步写0700/0600原子spool；App后台导入SQLite，以不含epoch的稳定receipt hash唯一去重。App离线仍写入；不新增Agent/daemon、同步handler I/O或历史扫描。
-9. 时间记录只收Pi assistant final自身usage，不收流式中间值、父owner累计或不可证明不重叠的工具聚合；子会话自己的final可独立计入，未接入孩子/工具/压缩等附加量明确缺口。日期使用原始request UTC时间，绝不把累计到达日当消费日；无时间的记录只标缺口。
+8. 时间总览新增最小本机持久元数据链：bridge在final handler只投递标量到有界队列，异步写0700/0600原子spool；App后台导入SQLite，以不含epoch的稳定receipt hash唯一去重。App离线仍写入；不新增Agent/daemon、同步handler I/O或常驻历史扫描。
+9. 实时链只收Pi assistant final自身usage，不收流式中间值、父owner累计或不可证明不重叠的工具聚合；子会话自己的final可独立计入，未接入孩子/工具/压缩等附加量明确缺口。日期使用原始request UTC时间，绝不把累计到达日当消费日；无时间的记录只标缺口。
 10. 按用户本地Gregorian日历及显式IANA时区算今日/近7天/本月/自定义日期；结束日转下一天零点，查询[start,end)。跨DST用Calendar加天，不按24小时推算。未来与采集起点之前的桶分别显示尚未发生/尚未采集，缺字段聚合已知量并标下界，不以0伪装未知。
 11. SQLite索引仅服务用量查询/去重，事务提交后才清理已导入spool，崩溃重导幂等；utility queue持有连接，schema/quick_check只初始化，metadata dirty代际/DB data_version未变时复用范围结果，新rowid只增量归桶，刷新仅单一在途/最新合并。预算/失败保留coverage，不把失败扩为Pi门禁。旧bridge不支持持久记录时明确提示未纳入，不将显示快照补记为今天。
 12. hard-link publish后进程崩溃留下双链接时，只在本工具私有spool证明最终ID文件和准确`.usage-UUID`临时项同inode/device/owner/mode、结构及SHA256内容相同且nlink恰2后移除临时链接，再沿原严格reader导入；未知第二链接不放行、不删除。
+
+### 一次性历史usage补采（2026-10-26授权）
+
+独立低优先级worker只在显式preview/apply/rollback命令下运行；不挂入App启动/refresh或Pi事件链。canonical Pi JSONL以只读fd、冻结dev/inode/size和prefix SHA256读取，单worker分块流式投影，单行16MiB、缓存有界并节流。仅stage标量与哈希，不保留原路径、会话ID、正文、工具参数/结果或模型配置。包含所有已付费分支的assistant/usage/compaction/branch_summary，不只读当前leaf；非Pi sidecar镜像不再计入。
+
+消费键与实时完全一致：host hash → session header ID hash → entry ID hash，不另设history命名空间绕开去重。fork/clone的新header不能让复制消费再次计费：沿parentSession链比较entry ID和usage fingerprint；不把8hex ID当全局ID；缺链、循环和内容冲突保守ambiguous。summary无provider/model保持unknown，缺桶保持null；reasoning/cacheWrite1h不再相加。
+
+apply绑定preview/source-set hash并校验冻结前缀，正常退出本App维护时Pi仍spool；SQLite backup API获得包含WAL的一致快照，原DB/WAL/SHM和install manifest只作补充备份，目录0700/文件0600。单事务插入、quick_check、import receipt；重复apply幂等。八列usage_entries保持兼容，provenance/import/alias/conflict为附加表；来源标签不改变消费identity。rollback只移除该import新增且未实时确认的行，后续实时数据和既有冲突审计不清除；App回退与数据回退分开。
+
+UI从索引展示实时/一次性历史/去重合计，以及各来源最早记录、冻结覆盖日期和不完整原因。utility queue缓存按rowid增量归桶/来源，模型筛选保持同口径；不会为展示重新打开JSONL。
 
 ## 8. 隐私、展示与诊断
 
@@ -160,7 +170,7 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 
 真实复用时再增加归属与上游MIT许可，不现在预建空第三方体系。纯原创外壳与适配不假称继承上游签名、公证、自动更新或Buddy支持。
 
-时间总览还参考[ccusage日期报告](https://ccusage.com/guide/daily-reports)的跨会话时间视角与四桶口径、[CodexIsland usage-only持久记录说明](https://github.com/ericjypark/codex-island/blob/main/docs/USAGE-HISTORY.md)的稳定ID/SQLite/陈旧值边界，以及[CodexBar](https://github.com/steipete/CodexBar)的原生状态反馈。只借鉴展示和统计边界，未复制代码/素材，不接它们的历史扫描、登录凭据、额度/定价或多provider层。Pi Desk仍从当前Pi final事件记录，不因此引入历史恢复。
+时间总览还参考[ccusage日期报告](https://ccusage.com/guide/daily-reports)的跨会话时间视角与四桶口径、[CodexIsland usage-only持久记录说明](https://github.com/ericjypark/codex-island/blob/main/docs/USAGE-HISTORY.md)的稳定ID/SQLite/陈旧值边界，以及[CodexBar](https://github.com/steipete/CodexBar)的原生状态反馈。只借鉴展示和统计边界，未复制代码/素材，不接它们的历史扫描、登录凭据、额度/定价或多provider层。常驻记录仍只来自当前Pi final；本次显式一次性补采是自有metadata-only worker，并未接入这些参考项目的历史/认证组件。
 
 ## 10. 验证与退出策略
 

@@ -7,7 +7,7 @@ release_scope: 首版合同与本地源码候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-24
+verified: 2026-10-26
 verification_scope: 用户范围、源码候选与隔离faux-native证据；不含业务会话和完整实机兼容验收
 ssot: true
 ---
@@ -18,7 +18,7 @@ ssot: true
 
 用户可以在一个原生入口看清已接入 Pi 会话、子任务、消耗和例外，并对原工作发出准确的管理请求；不用持续切换窗口，也不用守着界面让自动化继续。界面缺失、关闭或故障不改变原任务、通知兜底及权限。
 
-需求依据是本次用户确认：只考虑 Pi；不需要各工具历史会话扫描；Pi Token 统计可以有；首版绝对不能降低 AI 自动化程度。2026-10-24 先完成架构候选，后获授权沿单一 Change 实施和隔离验证。当前已有本地源码与已授权本机稳定安装；本轮继续实现时间维度总用量和可验证的交互补齐，不对外部署、发行或初始化空远端 main，真实证据见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
+需求依据是本次用户确认：只考虑 Pi；不需要各工具历史会话扫描；Pi Token 统计可以有；首版绝对不能降低 AI 自动化程度。2026-10-24 先完成架构候选，后获授权沿单一 Change 实施和隔离验证。当前已有本地源码与已授权本机稳定安装；2026-10-26用户另授权一次Pi历史usage元数据补采与未完成原验收补齐；不扩大为周期扫描或历史对话UI，不对外部署、发行或初始化空远端 main，真实证据见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
 
 ## 2. 范围与完成标准
 
@@ -29,7 +29,7 @@ ssot: true
 | 会话管理 | 追加要求、steer/follow-up、请求中止当前回合，原终端/Herdr跳转 | 不直接写 stdin；中止回合不承诺取消队列、子任务或外部副作用 |
 | 子任务管理 | 对准确运行对象纠偏、请求停止、符合 owner 条件时恢复 | 停止受理不等于进程终态；恢复不等于从头重跑 |
 | 现有计划 | 按 owner 区分列表、状态、暂停/恢复/触发；缺接口补最小 adapter 或明确不可用 | 不新增任务库，不把 Schedule 与 Subagents 同名计划合并，不直接改 JSON |
-| Token | 默认Pi总用量：今日、近7天、本月、自定义日期；跨已记录会话分别展示交互Token、缓存与四桶总处理量，趋势/数据表/模型分布可同口径切换；会话只次级下钻 | 缓存读取是上下文复用量，不等于新输入/账单；启用前未采集，不扫旧会话、不假零 |
+| Token | 默认Pi总用量：今日、近7天、本月、自定义日期；跨已记录会话分别展示交互Token、缓存与四桶总处理量，趋势/数据表/模型分布可同口径切换；会话只次级下钻 | 缓存读取是上下文复用量，不等于新输入/账单；实时/一次性历史/合计分开，冻结集合之外或缺usage仍未知，不假零 |
 | 重要事项 | 实际待输入、失败、自动恢复、治理/Gate/CI摘要与来源 | 未读不等于未执行；Agent自报不等于测试/合并/部署验证 |
 | 服务管理入口 | 可选连接现有管理系统并打开选定页面；必要受限动作复用原API | 服务未配置不影响会话功能；首版不复制整个管理后台 |
 
@@ -45,22 +45,24 @@ ssot: true
 6. 用户明确操作造成的改变与系统隐式退化分开；关闭提醒不回答问题，关闭卡片不停止工作。
 7. 不以审批全自动点击、全局 bypass 或改权限来声称自动化程度不降低。
 
-## 4. 统计与无历史扫描的边界
+## 4. 统计与一次性历史例外
 
-“无历史扫描”禁止发现/遍历/解析会话目录、旧 JSONL、rollout、终端内容、认证与模型配置。可以在已接入 owner 内访问其已加载对象的 usage 标量/原生统计结果；不能让 App 打开原始会话文件。
+默认仍不发现旧会话、不自动扫描历史JSONL、rollout、终端内容、认证与模型配置。App只读已投影的usage索引；可以在已接入owner内访问当前usage标量/原生统计结果。2026-10-26用户明确授权的唯一例外是独立worker对canonical Pi JSONL做一次只读metadata preview/apply/rollback，不保存或输出正文、工具参数/结果、原路径或原会话ID；不在App启动、刷新或turn时重扫，不扩为历史会话UI。
 
 - 普通 TUI 扩展首先提供 `attachment-window`：从本次扩展接入起观测到的已结算 usage，重载后新窗口明确重置。
 - owner 可提供原生当前会话累计时，另列 `native-session-total`，不能把接入窗口值标成会话全部消耗。
 - Subagents `cost` 存在既有当前分支/关联 run artifact 读取行为，可在用户已确认的 Pi 统计范围内复用，无需增加逐项批准；标明 owner-reported 来源、当前会话范围和不完整覆盖。无历史扫描不等于底层 owner 零文件读取：禁止的是 Pi Desk 广泛发现旧会话或自行解析原文件，不禁止原 owner 读取当前关联运行的统计产物。
 - 父子总数只有在 owner 给出明确、不重叠的归属和覆盖时展示；同一子任务独立卡片不再次计入汇总。
-- 时间总览基于启用记录后的稳定final增量持久记录，不拼接owner累计或接入窗口快照；按本地日历的明确时区分桶，自定义结束日期包含整天，内部一律半开边界，未来时段不可当已采集。
+- 时间总览基于稳定final增量与上述一次性补采的usage/压缩/摘要元数据，不拼接owner累计或接入窗口快照；按本地日历的明确时区分桶，自定义结束日期包含整天，内部一律半开边界，未来时段不可当已采集。
 - App关闭/崩溃后bridge仍异步记录；重开导入去重。只存不含路径/正文的用量ID、UTC时间、模型、token、必要归属与coverage；满队列/写盘失败可见且不阻塞Pi。历史日期未采集不填0；缺字段保留已知下界。
+- 一次性补采先冻结文件集合/dev/inode/size/前缀hash并预览；低优先级单worker流式处理、有界单行/缓存，source-set hash与import ID绑定收据。apply前用SQLite backup API（含WAL）一致备份，不移动活动库；原JSONL只读。实时与历史共用消费键，fork复制沿父链去重，缺链/冲突保守标ambiguous；重复apply不增量。回退只删除本次新增、未被后续实时确认的记录，保留后来的实时消费。
+- 来源分为实时记录、一次性历史补采和去重合计；覆盖日期与缺字段/未知模型/跳过原因可见。summary无物理模型就是unknown，reasoning/cacheWrite1h作为子集不再次相加。
 - 接入窗口、会话累计、上下文占用是不同量，不直接相加；切换模型仍按来源维度保留。
 - 没有费用来源就不显示价格估算。成本 unknown 不代表免费。
 
 ## 5. 非目标
 
-其他 AI 工具；任何历史会话发现/导入；新 Agent宿主/执行器/调度器/任务库；自动审批或新LLM judge；任意shell/任意工具代理；重建终端/SSH/凭据库；批量修改全局Pi设置；强制旧会话reload；手机/Watch/ESP32；多角色动画与大规模外观系统；套餐剩余额度、无依据费用估算与全账户/启用前历史计费统计。
+其他 AI 工具；历史对话发现/导入及任何自动历史扫描（上述一次性usage元数据例外不在此限）；新 Agent宿主/执行器/调度器/任务库；自动审批或新LLM judge；任意shell/任意工具代理；重建终端/SSH/凭据库；批量修改全局Pi设置；强制旧会话reload；手机/Watch/ESP32；多角色动画与大规模外观系统；套餐剩余额度、无依据费用估算与全账户/启用前历史计费统计。
 
 ## 6. 用户验收路径
 
@@ -72,4 +74,4 @@ ssot: true
 - 产生真实待输入生命周期与合成治理/CI变化，关闭提醒不影响原问题和任务。
 - 比较关闭/接入两组相同fixture的执行轨迹、模型调用数、人工确认数、原参数及额外开销。
 
-当前已验证其中的源码/隔离真实 SDK、Subagents/计划 owner 和原生 GUI 路径；尚未覆盖的真实 TUI、Herdr、系统通知/无障碍完整组合保持未完成，不把下层通过冒充整项首版验收。规范要求见单一 Change 的 [live-pi-sessions](../openspec/changes/pi-desk-v0-1/specs/live-pi-sessions/spec.md)、[owned-management](../openspec/changes/pi-desk-v0-1/specs/owned-management/spec.md)、[usage-and-attention](../openspec/changes/pi-desk-v0-1/specs/usage-and-attention/spec.md)。
+当前已验证其中的源码/隔离真实 SDK、Subagents/计划 owner 和原生 GUI 路径；尚未覆盖的Herdr、真实系统通知/完整键盘与VoiceOver/显示器组合保持未完成；长期provider/所有历史owner不是6.1–6.2新增前置，不把下层通过冒充整项首版验收。规范要求见单一 Change 的 [live-pi-sessions](../openspec/changes/pi-desk-v0-1/specs/live-pi-sessions/spec.md)、[owned-management](../openspec/changes/pi-desk-v0-1/specs/owned-management/spec.md)、[usage-and-attention](../openspec/changes/pi-desk-v0-1/specs/usage-and-attention/spec.md)。

@@ -8,7 +8,7 @@ Pi Desk 是 Pi-only 的轻量 macOS 原生可视化与管理客户端。它连�
 
 2026-10-24：已有 **SwiftUI/AppKit + TypeScript 本地源码候选**，不再只是静态稿。原生compact/expanded顶部灵动岛、中文分层管理窗口、双向私有 UDS、在线投影、原生消息/中止、Subagents 管理与统计、现有计划及注意事项均有实现；隔离真实 SDK、真实 Subagents owner 和 Schedule 管理 seam 候选的 faux-provider 验证见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
 
-这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付/无障碍完整组合及长期真实 TUI 验收尚未完成；Gate/CI 无真实 producer。已按显式授权完成本机稳定安装（GPT采集/账本性能与真实筛选源码 `40bce16` / build `16`）及隔离双会话管理验真，保留上一版准确回退；不强制重载业务会话，不对外发布或部署。远端仍为空，本机安装不代表共享 main 或 GitHub CI 已通过。
+这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付、完整键盘/VoiceOver及真实显示器组合尚未完成；Gate/CI 无真实 producer。已按显式授权完成本机稳定安装（GPT采集/账本性能与真实筛选源码 `40bce16` / build `16`）及隔离双会话管理验真，保留上一版准确回退；不强制重载业务会话，不对外发布或部署。远端仍为空，本机安装不代表共享 main 或 GitHub CI 已通过。
 
 ## 构建和合成检查
 
@@ -46,6 +46,12 @@ node --import tsx scripts/install-local.mjs verify
 
 安装状态以 `verify` 的 byte/hash 回读和实际 App/新会话证据为准；写文件、源码检查、安装、进程运行与新会话已加载分别记录。
 
+## 一次性历史用量补采
+
+这是2026-10-26明确授权的单次维护动作，不是启动/刷新功能或历史对话浏览器。`scripts/history-backfill.py preview` 冻结 canonical Pi JSONL 文件集合与前缀哈希，低优先级单worker流式投影 assistant/usage/compaction/branch-summary 的四桶元数据；`apply --run <private-preview-dir>` 校验冻结输入并事务导入。正文、工具参数/结果、原会话ID/路径不进入stage、收据或输出。
+
+导入与实时共用消费键；fork/clone沿parent链和entry ID+usage fingerprint解析，缺链/冲突保守跳过，未知物理模型不猜成当前模型。维护时正常退出App，Pi继续记录spool；使用SQLite backup API包含WAL的一致快照及owner-only备份/收据，重复apply不再写入。`rollback --import-id <receipt-id>`只移除此导入新增且未被后续实时确认的记录，不覆盖后来实时数据；App版本回退是独立动作。实际用量与备份路径只保存在本机私有证据。
+
 ## 开发态显式接入（仅在你选择的隔离会话中）
 
 先手动打开本地候选，再从本仓显式加载扩展：
@@ -73,11 +79,11 @@ PI_DESK_PEER_CHECK="$PWD/tmp/candidate/Pi Desk.app/Contents/Helpers/PiDeskPeerCh
 - 中止当前回合不清空后续队列、不停止独立子任务或外部副作用。Subagents stop 受理与进程终态分开。
 - Subagents Fleet key 只展示；后台孩子控制从 owner 的公开定向状态取得真实 runId。resume 由 owner 验证资格，拒绝后不偷开替代任务。
 - 计划按 owner 分开。Schedule seam 只复用现有 list/pause/resume/delete 和 event-job trigger，不新增计划库、CRUD 或常驻服务。暂停未来触发不撤销正在执行的工作。
-- Token主页面为跨已记录会话的“Pi总用量”：今日/近7天/本月/自定义时间、趋势和模型分布。从启用记录起异步持久化final标量，App关闭仍记录，重开恢复；不扫历史JSONL，不将owner累计补记为今天，不重复父子/工具聚合。缺失保留已知下界与覆盖缺口，不等于套餐额度/账单。
+- Token主页面为跨已记录会话的“Pi总用量”：今日/近7天/本月/自定义时间、趋势和模型分布。从启用记录起异步持久化final标量，App关闭仍记录，重开恢复；另按2026-10-26授权执行一次Pi历史usage元数据补采。实时/历史/去重合计分开显示，不将owner累计补记为今天，不重复父子/工具聚合。缺失保留已知下界与覆盖缺口，不等于套餐额度/账单。
 - owner执行后失败/超时为 unknown，不解释成确定未执行、不自动重试。本地请求未能提交时保留草稿。
 - 提醒已读/静音只改表现，不回答问题、不阻断执行。原 producer 通知从不被本客户端静默抑制。
 - Herdr 跳转只在精确当前会话文件与实时 owner 快照匹配时开放；未配置或失败不打开同名对象。管理页仅允许用户配置的无凭据、无 query/fragment 的精确 HTTPS 地址。
-- 关闭、断联或结束 Pi Desk 不结束 Pi；不扫描历史 JSONL、终端文本、旧会话或凭据。
+- 关闭、断联或结束 Pi Desk 不结束 Pi；不常驻扫描历史，不发现旧会话卡片，不读终端文本或凭据。仅显式授权的一次性补采worker只读Pi JSONL并立即投影usage标量，不保存/输出原正文或路径。
 
 ## 文档和规格
 

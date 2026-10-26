@@ -7,7 +7,7 @@ release_scope: 首版本地源码与旁路候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-24
+verified: 2026-10-26
 verification_scope: 本地Swift/Node、隔离真实SDK/owner/GUI与已授权本机安装验真；未发布，不含完整真实TUI/Herdr验收
 ---
 
@@ -147,25 +147,25 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 总用量候选 `40bce160ae601de4114bac9337ea6b5f72d69766` 已构建为本机 `0.1.0` build `16` 并完成安装/verify、签名与运行验真；App SHA256=`780af972adfb49a27d667e9832c6f7103fb448c23fb886fb07062a357b700fa4`，bridge digest=`ac9a3adfd5c8c43a4ec22ecd04cac4d6458451bfd67d4b985396f846d54817f6`；上一版 `9b88a0e517f721557098816d312240a25e5c0447` build `15` 的准确回退及此前build12安装仍保留。新版稳定App真实读回：默认“在线”不把断连卡挤入主列表；真实搜索无匹配时可见计数归零且详情进入选择空态；Token页默认交互口径、缓存/全部可切换，采集覆盖从实际最早记录起，明确本地时区和原始UTC。真实metadata-only聚合和UI对应数值只保存在本机ignored tmp，不将用户具体用量放入公开Git。前述隔离faux-native持久重开3116及旧build5 A追加证据继续有效，动作边界未改。最终compact/expanded/管理窗截图均来自同一视觉源码的显式合成预览，不含业务会话。桥接字节未改，复用原owner/断联/回退证据，不强reload业务Pi；文档状态收口不改已安装候选的source标记。
 
-### A1–A11 / 6.1–6.2 逐项覆盖与缺口
+### A1–A11 / 6.1–6.2 原验收覆盖
 
-本轮复用既有原件，并把总用量/兼容新增证据绑定如下：
+仅按本节原A1–A11与固定支持版本/代表性缺失、旧版和混合capability模式验收；不把所有历史owner、全部平台、长期真实provider或24x7运行新造为6.1–6.2前置。系统交互现场缺口单列在2.4/6.3。复用既有有效原件，并补实际native retry/内建threshold compaction/queued continuation开关bridge对照：
 
-| 矩阵 | 当前证据 | 仍未证明 |
+| 矩阵 | 原验收证据 | 原验收内剩余缺口 |
 |---|---|---|
-| A1 UI关闭/kill/update | 既有UDS kill/无App usage与实际App退出续行；新增10min实际InteractiveMode/PTY soak，receiver重启5次、离线15轮仍落usage | 业务TUI长期运行与更新热加载 |
-| A2 慢读/满队列/畸形帧 | native framing、slow socket/overload、usage writer bounded queue/ENOSPC/坏记录；handler p95/p99原件 | 生产规模长期内存曲线 |
-| A3 retry/compaction/queued continuation | 既有lifecycle/usage golden、未知边界；新增PTY soak 58轮含12次工具续行，116次settled，usage只收final | 长时间连续retry/compaction业务TUI |
-| A4 丢回复/重连/重复点击 | UDS重连不重放、action dedup、usage stable ID与冲突表；旧/新wire混用仍只局部降级 | 真实网络/跨用户环境（本产品不支持） |
-| A5 stop/计划与未命中对象 | `check-native-controls`、Subagents/Schedule owner原件；受限owner fixture只隐藏对应控制，Pi message/abort和另一会话仍可用 | 未配置远程owner |
-| A6 新旧owner/capability | 旧wire无`usageRecorder`、old owner/缺cap fixture；unsupported run control拒绝但native action继续，UI显示partial/unavailable | 所有历史owner版本组合 |
-| A7 父子/前后台 | 既有Subagents child/parent归属及usage boundary golden；工具/父累计不进时间账 | 未加载ambient扩展的真实前台child |
-| A8 usage重复/缺失/时间 | usage golden与UsageLedger Swift：DST 23/25h、时区重算、半开、自定义/未来、重复冲突/缺字段/坏库/并发索引 | provider账单或启用前历史 |
-| A9 input/通知 | input native check；fake notification authorized/denied/error/delivery-error + 实际稳定App显示未授权；仅用户点击才申请 | 用户系统consent后的真实投递 |
+| A1 UI关闭/kill/update | 既有UDS kill/无App usage与实际App退出续行；10min实际InteractiveMode/PTY soak，receiver重启5次、离线15轮仍落usage；实际稳定App更新不reload Pi | 无；更新热加载不是产品行为 |
+| A2 慢读/满队列/畸形帧 | native framing、slow socket/overload、usage writer bounded queue/ENOSPC/坏记录；10k事件及PTY的p95/p99/RSS/pending/drop原件 | 无；不宣称全负载基准 |
+| A3 retry/compaction/queued continuation | `check-recovery-native.mjs`实际Pi策略：429自动retry成功2调用；内建threshold摘要+工具+queued followup共5调用/1工具，bridge开关trace/loadout/结果一致，retry/compaction开始前settled均0；原PTY 58轮含12次续行 | 无；faux是隔离provider，不是注入生命周期事件 |
+| A4 丢回复/重连/重复点击 | UDS重连不重放、action dedup、usage stable ID与冲突表；旧/新wire混用仍只局部降级 | 无；远程网络/跨用户不支持 |
+| A5 stop/计划与未命中对象 | `check-native-controls`、Subagents/Schedule owner原件；受限owner fixture只隐藏对应控制，Pi message/abort和另一会话仍可用 | 无 |
+| A6 新旧owner/capability | 旧wire无`usageRecorder`与现代受限cap同时入Swift store；TS absent/old/read-only owner fixture，unsupported run control拒绝但native action继续，UI partial/unavailable | 无；不承诺未列历史版本 |
+| A7 父子/前后台 | 固定0.80真实native child/前台Fleet/后台runId steer-stop-resume与parent归属原件；工具/父累计不进时间账，未接入孩子明确partial | 无；ambient未加载不猜覆盖 |
+| A8 usage重复/缺失/时间 | usage golden与Swift DST/时区/半开/未来/冲突/坏库/并发；新增history fixture覆盖实时重叠、fork/clone/短ID碰撞/全分支/缺父与回退 | 无；已知下界不冒充账单 |
+| A9 input/通知 | input native producer start/end与关闭/静音独立；fake通知authorized/denied/error/delivery-error，实际App显示未授权且不自动申请 | 无软件缺口；OS许可/真实投递在6.3单列 |
 | A10 raw/canary | public source/白名单/原有canary与usage scalar-only；无prompt/output/path/凭据 | 无 |
-| A11 observer failure/loadout | baseline/native SDK loadout不变、0新模型/确认；spool/SQLite失败仅partial不改Pi | 长时资源耗尽下全平台行为 |
-| 6.1 | A1–A11逐行如上，10min PTY实际InteractiveMode+faux 58轮/140条final、接收器离线重连均过 | 完整业务模式组合及长期真实provider TUI |
-| 6.2 | Pi 1.4.0-fork.1、Subagents/Schedule版本原件；旧wire/no recorder/缺cap fixture；不强reload旧Pi | 全历史owner版本与真实混合现场 |
+| A11 observer failure/loadout | baseline/native SDK与新recovery对照loadout/执行结果一致、0新增模型/确认；spool/SQLite失败仅partial不改Pi | 无 |
+| 6.1 | 原A1–A11逐行如上，10min实际InteractiveMode/PTY 58轮/140条final与native retry/compaction对照补齐，模型/确认增量0 | 无；不替代2.4/6.3现场系统项 |
+| 6.2 | Pi 1.4.0-fork.1、Subagents0.80.0-fork.1、Schedule独立seam候选；缺owner/旧owner/混合wire+cap fixture，原TUI能力不降级、不强reload真实Pi | 无；可选Schedule未全局安装，不能宣称已启用 |
 
 本轮新增 `scripts/check-narrow-ux.sh`：fake notification client验证authorized/denied/request error/delivery error与重复点击；实际稳定App只读回“尚未授权”，未触发系统consent。`scripts/run-pty-check.py --soak` 在独立PTY内运行实际公开InteractiveMode（bridge真实mode=tui）600.005秒：58轮、12次工具续行、116次agent_settled、receiver重启5次/离线15轮，A/B模型调用82/58与持久final记录140严格对应，重连无重放，loadout不变，真实provider/新增确认0，错误0，进程peak RSS约214MiB。非TUI试跑196秒主动终止未当10min证据；结果不替代长期业务TUI/provider资格。
 
@@ -179,6 +179,12 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 
 App ledger现以utility queue持久连接、metadata generation/DB data_version缓存、rowid增量归桶与单一合并刷新代替每轮quick_check/DDL/全范围聚合；定向检查证明10次无变化刷新不增加aggregate扫描，新final只增量读1row；模型过滤与空态仍保留unknown。生产writer实际link后SIGKILL的隔离复现已验证准确自有临时链接恢复；未知第二链接依旧拒绝。真实数据/hash/原件只记本机tmp，不在公开Git暴露真实用量。
 
+### 一次性历史usage补采
+
+2026-10-26用户明确要求后实现独立preview/apply/rollback。实际canonical预览冻结约9.5GB来源，低优先级单worker约57秒、peak RSS约285MB；仅stage标量与哈希，无正文/原ID/路径输出。正式apply已先正常退出App，Pi继续spool；SQLite backup API含WAL一致快照与raw DB/WAL/SHM/install manifest私有备份均留存，quick_check通过，SQL逐桶/来源行数与收据相符，重复apply无变化。真实import ID/source-set hash/用量及备份位置只保存在ignored tmp与owner-only收据，不进入公开Git。
+
+补采共享实时消费键；已存在实时记录不改来源，fork/clone按完整父链、entry ID与usage fingerprint建立别名；未知模型不猜GPT。合成测试覆盖短ID碰撞、全分支、缺父/祖父保守跳过、缺字段/NaN、超行/未完成尾、冻结前缀被改拒绝、增量尾排除、事务失败回滚、重复apply、后续实时保留与一致备份。Swift来源分区/model/trend/合计和来源覆盖日期对齐；partial合并不误变完整。启动/刷新永不扫描JSONL。
+
 ### 保留的未完成项
 
-完整v0.1未验收、Change未归档。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整VoiceOver、系统通知许可/交付与长时间真实TUI/多显示器组合仍待验证。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。
+完整v0.1未验收、Change未归档。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付及真实物理显示器组合仍在2.4/6.3待验证；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

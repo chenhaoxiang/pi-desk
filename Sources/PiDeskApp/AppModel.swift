@@ -50,6 +50,7 @@ struct DeskSettings: Codable {
   @Published var usagePreset: UsagePreset = .today
   @Published var usageMetric: UsageMetric = .interaction
   @Published var usageModel = ""
+  @Published var usageOrigin: UsageOrigin = .combined
   @Published var usageCustomStart = Date()
   @Published var usageCustomEnd = Date()
   @Published var aggregate = UsageAggregate.empty(.make(preset: .today))
@@ -118,17 +119,18 @@ struct DeskSettings: Codable {
       return
     }
     let range = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)
-    if isPreview { aggregate = UsageAggregate.empty(range, preview: true).filtered(model: usageModel.isEmpty ? nil : usageModel); return }
+    if isPreview { aggregate = UsageAggregate.empty(range, preview: true).filtered(origin:usageOrigin,model: usageModel.isEmpty ? nil : usageModel); return }
     guard !usageLoading, let ledger else { return }
     usageLoading = true; lastUsageRefresh = Date()
     let filter = usageModel.isEmpty ? nil : usageModel
-    ledger.refresh(range: range, model: filter) { [weak self] result in
+    ledger.refresh(range: range, model: filter, origin:usageOrigin) { [weak self] result in
       guard let self else { return }
       self.usageLoading = false
       guard self.customRangeIsValid else { return }
       let expected = UsageDateRange.make(preset: self.usagePreset, customStart: self.usageCustomStart, customEnd: self.usageCustomEnd)
-      guard expected == result.range, (self.usageModel.isEmpty ? nil : self.usageModel) == result.selectedModel else { self.refreshUsage(); return }
-      if result.error != nil, self.aggregate.totals.seen, self.aggregate.range == result.range {
+      guard expected == result.range, self.usageOrigin == result.selectedOrigin, (self.usageModel.isEmpty ? nil : self.usageModel) == result.selectedModel else { self.refreshUsage(); return }
+      if result.error != nil, self.aggregate.totals.seen, self.aggregate.range == result.range,
+        self.aggregate.selectedOrigin == result.selectedOrigin, self.aggregate.selectedModel == result.selectedModel {
         self.aggregate.error = result.error
         self.aggregate.coverageReasons = result.coverageReasons
       } else { self.aggregate = result }

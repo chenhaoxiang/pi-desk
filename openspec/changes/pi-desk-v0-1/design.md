@@ -2,13 +2,13 @@
 
 ## Context
 
-动机与capability见[proposal](proposal.md)。初始仓为空仓规划，现已实现本机稳定候选并继续时间统计增量；用户已确定Pi-only、无历史会话扫描、Token统计和自动化不退化。主要源码事实与固定基线见[接口矩阵](../../../docs/integration-matrix.md)，不把源码存在当作已安装兼容。
+动机与capability见[proposal](proposal.md)。初始仓为空仓规划，现已实现本机稳定候选并继续时间统计增量；用户已确定Pi-only、默认无历史扫描、Token统计和自动化不退化；2026-10-26另授权一次canonical Pi usage元数据补采。主要源码事实与固定基线见[接口矩阵](../../../docs/integration-matrix.md)，不把源码存在当作已安装兼容。
 
 ## Goals / Non-Goals
 
 **Goals:** 本机原生轻量客户端连接已运行Pi；观察与管理分离；复用原生身份、owner动作和统计；UI退出或失效不成为主执行依赖。
 
-**Non-Goals:** 新Agent宿主/daemon/任务库/调度器/审批者、其他AI工具、历史会话导入、强制TUI迁移、任意shell代理、远程协议、手机硬件伴侣、真实环境接入及发行。
+**Non-Goals:** 新Agent宿主/daemon/任务库/调度器/审批者、其他AI工具、历史对话导入/常驻扫描、强制TUI迁移、任意shell代理、远程协议、手机硬件伴侣、真实环境接入及发行。
 
 ## Decisions
 
@@ -34,7 +34,7 @@
 
 ## Migration Plan
 
-本轮无运行迁移。后续M0–M5逐段实现和验证，见[实施方案](../../../docs/implementation-plan.md)及[tasks](tasks.md)。先隔离faux-native，再按授权小范围真实接入；不强reload忙碌会话。
+本轮包含一次显式usage-only索引迁移，原JSONL只读；SQLite备份/事务/精确回退保持后续实时数据。M0–M5实施和验证现状，见[实施方案](../../../docs/implementation-plan.md)及[tasks](tasks.md)。先隔离faux-native，再按授权小范围真实接入；不强reload忙碌会话。
 
 回退退出App并按原加载方式移除本扩展，保留原Pi/owner配置与会话。签名、公证、更新源、安装、启用和发布分别验证，不从代码/静态稿推断。
 

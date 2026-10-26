@@ -2,7 +2,7 @@
 
 ## Purpose
 
-让用户了解已接入Pi的Token消耗与真正需要关注的事项，并能识别统计来源、窗口、父子覆盖和未结算状态。该能力不通过扫描历史会话、额外模型轮询或自动回答来补数据，不让通知与显示故障改变已有任务或原问题处理。
+让用户了解已接入Pi的Token消耗与真正需要关注的事项，并能识别统计来源、窗口、父子覆盖和未结算状态。该能力不通过自动历史扫描、额外模型轮询或自动回答来补数据；2026-10-26明确授权的一次canonical Pi usage元数据补采有独立preview/apply/rollback，不让通知与显示故障改变已有任务或原问题处理。
 
 ## ADDED Requirements
 
@@ -24,15 +24,31 @@ Pi Desk SHALL 为Token显示来源、统计范围、窗口及覆盖，区分接�
 
 ### Requirement: No historical session discovery
 
-Pi Desk SHALL 从已接入宿主的usage元数据或原owner定向当前统计取数，不扫描、导入或解析历史会话目录和原始会话文件。
+Pi Desk SHALL 默认从已接入宿主usage或原owner当前统计取数，不自动扫描历史。唯一新增例外是用户明确授权的一次canonical Pi JSONL usage元数据preview/apply/rollback；App本身不打开原始会话文件，任何路径都不保存/输出正文、工具参数/结果、原路径或凭据。
 
 #### Scenario: Current owner reports associated run totals
 - **WHEN** 原owner读取当前会话关联运行产物并返回统计结果
 - **THEN** Pi Desk只消费带scope的结果，不新增广泛历史发现，不把这项统计变成新的批准流程
 
 #### Scenario: Previous sessions exist on disk
-- **WHEN** 本机存在未接入的旧会话与JSONL
-- **THEN** 它们不被发现、导入或用来填补统计图表
+- **WHEN** 本机存在未接入旧会话，且未显式执行本次授权的一次性补采
+- **THEN** App启动、刷新、turn与在线列表均不发现、导入或扫描这些JSONL
+
+#### Scenario: Explicit one-time historical usage import
+- **WHEN** 用户授权的worker先预览冻结canonical Pi文件集合与前缀hash，再apply
+- **THEN** 只流式投影已知assistant/usage/compaction/branch_summary标量，SQLite backup API含WAL备份后单事务导入，绑定source-set hash与import ID收据；原JSONL只读，重复apply不增加记录
+
+#### Scenario: Fork copies overlap realtime usage
+- **WHEN** fork/clone复制父entry或消费已由实时记录
+- **THEN** 与实时共用消费键，沿已知父链以entry ID和usage fingerprint去重；不把短entry ID当全局ID，缺父/碰撞保守ambiguous，不新造history identity重复计费
+
+#### Scenario: History coverage or model is unknown
+- **WHEN** 摘要没有物理provider/model、字段缺失或文件前缀之外有新数据
+- **THEN** 显示unknown/已知下界及覆盖缺口，实时/一次性历史/去重合计分开；不以selected model猜summary模型，不再加reasoning/cacheWrite1h，不宣称完整历史账单
+
+#### Scenario: Roll back one import after live data arrives
+- **WHEN** 用户回退指定import ID且后来有实时记录
+- **THEN** 只删除本导入新增且未被后续实时确认的记录，保留实时数据和既有冲突事实，不恢复旧DB覆盖后来数据
 
 ### Requirement: Single settlement and parent child accounting
 
@@ -52,7 +68,7 @@ Pi Desk SHALL 不重复累加流式累计值、同一usage重放或已包含的�
 
 ### Requirement: Durable time aggregate usage
 
-Pi Desk SHALL 默认展示跨所有已记录Pi会话的时间总用量，支持今日、含今日的近7天、本月与自定义起止日期，并提供趋势、input/output/cache四桶及模型分布。记录从启用采集起累计，不代表套餐余额、估价或真实账单。
+Pi Desk SHALL 默认展示跨所有已记录Pi会话的时间总用量，支持今日、含今日的近7天、本月与自定义起止日期，并提供趋势、input/output/cache四桶及模型分布。实时记录从启用采集起累计；一次性历史usage有独立provenance及覆盖，不代表套餐余额、估价或真实账单。
 
 #### Scenario: Local calendar crosses DST or month
 - **WHEN** 用户在明确的本地IANA时区选择日期范围

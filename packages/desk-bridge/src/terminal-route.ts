@@ -12,7 +12,7 @@ export function routeFromMetadata(sessionId: string, sessionFile: string | undef
     route.ttyPath = ttyPath;
     if (env.TERM_PROGRAM === "Apple_Terminal") route.terminalApp = "com.apple.Terminal";
     if (env.TERM_PROGRAM === "iTerm.app") route.terminalApp = "com.googlecode.iterm2";
-    if (route.kind !== "herdr" && route.terminalApp) route.kind = "terminal";
+    if (route.kind !== "herdr" && route.terminalApp && !env.TMUX_PANE && !env.WEZTERM_PANE && !env.CMUX_SURFACE_ID) route.kind = "terminal";
   }
   route.terminalSessionId = token(env.ITERM_SESSION_ID ?? env.TERM_SESSION_ID);
   route.tmuxPane = token(env.TMUX_PANE);
@@ -25,17 +25,6 @@ function fdIsTTY(fd: number): boolean {
   if (fd === 0) return process.stdin.isTTY === true;
   if (fd === 1) return process.stdout.isTTY === true;
   return process.stderr.isTTY === true;
-}
-async function commandOutput(executable: string, args: string[], timeoutMS = 500): Promise<string | undefined> {
-  return await new Promise((resolve) => {
-    const child = spawn(executable, args, { stdio: ["ignore", "pipe", "ignore"] });
-    let output = "", settled = false;
-    const finish = (value?: string) => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
-    const timer = setTimeout(() => { child.kill(); finish(); }, timeoutMS).unref();
-    child.stdout?.on("data", (chunk: Buffer) => { if (output.length < 128) output += chunk.toString("utf8"); });
-    child.on("error", () => finish());
-    child.on("exit", (code) => finish(code === 0 ? output.trim() : undefined));
-  });
 }
 async function ttyName(fd: number): Promise<string | undefined> {
   return await new Promise((resolve) => {
@@ -54,15 +43,8 @@ export async function captureTerminalRoute(sessionId: string, sessionFile: strin
     if (!fdIsTTY(fd)) continue;
     const value = await ttyName(fd);
     if (value) {
-      if (env.TMUX_PANE) {
-        let clientTTY: string | undefined;
-        for (const candidate of ["/opt/homebrew/bin/tmux", "/usr/local/bin/tmux"]) {
-          clientTTY = await commandOutput(candidate, ["display-message", "-p", "-t", env.TMUX_PANE, "#{client_tty}"]);
-          if (clientTTY) break;
-        }
-        if (!clientTTY || !ttyPattern.test(clientTTY)) return routeFromMetadata(sessionId, sessionFile, cwd, env);
-        return routeFromMetadata(sessionId, sessionFile, cwd, env, clientTTY);
-      }
+      // Multiplexers need their own pane/surface focus contract. An outer
+      // Terminal tab alone does not prove the original inner Pi pane is visible.
       return routeFromMetadata(sessionId, sessionFile, cwd, env, value);
     }
   }

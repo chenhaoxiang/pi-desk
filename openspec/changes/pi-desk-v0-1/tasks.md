@@ -102,8 +102,8 @@
 
 - [x] 13.1 收紧时间/来源/模型/刷新工具条，去重复标题、来源三列大数与同值重复；当前metric单一主数、四桶小拆分、175pt趋势紧随，来源/覆盖/导入收据默认折叠，错误/unknown/pending仍有短提示。
 - [x] 13.2 本App真实窗口visible/occlusion/minimize/close兴趣驱动5/30/60秒统计刷新；Pi异步采集不变、无owner自动查询。utility最多3范围缓存、源/模型投影、单合并请求、empty spool无写事务，图表按bucket等值复用。
-- [ ] 13.3 记录真实大库metadata-only进程累计CPU/IO/RSS前后30–60秒和同scope暖响应/cache/增量，拍实际数据标准/小窗/长模型/自定义/深浅色/source+metric首屏；保留真实输入差异与未验，不重新扫描源JSONL。
-- [ ] 13.4 冻结新source/build、稳定安装并保留build18，verify/codesign/runtime回读，更新owner证据；不push/PR/发行或扩大未变Pi后端验收。
+- [x] 13.3 记录真实大库metadata-only进程累计CPU/IO/RSS前后30秒和同scope暖响应/cache/增量，按统计可见/其他页/AX确认最小化/AX确认关窗分段；实际输入行差异和未证明改善如实保留，不重新扫描源JSONL。
+- [x] 13.4 冻结`8bd2e80`/build20、稳定安装并保留build18，verify/codesign/runtime回读；标准/960小窗、长模型、自定义unknown、深浅色、source+metric截图和真实canonical ledger cache evidence已留本机tmp。未push/PR/发行，不扩大未变Pi后端验收。
 
 ## Workflow follow-up
 

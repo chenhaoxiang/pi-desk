@@ -193,6 +193,16 @@ App ledger现以utility queue持久连接、metadata generation/DB data_version�
 
 另以显式合成预览（不连接业务/不递送管理）在本机真实屏幕移动管理窗：1728×1117刘海内屏safeTop32/camera gap185对应453×40顶部panel；1920×1080外屏safeTop0/gap0对应300×38 fallback，展开卡片截图与AX均可读，Manager跨屏后panel实际跟随。临时预览正常退出，未改系统辅助设置。日期picker的AX直接set_value返回不支持，未改变日期；自定义逻辑的现有Swift/原生错误提示证据仍有效，不把该自动化失败当产品日期输入通过。
 
+### build20统计首屏与真实大库性能
+
+源码 `8bd2e809d659830a12c69d083c020efd40876c61` 已构建并稳定安装为0.1.0/build20，source tree `4e1478fc41e61e006c5e82edb17cac8696388173`；App SHA256=`4ed795978b7fdda1fe403a98e14ff15e39900ea8c9217b09352e288f524fbdba`，bridge digest仍为`ac9a3adfd5c8c43a4ec22ecd04cac4d6458451bfd67d4b985396f846d54817f6`，build18回退由安装器保留。install/verify、codesign strict/deep和稳定App实际运行通过。
+
+首屏真实截图：标准1120×760 `tmp/playwright-mcp/compact-after-build20-standard-ready.png`，最小960×620 `compact-after-build20-small-real.png`，source=一次性历史补采+metric=缓存 `compact-after-build20-small-history-cache.png`，长模型picker `compact-after-build20-long-model-real.png`，自定义日期/unknown提示 `compact-after-build20-custom-real.png`，浅色合成 `compact-after-build20-light-preview.png`。标准与最小窗口均在首屏保留当前metric主数、四桶小拆分和完整趋势；来源/覆盖/收据默认折叠；长模型中间截断；自定义范围未采集时显示unknown/短警告，不补0。合成预览不连接业务会话。
+
+真实canonical usage索引只读metadata profiling未重扫源JSONL：build18/build20各采30秒进程累计CPU/RSS/物理IO，分统计可见、其他页、AX确认的最小化和AX确认的管理窗关闭；`tmp/stats-profile/comparison.json` 固定记录每段实际新增行差异和解释。build20同输入其他页样本CPU约0.055s/30s（build18约0.086s），AX确认最小化约0.094s且0物理IO、管理窗关闭约0.085s且0物理IO；统计可见样本输入增长不同（build18 1行/build20 3行），CPU不能据此宣称改善，RSS因新进程/缓存状态更高，保留真实未知。后台样本由AX `minimized=true`/无manager窗口确认，而非top瞬时数。
+
+大库metadata-only ledger probe显示：冷本月聚合约2.95–3.88秒在utility队列；同range重复刷新约1–2ms，source/model projection约1.3–1.7ms，warm refresh新增aggregateRows为0、aggregateScans不增、cache hits增加；健康检查和schema初始化各仅1次，新增final只增量。窗口兴趣为真实manager visible/occlusion/minimized/closed：可见Token 5秒、其他可见页30秒、后台60秒；关闭窗口不停止Pi异步final采集。profile与ledger原件仅在本机ignored tmp，不公开真实token/路径。
+
 ### 保留的未完成项
 
 完整v0.1未验收、Change未归档。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

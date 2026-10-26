@@ -2,10 +2,20 @@ import AppKit
 import PiDeskCore
 import SwiftUI
 
-@MainActor final class DeskDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class DeskDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let model = AppModel()
   let island = IslandController()
   private var manager: NSWindow?
+  private var managerOpen = false
+  private func updateUsageInterest() {
+    model.setManagerVisibility(managerOpen && manager?.isVisible == true && manager?.isMiniaturized == false && manager?.occlusionState.contains(.visible) == true && !NSApp.isHidden)
+  }
+  func windowDidChangeOcclusionState(_ notification: Notification) { updateUsageInterest() }
+  func windowDidMiniaturize(_ notification: Notification) { updateUsageInterest() }
+  func windowDidDeminiaturize(_ notification: Notification) { updateUsageInterest() }
+  func windowWillClose(_ notification: Notification) { managerOpen = false; model.setManagerVisibility(false) }
+  func applicationDidHide(_ notification: Notification) { updateUsageInterest() }
+  func applicationDidUnhide(_ notification: Notification) { updateUsageInterest() }
   func applicationDidFinishLaunching(_ notification: Notification) {
     model.showManager = { [weak self] in self?.showManager() }
     island.start(model: model)
@@ -22,6 +32,7 @@ import SwiftUI
       window.titlebarAppearsTransparent = true
       window.minSize = NSSize(width: 960, height: 620)
       window.isReleasedWhenClosed = false
+      window.delegate = self
       let content = AnyView(DeskWindow().environmentObject(model))
       window.contentView = NSHostingView(
         rootView: model.isPreview && CommandLine.arguments.contains("--light-preview")
@@ -30,12 +41,14 @@ import SwiftUI
       manager = window
       island.attachManager(window)
     }
+    managerOpen = true
     if activate {
       manager?.makeKeyAndOrderFront(nil)
       NSApp.activate(ignoringOtherApps: true)
     } else {
       manager?.orderFrontRegardless()
     }
+    updateUsageInterest()
   }
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
@@ -143,8 +156,8 @@ struct DeskWindow: View {
   var header: some View {
     HStack {
       VStack(alignment: .leading, spacing: 5) {
-        Text(model.page == "会话" ? "工作概览" : (model.page == "Token" ? "用量总览" : model.page)).font(.system(size: 21, weight: .semibold))
-        Text("查看正在发生的事，不改变原来的推进方式").font(.caption).foregroundStyle(.secondary)
+        Text(model.page == "会话" ? "工作概览" : (model.page == "Token" ? "用量总览" : model.page)).font(.system(size: model.page == "Token" ? 19 : 21, weight: .semibold))
+        if model.page != "Token" { Text("查看正在发生的事，不改变原来的推进方式").font(.caption).foregroundStyle(.secondary) }
       }
       Spacer()
       if model.isPreview { PreviewBadge() }
@@ -159,12 +172,11 @@ struct DeskWindow: View {
           .system(size: 11)
         ).foregroundStyle(StatusTone.amber.ink(dark: scheme == .dark))
       }
-      Button {
-        if model.page == "Token" { model.refreshUsage() } else { model.refresh() }
-      } label: {
-        Image(systemName: "arrow.clockwise")
-      }.buttonStyle(.borderless).help(model.page == "Token" ? "刷新本机用量记录" : "刷新选定会话").accessibilityLabel("刷新当前页面")
-    }.padding(.horizontal, 25).padding(.vertical, 20)
+      if model.page != "Token" {
+        Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }
+          .buttonStyle(.borderless).help("刷新选定会话").accessibilityLabel("刷新当前页面")
+      }
+    }.padding(.horizontal, 25).padding(.vertical, model.page == "Token" ? 12 : 20)
   }
   func icon(_ p: String) -> String {
     [

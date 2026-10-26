@@ -35,7 +35,14 @@ import Darwin
     precondition(dirty.recordCount==3&&dirty.totals.input==80)
     let incremental = await diagnostics(ledger)
     precondition(incremental["aggregateRows"] == 3, "new final adds one row instead of rescanning the old range")
-    precondition(incremental["databaseOpens"] == 1)
-    print("Ledger cache checks passed: persistent single DB, no unchanged aggregate/import, dirty shard detection, exact model filter and empty unknown.")
+    precondition(incremental["databaseOpens"] == 1 && incremental["healthChecks"] == 1 && incremental["schemaInitializations"] == 1)
+    let month = UsageDateRange.make(preset: .month), week = UsageDateRange.make(preset: .last7)
+    _ = await refresh(ledger, month); _ = await refresh(ledger, week)
+    let warmRanges = await diagnostics(ledger)
+    for selectedRange in [range, month, week, range] { _ = await refresh(ledger, selectedRange) }
+    let projected = await diagnostics(ledger)
+    precondition(projected["aggregateRows"] == warmRanges["aggregateRows"], "warm date selections reuse bounded aggregate projections, not a full ledger loop")
+    precondition(projected["healthChecks"] == 1 && projected["schemaInitializations"] == 1, "refresh and selection never repeat health scan or DDL")
+    print("Ledger cache checks passed: persistent single DB/one health+schema init, no empty-spool write, unchanged and bounded warm-range reuse, one-row increment, exact model filter and empty unknown.")
   }
 }

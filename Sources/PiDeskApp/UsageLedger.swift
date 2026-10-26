@@ -11,7 +11,7 @@ public enum UsagePreset: String, CaseIterable, Identifiable {
   public var id: String { rawValue }
 }
 
-public struct UsageDateRange: Equatable {
+public struct UsageDateRange: Equatable, Hashable {
   public var start: Date
   public var end: Date
   public var preset: UsagePreset
@@ -386,7 +386,12 @@ public final class UsageLedger: UsageLedgerClient {
   private func readIncremental(range: UsageDateRange) -> UsageAggregate {
     do {
       try Self.secureDirectory(root)
-      if database == nil { database = try Database(root: root); counters["databaseOpens", default: 0] += 1 }
+      if database == nil {
+        database = try Database(root: root)
+        counters["databaseOpens", default: 0] += 1
+        counters["healthChecks", default: 0] += 1
+        counters["schemaInitializations", default: 0] += 1
+      }
       let db = database!
       let generation = try metadataGeneration(db: db)
       if let cachedAggregate, cachedRange == range, cachedGeneration == generation, cacheBucket == range.bucket(for: Date()) {
@@ -600,6 +605,10 @@ public final class UsageLedger: UsageLedgerClient {
     }
     func importSpool() throws -> (pending: Int, malformed: Int, conflicts: Int, reasons: [String]) {
       let files = try spoolFiles()
+      if files.isEmpty {
+        let status = try recorderStatus()
+        return (0, status.malformed, Int(try scalar("SELECT count(*) FROM usage_conflicts")), Array(status.reasons))
+      }
       let cursor = files.isEmpty ? 0 : Int(try scalar("SELECT COALESCE((SELECT value FROM usage_meta WHERE key='scan-cursor'),0)")) % files.count
       let batch = Array((Array(files.dropFirst(cursor)) + Array(files.prefix(cursor))).prefix(1024))
       var malformed = 0, reasons = Set<String>(), accepted: [(URL, Data)] = []
@@ -704,16 +713,17 @@ public final class UsageLedger: UsageLedgerClient {
       }
     }
     private(set) var lastAggregateRows = 0
-    private var aggregateCache: (range: UsageDateRange, version: Int64, cursor: Int64, value: UsageAggregate)?
-    private var aggregateDays: [Date: UsageTokenTotals] = [:]
+    private var aggregateCaches: [UsageDateRange: (version: Int64, cursor: Int64, value: UsageAggregate, days: [Date: UsageTokenTotals])] = [:]
+    private var rangeOrder: [UsageDateRange] = []
     private var coverageCache: (version: Int64, cursor: Int64, values: [String: Date])?
     func aggregate(range: UsageDateRange) throws -> UsageAggregate {
       let version = try scalar("PRAGMA data_version")
       let maximum = try scalar("SELECT COALESCE(max(rowid),0) FROM usage_entries")
-      let reusable = aggregateCache.map { $0.range == range && $0.version == version && $0.cursor <= maximum } ?? false
-      var result = reusable ? aggregateCache!.value : UsageAggregate(range: range, timeZoneID: range.timeZone.identifier)
-      let cursor = reusable ? aggregateCache!.cursor : 0
-      if !reusable { aggregateDays = [:] }
+      let cached = aggregateCaches[range]
+      let reusable = cached.map { $0.version == version && $0.cursor <= maximum } ?? false
+      var result = reusable ? cached!.value : UsageAggregate(range: range, timeZoneID: range.timeZone.identifier)
+      let cursor = reusable ? cached!.cursor : 0
+      var aggregateDays = reusable ? cached!.days : [:]
       var modelTotals = Dictionary(uniqueKeysWithValues: result.models.map { ($0.model, $0.tokens) })
       let visible = Set(range.days)
       var processed = 0
@@ -795,7 +805,9 @@ public final class UsageLedger: UsageLedgerClient {
       if result.totals.overflow { result.coverageReasons.append("计数超出安全范围，仅显示已知下界") }
       if !result.totals.seen { result.coverageReasons.append("该时间范围尚未采集用量，不代表零消费") }
       lastAggregateRows = processed
-      aggregateCache = (range, version, maximum, result)
+      aggregateCaches[range] = (version, maximum, result, aggregateDays)
+      rangeOrder.removeAll { $0 == range }; rangeOrder.append(range)
+      if rangeOrder.count > 3 { aggregateCaches.removeValue(forKey: rangeOrder.removeFirst()) }
       return result
     }
   }

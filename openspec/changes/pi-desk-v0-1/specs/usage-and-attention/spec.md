@@ -78,6 +78,14 @@ Pi Desk SHALL 默认展示跨所有已记录Pi会话的时间总用量，支持�
 - **WHEN** 缓存读取大于本次交互输入输出
 - **THEN** 主页面分别显示交互Token(input+output)、缓存复用/写入和四桶记录总处理量；默认趋势使用交互口径，趋势/数据表/模型分布随同一选择切换，不把缓存隐藏或冒充新输入/账单
 
+#### Scenario: Compact default statistics overview
+- **WHEN** 用户打开默认折叠详情的统计页
+- **THEN** 时间/来源/模型/刷新为紧凑可适应工具条，主卡仅一个所选metric主数字和四桶小拆分，紧接175–200pt趋势；标准1120×760无需滚动看完主卡与趋势，960×620保持总量和图主区域，来源差异/计数/收据/coverage默认折叠不删除数据
+
+#### Scenario: Statistics manager loses visible interest
+- **WHEN** manager被遮挡、最小化或关闭但App仍存活，即便保留Token页
+- **THEN** 由本App窗口真实状态降低后台刷新，Pi final仍异步采集；不轮询其他App，不新增owner自动cost/status。相同输入的重复刷新命中cache不扫描旧行，新增final只增量，schema/health check不重复
+
 #### Scenario: Custom end precedes start
 - **WHEN** 自定义结束日期早于开始日期
 - **THEN** 不提交新查询，不将范围偷偷归一成另一天，保留旧有效结果并清楚要求修正日期；旧在途回调也不覆盖当前结果

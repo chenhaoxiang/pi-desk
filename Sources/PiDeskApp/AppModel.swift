@@ -60,6 +60,16 @@ struct DeskSettings: Codable {
   private let notificationClient: NotificationClient?
   private var ledger: UsageLedgerClient?
   private var lastUsageRefresh = Date.distantPast
+  private(set) var managerIsVisible = false
+  var usageRefreshInterval: TimeInterval { managerIsVisible ? (page == "Token" ? 5 : 30) : 60 }
+  func setManagerVisibility(_ visible: Bool) {
+    guard visible != managerIsVisible else { return }
+    managerIsVisible = visible
+    if visible && page == "Token" && Date().timeIntervalSince(lastUsageRefresh) >= 1 { refreshUsage() }
+  }
+  func refreshUsageIfDue(now: Date = Date()) {
+    if now.timeIntervalSince(lastUsageRefresh) >= usageRefreshInterval { refreshUsage() }
+  }
   private var ownerQueryTimes: [String: Date] = [:]
   let isPreview: Bool
   var showManager: () -> Void = {}
@@ -267,7 +277,7 @@ struct DeskSettings: Codable {
       Task { @MainActor in
         guard let self = self else { return }
         self.store.tick(now: Date().timeIntervalSince1970 * 1000)
-        if Date().timeIntervalSince(self.lastUsageRefresh) >= (self.page == "Token" ? 5 : 30) { self.refreshUsage() }
+        self.refreshUsageIfDue()
       }
     }
   }

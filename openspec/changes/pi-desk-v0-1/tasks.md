@@ -98,6 +98,13 @@
 
 - [x] 12.6 冻结138938f/build18并完成稳定install/verify、签名、真实canonical来源切换/收据/覆盖日期/metadata-only SQL四桶回读；保留build16安装回退和独立历史import回退，真实用量/备份路径只留本机私有证据。用显式合成预览补真实内屏safeTop32/gap185与外屏safeTop0/gap0及跨屏panel跟随，不改变系统设置，临时预览已退出。
 
+## 13. 统计首屏与真实大库性能
+
+- [x] 13.1 收紧时间/来源/模型/刷新工具条，去重复标题、来源三列大数与同值重复；当前metric单一主数、四桶小拆分、175pt趋势紧随，来源/覆盖/导入收据默认折叠，错误/unknown/pending仍有短提示。
+- [x] 13.2 本App真实窗口visible/occlusion/minimize/close兴趣驱动5/30/60秒统计刷新；Pi异步采集不变、无owner自动查询。utility最多3范围缓存、源/模型投影、单合并请求、empty spool无写事务，图表按bucket等值复用。
+- [ ] 13.3 记录真实大库metadata-only进程累计CPU/IO/RSS前后30–60秒和同scope暖响应/cache/增量，拍实际数据标准/小窗/长模型/自定义/深浅色/source+metric首屏；保留真实输入差异与未验，不重新扫描源JSONL。
+- [ ] 13.4 冻结新source/build、稳定安装并保留build18，verify/codesign/runtime回读，更新owner证据；不push/PR/发行或扩大未变Pi后端验收。
+
 ## Workflow follow-up
 
 - 共享源码交付按当时适用的独立只读审查、PR、检查和普通merge流程；空仓首main的初始化需匹配实际授权，不默认直推。

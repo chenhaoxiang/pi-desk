@@ -45,6 +45,23 @@ private final class FakeLedger: UsageLedgerClient {
     await spin { model.notificationStatus.contains("尚未授权") }
     precondition(fake.requested == 0 && fake.posts == 0, "startup must not request OS consent")
     let requestsBefore = model.store.requests.count
+    model.page = "Token"
+    precondition(!model.managerIsVisible && model.usageRefreshInterval == 60, "no manager cannot retain the Token page's fast interest")
+    let backgroundCalls = ledger.calls
+    model.refreshUsageIfDue(now: Date().addingTimeInterval(6))
+    precondition(ledger.calls == backgroundCalls, "hidden/minimized/closed does not query every five seconds")
+    model.refreshUsageIfDue(now: Date().addingTimeInterval(61))
+    precondition(ledger.calls == backgroundCalls + 1, "background keeps bounded spool indexing, not collection shutdown")
+    model.setManagerVisibility(true)
+    precondition(model.managerIsVisible && model.usageRefreshInterval == 5)
+    model.refreshUsageIfDue(now: Date().addingTimeInterval(6))
+    precondition(ledger.calls == backgroundCalls + 2)
+    model.page = "会话"
+    precondition(model.usageRefreshInterval == 30)
+    model.setManagerVisibility(false)
+    precondition(model.usageRefreshInterval == 60)
+    model.page = "Token"
+    precondition(model.usageRefreshInterval == 60, "retained page does not override actual window interest")
     fake.permission = .authorized; fake.requestResult = .success(true)
     model.enableNotifications()
     await spin { model.notificationStatus.contains("已授权") && !model.requestingNotifications }
@@ -95,6 +112,6 @@ private final class FakeLedger: UsageLedgerClient {
     model.usageCustomStart = today.addingTimeInterval(12 * 3600); model.usageCustomEnd = today
     ledger.hold = false; model.refreshUsage()
     precondition(model.customRangeIsValid && ledger.calls == heldCalls + 1)
-    print("Narrow UX checks passed: explicit authorization only, authorized/denied/error/send-failure, duplicate request, invalid custom range and stale in-flight preservation.")
+    print("Narrow UX checks passed: visible/background usage interest, explicit authorization only, authorized/denied/error/send-failure, duplicate request, invalid custom range and stale in-flight preservation.")
   }
 }

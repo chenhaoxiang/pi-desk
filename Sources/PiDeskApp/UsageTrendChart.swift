@@ -1,9 +1,12 @@
 import Charts
 import SwiftUI
 
-struct UsageTrendChart: View {
+struct UsageTrendChart: View, Equatable {
   let usage: UsageAggregate
   let metric: UsageMetric
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.metric == rhs.metric && lhs.usage.range == rhs.usage.range && lhs.usage.buckets == rhs.usage.buckets
+  }
   private let labels = ["输入", "输出", "缓存读取", "缓存写入"]
   private let colors: [Color] = [.blue, .green, .purple, .orange]
   var body: some View {

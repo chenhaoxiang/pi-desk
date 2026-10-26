@@ -6,14 +6,15 @@ import { sessionCreatedAt } from "../src/session.ts";
 
 test("terminal route keeps exact tty/session metadata and never falls back to cwd", () => {
   const route = routeFromMetadata("session-a", "/private/session-a.jsonl", "/private/project", {
-    TERM_PROGRAM: "Apple_Terminal", TERM_SESSION_ID: "session-tty-a", TMUX_PANE: "%7",
+    TERM_PROGRAM: "Apple_Terminal", TERM_SESSION_ID: "session-tty-a",
   }, "/dev/ttys034");
   assert.equal(route.kind, "terminal");
   assert.equal(route.ttyPath, "/dev/ttys034");
   assert.equal(route.terminalApp, "com.apple.Terminal");
   assert.equal(route.terminalSessionId, "session-tty-a");
-  assert.equal(route.tmuxPane, "%7");
   assert.equal(route.cwd, "/private/project");
+  const tmux = routeFromMetadata("session-tmux", "/private/session.jsonl", "/private/project", { TERM_PROGRAM: "Apple_Terminal", TMUX_PANE: "%7" }, "/dev/ttys034");
+  assert.equal(tmux.kind, "unavailable");
 });
 
 test("invalid tty is unavailable instead of choosing a terminal by cwd", () => {

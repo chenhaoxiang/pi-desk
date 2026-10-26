@@ -50,7 +50,7 @@
 
 ### 当前仍未满足的组合验收
 
-2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整键盘/VoiceOver/实体显示器及6.3实际OS通知仍未验。6.1–6.2已按原A1–A11、固定支持版本及代表性旧/缺失/混合cap补齐；不以所有历史owner、长期provider或24x7另造前置，亦不把软件通过冒称现场系统通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
+2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整键盘/VoiceOver及6.3实际OS通知仍未验；build18以显式合成预览核对真实刘海内屏和无刘海外屏compact/expanded及跨屏跟随，不冒称所有系统组合。6.1–6.2已按原A1–A11、固定支持版本及代表性旧/缺失/混合cap补齐；不以所有历史owner、长期provider或24x7另造前置，亦不把软件通过冒称现场系统通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
 
 ## 7. Native visual and interaction refinement
 
@@ -95,6 +95,8 @@
 - [x] 12.3 apply前正常退出App但不停止Pi，使用SQLite backup API含WAL的一致快照、私有owner-only补充备份和receipt；新增provenance/import/alias/conflict表保持旧八列兼容，重复apply无变化，目标回退只移除本import新增且保留后续实时确认/审计事实。
 - [x] 12.4 Swift Ledger/UI支持实时记录、一次性历史补采、去重合计来源切换；来源覆盖日期、缺字段/未知模型/跳过原因、模型/趋势/四桶口径一致；启动/刷新不自动扫JSONL。实际canonical preview/apply、数据库quick_check、私有备份、重复apply、fixture全套与来源分区回读已验真。
 - [x] 12.5 对原A1–A11/6.1–6.2补齐实际Pi 1.4.0-fork.1/Subagents 0.80.0-fork.1/代表性旧缺失混合cap：native retry/threshold compaction/queued continuation bridge开关对照、loadout/模型调用/确认/settled边界不变；2.4/6.3的Herdr/VoiceOver/OS consent/实体多屏仍分别标未知，不作为历史补采阻断。
+
+- [x] 12.6 冻结138938f/build18并完成稳定install/verify、签名、真实canonical来源切换/收据/覆盖日期/metadata-only SQL四桶回读；保留build16安装回退和独立历史import回退，真实用量/备份路径只留本机私有证据。用显式合成预览补真实内屏safeTop32/gap185与外屏safeTop0/gap0及跨屏panel跟随，不改变系统设置，临时预览已退出。
 
 ## Workflow follow-up
 

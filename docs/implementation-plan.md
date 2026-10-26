@@ -185,6 +185,14 @@ App ledger现以utility queue持久连接、metadata generation/DB data_version�
 
 补采共享实时消费键；已存在实时记录不改来源，fork/clone按完整父链、entry ID与usage fingerprint建立别名；未知模型不猜GPT。合成测试覆盖短ID碰撞、全分支、缺父/祖父保守跳过、缺字段/NaN、超行/未完成尾、冻结前缀被改拒绝、增量尾排除、事务失败回滚、重复apply、后续实时保留与一致备份。Swift来源分区/model/trend/合计和来源覆盖日期对齐；partial合并不误变完整。启动/刷新永不扫描JSONL。
 
+### build18安装与现场增量
+
+源码 `138938f3e628250013ec16b497a4d6a4ed329701` 已构建并稳定安装为0.1.0/build18，source tree `a5ed46685449df0970834d1eb5e47cc4fbc3950e`；App SHA256=`ee92e7b2644b2ae2e0e0327c5e20492b0d530165a2fd3b9784c2ff7df653331b`，bridge digest维持`ac9a3adfd5c8c43a4ec22ecd04cac4d6458451bfd67d4b985396f846d54817f6`未变，build16准确安装备份保留。install/verify、ad-hoc codesign strict/deep、真实稳定App运行与canonical ledger quick_check均通过。实际UI验证本月/今日及来源切换、历史收据、source-specific覆盖日期；历史来源保持冻结数据不随实时增长，模型分布保留unknown，与SQL四桶/来源行数对应。实际用量和截图只在本机ignored tmp，不写公开Git。
+
+本轮曾启动一个无管理窗口实例，随后启动带窗口实例导致后者UDS不可用；常规键盘打开管理窗因target不存在被拒绝后，仅强制结束本轮自己创建的无窗App（非Pi），再正常退出第二实例，按`--show-manager`单实例重启，连接恢复。最后只留一个正常稳定App；业务Pi未被终止/reload。
+
+另以显式合成预览（不连接业务/不递送管理）在本机真实屏幕移动管理窗：1728×1117刘海内屏safeTop32/camera gap185对应453×40顶部panel；1920×1080外屏safeTop0/gap0对应300×38 fallback，展开卡片截图与AX均可读，Manager跨屏后panel实际跟随。临时预览正常退出，未改系统辅助设置。日期picker的AX直接set_value返回不支持，未改变日期；自定义逻辑的现有Swift/原生错误提示证据仍有效，不把该自动化失败当产品日期输入通过。
+
 ### 保留的未完成项
 
-完整v0.1未验收、Change未归档。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付及真实物理显示器组合仍在2.4/6.3待验证；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。
+完整v0.1未验收、Change未归档。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

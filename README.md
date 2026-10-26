@@ -82,7 +82,9 @@ PI_DESK_PEER_CHECK="$PWD/tmp/candidate/Pi Desk.app/Contents/Helpers/PiDeskPeerCh
 - Token主页面为跨已记录会话的“Pi总用量”：今日/近7天/本月/自定义时间、趋势和模型分布。从启用记录起异步持久化final标量，App关闭仍记录，重开恢复；另按2026-10-26授权执行一次Pi历史usage元数据补采。实时/历史/去重合计分开显示，不将owner累计补记为今天，不重复父子/工具聚合。缺失保留已知下界与覆盖缺口，不等于套餐额度/账单。
 - owner执行后失败/超时为 unknown，不解释成确定未执行、不自动重试。本地请求未能提交时保留草稿。
 - 提醒已读/静音只改表现，不回答问题、不阻断执行。原 producer 通知从不被本客户端静默抑制。
-- Herdr 跳转只在精确当前会话文件与实时 owner 快照匹配时开放；未配置或失败不打开同名对象。管理页仅允许用户配置的无凭据、无 query/fragment 的精确 HTTPS 地址。
+- 原会话定位只接受主动接入快照里的精确 Herdr pane 或 Terminal.app TTY route（唯一匹配后才聚焦；tmux/WezTerm/cmux未接入或Automation拒绝即不可定位）；不按cwd/名称猜窗口，不对活跃会话自动执行`pi --session`开启第二writer。旧bridge没有route时等待自然加载，显示unknown。管理页仅允许用户配置的无凭据、无 query/fragment 的精确 HTTPS 地址。
+- 会话卡片的创建时间只来自session header timestamp，缺失/超界显示unknown，不把observedAt或首次接入时间当创建时间。
+- 设置页仅投影Pi原生用户settings.json白名单：theme、thinking、steering/followUp、compaction、retry、quietStartup、tuiMode和终端图片/进度；项目`.pi/settings.json`只显示覆盖来源，不写；auth/models/MCP/资源/代理/信任/权限和工具模型默认值不纳入。写入带Pi兼容的`.lock`目录、revision冲突、owner-only备份、原子替换和readback，失败只读保全。
 - 关闭、断联或结束 Pi Desk 不结束 Pi；不常驻扫描历史，不发现旧会话卡片，不读终端文本或凭据。仅显式授权的一次性补采worker只读Pi JSONL并立即投影usage标量，不保存/输出原正文或路径。
 
 ## 文档和规格

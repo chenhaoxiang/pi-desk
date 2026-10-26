@@ -74,6 +74,39 @@ public enum UsageOrigin: String, CaseIterable, Identifiable {
   public var id: String { rawValue }
   public var title: String { switch self { case .combined: return "合计"; case .realtime: return "实时记录"; case .history: return "一次性历史补采" } }
 }
+public struct UsageViewState: Codable, Equatable {
+  public static let currentVersion = 1
+  public var version: Int = currentVersion
+  public var page: String = "会话"
+  public var sessionFilter: String = "在线"
+  public var usagePreset: String = UsagePreset.today.rawValue
+  public var usageMetric: String = UsageMetric.interaction.rawValue
+  public var usageOrigin: String = UsageOrigin.combined.rawValue
+  public var usageModel: String = ""
+  public var customStartMS: Int64?
+  public var customEndMS: Int64?
+  public var selectedKeyHash: String?
+  public var hiddenKeyHashes: [String] = []
+  public var dismissedKeyHashes: [String] = []
+
+  public init() {}
+  public var valid: Bool {
+    func hash(_ value: String) -> Bool { value.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil }
+    let validDates = [customStartMS, customEndMS].allSatisfy { $0 == nil || (946684800000...7258118400000).contains($0!) }
+    return version == Self.currentVersion && ["会话", "子任务", "计划", "Token", "重要事项", "设置"].contains(page)
+      && ["在线", "全部", "运行中", "需输入", "断连"].contains(sessionFilter)
+      && UsagePreset(rawValue: usagePreset) != nil && UsageMetric(rawValue: usageMetric) != nil && UsageOrigin(rawValue: usageOrigin) != nil
+      && (usageModel.isEmpty || usageModel.range(of: "^[A-Za-z0-9._:/+@ -]{1,128}$", options: .regularExpression) != nil)
+      && validDates && (selectedKeyHash == nil || hash(selectedKeyHash!))
+      && hiddenKeyHashes.count <= 64 && hiddenKeyHashes.allSatisfy(hash)
+      && dismissedKeyHashes.count <= 1024 && dismissedKeyHashes.allSatisfy(hash)
+  }
+}
+public enum UsageViewStateKey {
+  public static func hash(_ value: String) -> String {
+    SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+  }
+}
 public enum UsageMetric: String, CaseIterable, Identifiable {
   case interaction, cache, processing
   public var id: String { rawValue }
@@ -328,8 +361,14 @@ protocol UsageLedgerClient: AnyObject {
   func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void)
   func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void)
   func refresh(range: UsageDateRange, model: String?, origin: UsageOrigin, completion: @escaping (UsageAggregate) -> Void)
+  func loadViewState(completion: @escaping (UsageViewState?, String?) -> Void)
+  func saveViewState(_ state: UsageViewState, completion: @escaping (String?) -> Void)
+  @discardableResult func flushViewState(_ state: UsageViewState) -> Bool
 }
 extension UsageLedgerClient {
+  func loadViewState(completion: @escaping (UsageViewState?, String?) -> Void) { completion(nil, nil) }
+  func saveViewState(_ state: UsageViewState, completion: @escaping (String?) -> Void) { completion(nil) }
+  @discardableResult func flushViewState(_ state: UsageViewState) -> Bool { saveViewState(state) { _ in }; return true }
   func refresh(range: UsageDateRange, model: String?, origin: UsageOrigin, completion: @escaping (UsageAggregate) -> Void) {
     refresh(range: range) { completion($0.filtered(origin: origin, model: model)) }
   }
@@ -347,6 +386,7 @@ public final class UsageLedger: UsageLedgerClient {
   private var cachedAggregate: UsageAggregate?
   private var cacheBucket: Date?
   private var counters = ["databaseOpens": 0, "importScans": 0, "aggregateScans": 0, "cacheHits": 0]
+  private var persistedViewState: UsageViewState?
 
   public init(root: URL? = nil) {
     if let root {
@@ -361,6 +401,44 @@ public final class UsageLedger: UsageLedgerClient {
 
   private var pendingRefresh: (range: UsageDateRange, model: String?, origin: UsageOrigin, completion: (UsageAggregate) -> Void)?
   private var isRefreshing = false
+  public func loadViewState(completion: @escaping (UsageViewState?, String?) -> Void) {
+    queue.async { [weak self] in
+      guard let self else { DispatchQueue.main.async { completion(nil, nil) }; return }
+      do {
+        let value = try self.openDatabase().loadViewState()
+        self.persistedViewState = value
+        DispatchQueue.main.async { completion(value, nil) }
+      } catch { DispatchQueue.main.async { completion(nil, "视图偏好未恢复；旧数据已保留，本次使用默认视图。") } }
+    }
+  }
+  private final class FlushResult: @unchecked Sendable { var succeeded = false }
+  @discardableResult public func flushViewState(_ state: UsageViewState) -> Bool {
+    let done = DispatchGroup(), result = FlushResult()
+    done.enter()
+    queue.async {
+      defer { done.leave() }
+      guard state.valid else { return }
+      if self.persistedViewState == state { result.succeeded = true; return }
+      do {
+        try self.openDatabase().saveViewState(state)
+        self.persistedViewState = state; self.counters["viewStateFlushes", default: 0] += 1
+        result.succeeded = true
+      } catch { /* old state is preserved; shutdown reports unconfirmed */ }
+    }
+    return done.wait(timeout: .now() + 1) == .success && result.succeeded
+  }
+  public func saveViewState(_ state: UsageViewState, completion: @escaping (String?) -> Void = { _ in }) {
+    queue.async { [weak self] in
+      guard let self else { DispatchQueue.main.async { completion(nil) }; return }
+      guard state.valid else { DispatchQueue.main.async { completion("视图偏好格式无效；未写入。") }; return }
+      guard self.persistedViewState != state else { DispatchQueue.main.async { completion(nil) }; return }
+      do {
+        try self.openDatabase().saveViewState(state)
+        self.persistedViewState = state; self.counters["viewStateWrites", default: 0] += 1
+        DispatchQueue.main.async { completion(nil) }
+      } catch { DispatchQueue.main.async { completion("视图偏好保存失败；旧数据已保留，本次状态仍在内存。") } }
+    }
+  }
   public func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void) {
     refresh(range: range, model: nil, completion: completion)
   }
@@ -383,16 +461,20 @@ public final class UsageLedger: UsageLedgerClient {
       }
     }
   }
+  private func openDatabase() throws -> Database {
+    try Self.secureDirectory(root)
+    if database == nil {
+      database = try Database(root: root)
+      counters["databaseOpens", default: 0] += 1
+      counters["healthChecks", default: 0] += 1
+      counters["schemaInitializations", default: 0] += 1
+    }
+    return database!
+  }
   private func readIncremental(range: UsageDateRange) -> UsageAggregate {
     do {
       try Self.secureDirectory(root)
-      if database == nil {
-        database = try Database(root: root)
-        counters["databaseOpens", default: 0] += 1
-        counters["healthChecks", default: 0] += 1
-        counters["schemaInitializations", default: 0] += 1
-      }
-      let db = database!
+      let db = try openDatabase()
       let generation = try metadataGeneration(db: db)
       if let cachedAggregate, cachedRange == range, cachedGeneration == generation, cacheBucket == range.bucket(for: Date()) {
         counters["cacheHits", default: 0] += 1
@@ -456,7 +538,7 @@ public final class UsageLedger: UsageLedgerClient {
     guard lstat(url.path, &info) == 0, info.st_uid == getuid(), info.st_mode & 0o077 == 0,
       info.st_mode & S_IFMT == S_IFDIR else { throw LedgerError.unsafeStorage }
   }
-  private enum LedgerError: Error { case unsafeStorage, databaseUnavailable, incompatibleSchema, fileMissing }
+  private enum LedgerError: Error { case unsafeStorage, databaseUnavailable, incompatibleSchema, incompatibleViewState, fileMissing }
   private static func readPrivate(_ url: URL) throws -> Data {
     let fd = open(url.path, O_RDONLY | O_NOFOLLOW)
     guard fd >= 0 else { throw errno == ENOENT ? LedgerError.fileMissing : LedgerError.unsafeStorage }
@@ -562,6 +644,7 @@ public final class UsageLedger: UsageLedgerClient {
           CREATE TABLE IF NOT EXISTS history_imports(import_id TEXT PRIMARY KEY,source_set_hash TEXT NOT NULL,applied INTEGER NOT NULL,status TEXT NOT NULL,summary_json TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS usage_aliases(alias_id TEXT PRIMARY KEY,canonical_id TEXT NOT NULL,fingerprint TEXT NOT NULL,kind TEXT NOT NULL,import_id TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS history_conflicts(id TEXT NOT NULL,import_id TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(id,import_id));
+          CREATE TABLE IF NOT EXISTS app_view_state(key TEXT PRIMARY KEY,version INTEGER NOT NULL,updated INTEGER NOT NULL,value TEXT NOT NULL);
           PRAGMA user_version=1; PRAGMA application_id=1346978901;
           """)
       } catch { sqlite3_close(db); handle = nil; throw error }
@@ -591,6 +674,27 @@ public final class UsageLedger: UsageLedgerClient {
     }
     func int(_ statement: OpaquePointer, _ index: Int32) -> Int64? {
       sqlite3_column_type(statement, index) == SQLITE_NULL ? nil : sqlite3_column_int64(statement, index)
+    }
+    func loadViewState() throws -> UsageViewState? {
+      let statement = try prepare("SELECT version,value FROM app_view_state WHERE key='main'")
+      defer { sqlite3_finalize(statement) }
+      let step = sqlite3_step(statement)
+      if step == SQLITE_DONE { return nil }
+      guard step == SQLITE_ROW else { throw LedgerError.databaseUnavailable }
+      let raw = string(statement, 1)
+      guard raw.utf8.count <= 16384, let data = raw.data(using: .utf8), Int(sqlite3_column_int(statement, 0)) == UsageViewState.currentVersion else { throw LedgerError.incompatibleViewState }
+      let state = try JSONDecoder().decode(UsageViewState.self, from: data)
+      guard state.valid else { throw LedgerError.incompatibleViewState }
+      return state
+    }
+    func saveViewState(_ state: UsageViewState) throws {
+      _ = try loadViewState() // Invalid/future rows are preserved, never overwritten by defaults.
+      let data = try JSONEncoder().encode(state)
+      guard let json = String(data: data, encoding: .utf8), json.utf8.count <= 16384 else { throw LedgerError.databaseUnavailable }
+      let statement = try prepare("INSERT INTO app_view_state(key,version,updated,value) VALUES('main',?,?,?) ON CONFLICT(key) DO UPDATE SET version=excluded.version,updated=excluded.updated,value=excluded.value")
+      defer { sqlite3_finalize(statement) }
+      sqlite3_bind_int(statement, 1, Int32(state.version)); sqlite3_bind_int64(statement, 2, Int64(Date().timeIntervalSince1970 * 1000)); bind(json, statement, 3)
+      guard sqlite3_step(statement) == SQLITE_DONE else { throw LedgerError.databaseUnavailable }
     }
     func spoolFiles() throws -> [URL] {
       let spool = root.appendingPathComponent("spool")

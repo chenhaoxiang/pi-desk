@@ -105,6 +105,13 @@
 - [x] 13.3 记录真实大库metadata-only进程累计CPU/IO/RSS前后30秒和同scope暖响应/cache/增量，按统计可见/其他页/AX确认最小化/AX确认关窗分段；实际输入行差异和未证明改善如实保留，不重新扫描源JSONL。
 - [x] 13.4 冻结`8bd2e80`/build20、稳定安装并保留build18，verify/codesign/runtime回读；标准/960小窗、长模型、自定义unknown、深浅色、source+metric截图和真实canonical ledger cache evidence已留本机tmp。未push/PR/发行，不扩大未变Pi后端验收。
 
+## 14. 原会话定位、创建时间与Pi原生设置
+
+- [x] 14.1 route协议补Terminal.app精确TTY/TERM_SESSION_ID及createdAt/header来源；一次性TTY helper、tmux client_tty不冒称、双端route/createdAt安全范围校验；旧bridge字段缺失保持unknown。
+- [x] 14.2 原会话按钮优先Herdr exact pane，Terminal.app仅唯一tty匹配后focus且先收集再解目标窗口；Automation拒绝/无route明确不可定位；不按cwd猜测、不对活跃session自动`pi --session`启动第二writer。
+- [x] 14.3 PiSettingsStore只读/白名单卡片与canonical user settings.json安全写 fixture：Pi兼容`.lock`、unknown字段保留、project overlay只读、revision/坏JSON/类型/权限/锁冲突拒写、owner-only backup/atomic readback；view-state退出flush bounded回读。
+- [ ] 14.4 真实Terminal.app唯一tab/Automation授权与完整键盘/VoiceOver/Herdr/OS通知仍需现场条件；未验不勾2.4/6.3，不把隔离PTY或合成fixture冒称现场通过。
+
 ## Workflow follow-up
 
 - 共享源码交付按当时适用的独立只读审查、PR、检查和普通merge流程；空仓首main的初始化需匹配实际授权，不默认直推。

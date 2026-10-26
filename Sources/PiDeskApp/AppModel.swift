@@ -57,10 +57,64 @@ struct DeskSettings: Codable {
   @Published var usageLoading = false
   @Published var notificationStatus = "尚未检查系统通知状态"
   @Published var requestingNotifications = false
+  @Published var piSettingsSnapshot: PiSettingsSnapshot?
+  @Published var piSettingsSelections: [String: String] = [:]
+  @Published var piSettingsLoading = false
+  @Published var piSettingsNote = "尚未读取原Pi设置"
+  private let piSettingsStore = PiSettingsStore()
+  private var piSettingsGeneration = UUID()
+  var piSettingsChanges: [String: String] {
+    guard let snapshot = piSettingsSnapshot else { return [:] }
+    return piSettingsSelections.filter { key, value in value != "__keep__" && value != (snapshot.values[key] ?? PiSettingsStore.unset) }
+  }
+  func reloadPiSettings(projectCwd: String? = nil) {
+    guard !isPreview else { piSettingsNote = "合成预览不读取或修改真实Pi设置"; return }
+    piSettingsGeneration = UUID(); let generation = piSettingsGeneration
+    piSettingsLoading = true
+    piSettingsStore.load(projectCwd: projectCwd ?? current?.snapshot.display.cwd) { [weak self] result in
+      Task { @MainActor in
+        guard let self, self.piSettingsGeneration == generation else { return }
+        self.piSettingsLoading = false
+        switch result {
+        case .success(let snapshot):
+          self.piSettingsSnapshot = snapshot
+          self.piSettingsSelections = Dictionary(uniqueKeysWithValues: PiSettingField.fields.map { field in
+            (field.key, snapshot.values[field.key].map { field.choices.contains($0) ? $0 : "__keep__" } ?? PiSettingsStore.unset)
+          })
+          self.piSettingsNote = "已读取原Pi用户设置；点击保存前不修改任何文件。"
+        case .failure(let error): self.piSettingsSnapshot = nil; self.piSettingsNote = error.rawValue
+        }
+      }
+    }
+  }
+  func savePiSettings() {
+    guard !isPreview, !piSettingsLoading, let snapshot = piSettingsSnapshot, !piSettingsChanges.isEmpty else { return }
+    piSettingsLoading = true; let generation = piSettingsGeneration
+    piSettingsStore.save(changes: piSettingsChanges, expected: snapshot) { [weak self] result in
+      Task { @MainActor in
+        guard let self, self.piSettingsGeneration == generation else { return }
+        self.piSettingsLoading = false
+        switch result {
+        case .success(let value):
+          self.piSettingsSnapshot = value
+          self.piSettingsNote = "已原子保存到原Pi用户设置并读回，备份保留；下次会话生效，未reload当前会话。"
+        case .failure(let error): self.piSettingsNote = error.rawValue
+        }
+      }
+    }
+  }
   private let notificationClient: NotificationClient?
   private var ledger: UsageLedgerClient?
   private var lastUsageRefresh = Date.distantPast
   private(set) var managerIsVisible = false
+  private var viewStateLoaded = false
+  private var viewStateTouchedBeforeLoad = false
+  private var restoringViewState = false
+  private var selectionPinned = false
+  private var pendingSelectionHash: String?
+  private var pendingHiddenHashes = Set<String>()
+  private var pendingDismissedHashes = Set<String>()
+  private var viewStateSaveWork: DispatchWorkItem?
   var usageRefreshInterval: TimeInterval { managerIsVisible ? (page == "Token" ? 5 : 30) : 60 }
   func setManagerVisibility(_ visible: Bool) {
     guard visible != managerIsVisible else { return }
@@ -88,7 +142,79 @@ struct DeskSettings: Codable {
       hiddenSessions.remove(identity.sessionKey)
     }
     selected = identity.sessionKey
+    selectionPinned = true
+    pendingSelectionHash = UsageViewStateKey.hash(identity.sessionKey)
+    persistViewState()
     refresh(identity: identity)
+  }
+  private func preferredSessionKey() -> String? {
+    if let pendingSelectionHash,
+      let restored = sessions.first(where: { UsageViewStateKey.hash($0.snapshot.identity.sessionKey) == pendingSelectionHash }) {
+      return restored.snapshot.identity.sessionKey
+    }
+    let connected = sessions.filter { $0.connection == .connected }
+    let input = connected.first(where: { !$0.snapshot.inputs.isEmpty })
+    if let input { return input.snapshot.identity.sessionKey }
+    let active = connected.first(where: { [.running, .waitingChildren, .retrying, .compacting].contains($0.snapshot.execution) })
+    return active?.snapshot.identity.sessionKey ?? connected.first?.snapshot.identity.sessionKey ?? sessions.first?.snapshot.identity.sessionKey
+  }
+  func selectPreferredSession() {
+    guard !selectionPinned, let key = preferredSessionKey() else { return }
+    if selected != key { selected = key }
+  }
+  private func restoreHidden(_ identity: Identity, connection: ConnectionState) {
+    guard connection != .connected, pendingHiddenHashes.contains(UsageViewStateKey.hash(identity.sessionKey)) else { return }
+    hiddenSessions.insert(identity.sessionKey)
+  }
+  private func applyViewState(_ state: UsageViewState?) {
+    guard let state, state.valid else { return }
+    restoringViewState = true
+    defer { restoringViewState = false }
+    if let value = UsagePreset(rawValue: state.usagePreset) { usagePreset = value }
+    if let value = UsageMetric(rawValue: state.usageMetric) { usageMetric = value }
+    if let value = UsageOrigin(rawValue: state.usageOrigin) { usageOrigin = value }
+    if ["会话", "子任务", "计划", "Token", "重要事项", "设置"].contains(state.page) { page = state.page }
+    if ["在线", "全部", "运行中", "需输入", "断连"].contains(state.sessionFilter) { sessionFilter = state.sessionFilter }
+    usageModel = state.usageModel
+    if let start = state.customStartMS { usageCustomStart = Date(timeIntervalSince1970: Double(start) / 1000) }
+    if let end = state.customEndMS { usageCustomEnd = Date(timeIntervalSince1970: Double(end) / 1000) }
+    pendingSelectionHash = state.selectedKeyHash
+    pendingHiddenHashes = Set(state.hiddenKeyHashes)
+    pendingDismissedHashes = Set(state.dismissedKeyHashes)
+    for session in sessions where session.connection != .connected && pendingHiddenHashes.contains(UsageViewStateKey.hash(session.snapshot.identity.sessionKey)) {
+      hiddenSessions.insert(session.snapshot.identity.sessionKey)
+    }
+  }
+  private func currentViewState() -> UsageViewState {
+    var state = UsageViewState()
+    state.page = page; state.sessionFilter = sessionFilter
+    state.usagePreset = usagePreset.rawValue; state.usageMetric = usageMetric.rawValue
+    state.usageOrigin = usageOrigin.rawValue; state.usageModel = usageModel
+    state.customStartMS = Int64(usageCustomStart.timeIntervalSince1970 * 1000)
+    state.customEndMS = Int64(usageCustomEnd.timeIntervalSince1970 * 1000)
+    state.selectedKeyHash = selectionPinned ? selected.map { UsageViewStateKey.hash($0) } : pendingSelectionHash
+    state.hiddenKeyHashes = Array(pendingHiddenHashes.union(hiddenSessions.map { UsageViewStateKey.hash($0) })).sorted().prefix(64).map { $0 }
+    state.dismissedKeyHashes = Array(pendingDismissedHashes.union(dismissed.map { UsageViewStateKey.hash($0) })).sorted().prefix(1024).map { $0 }
+    return state
+  }
+  func persistViewState() {
+    guard !isPreview, !restoringViewState else { return }
+    guard viewStateLoaded else { viewStateTouchedBeforeLoad = true; return }
+    viewStateSaveWork?.cancel()
+    let state = currentViewState()
+    let work = DispatchWorkItem { [weak self] in
+      self?.ledger?.saveViewState(state) { [weak self] issue in
+        guard let issue else { return }
+        Task { @MainActor in self?.actionNote = issue }
+      }
+    }
+    viewStateSaveWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+  }
+  func flushViewState() {
+    viewStateSaveWork?.cancel(); viewStateSaveWork = nil
+    guard viewStateLoaded, !isPreview, let ledger else { return }
+    if !ledger.flushViewState(currentViewState()) { actionNote = "视图状态退出写入未确认；本次状态保留在内存，旧SQLite数据未覆盖" }
   }
   private var notified: Set<String> = []
   private var server: SocketServer!
@@ -115,7 +241,12 @@ struct DeskSettings: Codable {
     guard let s = store.sessions[identity.sessionKey], s.snapshot.identity == identity, s.connection != .connected else { return }
     hiddenSessions.insert(identity.sessionKey)
     if selected == identity.sessionKey { selected = visibleSessions.first?.snapshot.identity.sessionKey }
+    persistViewState()
     actionNote = "仅隐藏断连卡片，未停止或删除任何Pi工作"
+  }
+  func clearHiddenSessions() {
+    hiddenSessions.removeAll(); pendingHiddenHashes.removeAll()
+    persistViewState()
   }
   var customRangeIsValid: Bool {
     guard usagePreset == .custom else { return true }
@@ -264,6 +395,17 @@ struct DeskSettings: Codable {
     loadSettings()
     let usageRoot = argument("--usage-path").map { URL(fileURLWithPath: $0) } ?? (argument("--socket-path").map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("usage-v1") })
     ledger = usageLedger ?? UsageLedger(root: usageRoot)
+    ledger?.loadViewState { [weak self] state, issue in
+      Task { @MainActor in
+        guard let self else { return }
+        if let issue { self.actionNote = issue }
+        if !self.viewStateTouchedBeforeLoad { self.applyViewState(state) }
+        self.viewStateLoaded = true
+        self.selectPreferredSession()
+        self.refreshUsage()
+        if self.viewStateTouchedBeforeLoad { self.persistViewState() }
+      }
+    }
     refreshUsage(); checkNotificationStatus()
     server = SocketServer(path: socketPath) { [weak self] event in
       if Thread.isMainThread {
@@ -289,13 +431,18 @@ struct DeskSettings: Codable {
         if record.kind == "hello" { server.close(connection) }
         return
       }
-      if selected == nil { selected = record.identity.sessionKey }
+      restoreHidden(record.identity, connection: store.sessions[record.identity.sessionKey]?.connection ?? .connected)
+      selectPreferredSession()
       notify()
-    case .disconnected(let id): store.disconnect(id)
+    case .disconnected(let id):
+      store.disconnect(id)
+      for session in sessions where session.connectionId == id { restoreHidden(session.snapshot.identity, connection: session.connection) }
+      selectPreferredSession()
     case .diagnostic(let code): diagnostic = code == "socket-ready" ? "本机连接已就绪" : "连接不可用：" + code
     }
   }
   func stop() {
+    flushViewState()
     timer?.invalidate()
     server?.stop()
   }
@@ -343,30 +490,47 @@ struct DeskSettings: Codable {
       return false
     }
   }
+  func canOpenOriginal(identity: Identity) -> Bool {
+    guard let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity, session.connection == .connected,
+      let route = session.snapshot.display.route, route.sessionId == identity.nativeSessionId else { return false }
+    if route.kind == "terminal" { return route.terminalApp == "com.apple.Terminal" && route.ttyPath != nil }
+    return route.kind == "herdr" && route.sessionFile != nil && !settings.herdrExecutable.isEmpty
+  }
+  func originalRouteLabel(identity: Identity) -> String {
+    guard let route = store.sessions[identity.sessionKey]?.snapshot.display.route else { return "原会话不可定位" }
+    return route.kind == "terminal" ? "回到原终端" : "打开原会话"
+  }
   func openOriginal(identity: Identity? = nil) {
-    guard !isPreview else {
-      actionNote = "合成预览：不会切换到其他应用"
-      return
-    }
+    guard !isPreview else { actionNote = "合成预览：不会切换到其他应用"; return }
     guard let s = identity.flatMap({ store.sessions[$0.sessionKey] }) ?? current,
       identity == nil || s.snapshot.identity == identity, s.connection == .connected,
-      let route = s.snapshot.display.route,
-      route.kind == "herdr", route.sessionId == s.snapshot.identity.nativeSessionId,
-      let file = route.sessionFile, !settings.herdrExecutable.isEmpty
-    else {
-      actionNote = "没有核实的当前路由；请在原会话操作或配置 Herdr，不会打开同名对象"
+      let route = s.snapshot.display.route, route.sessionId == s.snapshot.identity.nativeSessionId
+    else { actionNote = "没有精确的当前终端/Herdr路由；未打开同名对象或第二个Pi"; return }
+    let currentIdentity = s.snapshot.identity
+    if route.kind == "terminal" {
+      guard route.terminalApp == "com.apple.Terminal", let ttyPath = route.ttyPath else {
+        actionNote = "当前会话没有可验证的Terminal.app TTY路由；不会打开新终端或恢复第二个Pi"
+        return
+      }
+      Task {
+        do {
+          let result = try await TerminalRouteActivator.focus(ttyPath: ttyPath)
+          guard store.sessions[currentIdentity.sessionKey]?.snapshot.identity == currentIdentity else { throw NavigationError.unavailable }
+          actionNote = "已定位准确Terminal tab（\(result)）；未启动新的Pi writer"
+        } catch { actionNote = "无法定位准确Terminal tab；请回到原入口，不会自动执行pi --session" }
+      }
+      return
+    }
+    guard route.kind == "herdr", let file = route.sessionFile, !settings.herdrExecutable.isEmpty else {
+      actionNote = "没有可用的精确Herdr/Terminal路由；不会打开同名对象或恢复第二个Pi"
       return
     }
     let executable = settings.herdrExecutable
-    let identity = s.snapshot.identity
     Task {
       do {
         let raw = try await FiniteCommand.run(executable, ["api", "snapshot"])
         let pane = try Navigation.exactPane(snapshot: raw, sessionFile: file)
-        guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else {
-          throw NavigationError.unavailable
-        }
-        // Only this fixed public owner action; never send-keys, shell or lifecycle control.
+        guard store.sessions[currentIdentity.sessionKey]?.snapshot.identity == currentIdentity else { throw NavigationError.unavailable }
         _ = try await FiniteCommand.run(executable, ["agent", "focus", pane.paneId])
         let verify = try await FiniteCommand.run(executable, ["api", "snapshot"])
         let verified = try Navigation.exactPane(snapshot: verify, sessionFile: file)
@@ -412,9 +576,11 @@ struct DeskSettings: Codable {
   func markRead(_ input: InputNotice, session: Identity) {
     if dismissed.count >= 1024 { dismissed.removeAll() }
     dismissed.insert(session.runtimeEpoch + ":" + input.id)
+    persistViewState()
   }
   func isRead(_ input: InputNotice, session: Identity) -> Bool {
-    dismissed.contains(session.runtimeEpoch + ":" + input.id)
+    let key = session.runtimeEpoch + ":" + input.id
+    return dismissed.contains(key) || pendingDismissedHashes.contains(UsageViewStateKey.hash(key))
   }
   private func notify() {
     guard !muted else { return }

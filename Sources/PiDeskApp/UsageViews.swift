@@ -57,11 +57,12 @@ struct AggregateTokenPage: View {
         DisclosureGroup("当前会话用量（不同范围，不与总览相加）") { TokenPage() }.font(.caption)
       }.padding(18)
     }.onAppear { model.refreshUsage() }
-      .onChange(of: model.usagePreset) { _, _ in model.refreshUsage() }
-      .onChange(of: model.usageModel) { _, _ in model.refreshUsage() }
-      .onChange(of: model.usageOrigin) { _, _ in model.refreshUsage() }
-      .onChange(of: model.usageCustomStart) { _, _ in model.refreshUsage() }
-      .onChange(of: model.usageCustomEnd) { _, _ in model.refreshUsage() }
+      .onChange(of: model.usagePreset) { _, _ in model.persistViewState(); model.refreshUsage() }
+      .onChange(of: model.usageModel) { _, _ in model.persistViewState(); model.refreshUsage() }
+      .onChange(of: model.usageOrigin) { _, _ in model.persistViewState(); model.refreshUsage() }
+      .onChange(of: model.usageMetric) { _, _ in model.persistViewState() }
+      .onChange(of: model.usageCustomStart) { _, _ in model.persistViewState(); model.refreshUsage() }
+      .onChange(of: model.usageCustomEnd) { _, _ in model.persistViewState(); model.refreshUsage() }
   }
   private var filterBar: some View {
     ViewThatFits(in: .horizontal) {

@@ -56,6 +56,7 @@ import SwiftUI
     return true
   }
   func applicationWillTerminate(_ notification: Notification) {
+    model.flushViewState()
     island.stop()
     model.stop()
   }
@@ -152,6 +153,7 @@ struct DeskWindow: View {
         }
       }
     }.background(Color(nsColor: .windowBackgroundColor))
+      .onChange(of: model.page) { _, _ in model.persistViewState() }
   }
   var header: some View {
     HStack {
@@ -199,7 +201,7 @@ struct SessionList: View {
         Picker("状态筛选", selection: $model.sessionFilter) {
           ForEach(["在线", "全部", "运行中", "需输入", "断连"], id: \.self) { Text($0).tag($0) }
         }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("按状态筛选会话")
-        if !model.hiddenSessions.isEmpty { Button("显示已隐藏卡片（不改变运行）") { model.hiddenSessions.removeAll() }.font(.caption2) }
+        if !model.hiddenSessions.isEmpty { Button("显示已隐藏卡片（不改变运行）") { model.clearHiddenSessions() }.font(.caption2) }
       }.padding(.horizontal, 13).padding(.bottom, 12)
       ScrollView {
         LazyVStack(spacing: 9) {
@@ -248,11 +250,15 @@ struct SessionDetail: View {
               [Presentation.project(snap), snap.display.branch, Presentation.shortModel(snap)]
                 .compactMap { $0 }.joined(separator: " · ")
             ).font(.system(size: 12)).foregroundStyle(.secondary)
+            Text(Presentation.createdAbsolute(snap)).font(.caption).foregroundStyle(.secondary)
           }
           Spacer()
           StatusPill(status: Presentation.status(session))
         }
         SessionActions(session: session).id(snap.identity)
+        if !model.canOpenOriginal(identity: snap.identity) {
+          Text("没有精确的当前终端/Herdr路由；旧桥接需等待自然加载。不会按cwd猜窗口或启动第二个Pi。").font(.caption).foregroundStyle(.secondary)
+        }
         if !snap.inputs.isEmpty {
           DeskCard {
             VStack(alignment: .leading, spacing: 9) {
@@ -261,8 +267,7 @@ struct SessionDetail: View {
               ).foregroundStyle(StatusTone.amber.ink(dark: scheme == .dark))
               Text("请在原会话处理；已读和关闭提醒不会代答，也不会改变执行。").font(.caption).foregroundStyle(.secondary)
               HStack {
-                Button("打开原会话") { model.openOriginal(identity: snap.identity) }.buttonStyle(
-                  .bordered)
+                Button(model.originalRouteLabel(identity: snap.identity)) { model.openOriginal(identity: snap.identity) }.buttonStyle(.bordered).disabled(!model.canOpenOriginal(identity: snap.identity))
                 ForEach(snap.inputs.prefix(1)) { input in
                   Button("标为已读") { model.markRead(input, session: snap.identity) }.buttonStyle(
                     .borderless)
@@ -499,7 +504,7 @@ struct AttentionPage: View {
                 }
                 Text(Presentation.activity(s)).font(.subheadline)
                 HStack {
-                  Button("打开原会话") { model.openOriginal(identity: s.snapshot.identity) }
+                  Button(model.originalRouteLabel(identity: s.snapshot.identity)) { model.openOriginal(identity: s.snapshot.identity) }.disabled(!model.canOpenOriginal(identity: s.snapshot.identity))
                   ForEach(s.snapshot.inputs) { i in
                     Button(model.isRead(i, session: s.snapshot.identity) ? "已读" : "标为已读") {
                       model.markRead(i, session: s.snapshot.identity)
@@ -557,6 +562,7 @@ struct SettingsPage: View {
           Button("展开顶部速览") { model.showIsland() }.buttonStyle(.bordered)
         }
       }
+      PiSettingsCard(projectCwd: model.current?.snapshot.display.cwd ?? model.sessions.first?.snapshot.display.cwd)
       DeskCard {
         VStack(alignment: .leading, spacing: 12) {
           Text("原系统入口").font(.subheadline.weight(.semibold))

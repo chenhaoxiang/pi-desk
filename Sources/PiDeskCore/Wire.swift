@@ -54,11 +54,27 @@ public struct Display: Codable, Equatable, Sendable {
   public var effort: String?
   public var mode: String
   public var route: Route?
+  public var createdAt: Double? = nil
+  public var createdAtSource: String? = nil
 }
 public struct Route: Codable, Equatable, Sendable {
   public var kind: String
   public var sessionId: String
   public var sessionFile: String?
+  public var cwd: String?
+  public var ttyPath: String? = nil
+  public var terminalApp: String? = nil
+  public var terminalSessionId: String? = nil
+  public var tmuxPane: String? = nil
+  public var weztermPane: String? = nil
+  public var cmuxWorkspace: String? = nil
+  public var surface: String? = nil
+  public var valid: Bool {
+    func safe(_ value: String) -> Bool { value.range(of: "^[A-Za-z0-9._-]{1,128}$", options: .regularExpression) != nil }
+    let values = [sessionFile, cwd, ttyPath, terminalApp, terminalSessionId, tmuxPane, weztermPane, cmuxWorkspace, surface]
+    return safe(kind) && safe(sessionId) && values.allSatisfy { $0 == nil || $0!.utf8.count <= 512 }
+      && (ttyPath == nil || ttyPath!.range(of: "^/dev/(ttys[A-Za-z0-9]+|pts/[0-9]+)$", options: .regularExpression) != nil)
+  }
 }
 public struct Tokens: Codable, Equatable, Sendable {
   public var input: Double?
@@ -165,6 +181,9 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var valid: Bool {
     identity.valid && seq >= 0 && observedAt.isFinite && observedAt > 0 && dropped >= 0
       && display.name.utf8.count <= 512 && (display.cwd?.utf8.count ?? 0) <= 512
+      && (display.createdAt == nil || (display.createdAt!.isFinite && display.createdAt! >= 0 && display.createdAt! <= 7_258_118_400_000 && display.createdAt!.rounded(.towardZero) == display.createdAt!))
+      && (display.createdAtSource == nil || ["session-header", "unknown"].contains(display.createdAtSource!))
+      && (display.route == nil || display.route!.valid)
       && tools.count <= 32 && runs.count <= 64 && schedules.count <= 64 && inputs.count <= 32
       && usage.count <= 8 && evidence.count <= 32 && tools.allSatisfy { $0.utf8.count <= 128 }
       && usage.allSatisfy { $0.tokens.valid && $0.includedRunIds.count <= 128 }

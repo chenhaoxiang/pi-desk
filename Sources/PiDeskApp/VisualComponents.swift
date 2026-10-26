@@ -77,7 +77,7 @@ struct SessionCard: View {
           Spacer(minLength: 0)
           StatusPill(status: Presentation.status(session))
         }
-        Text(metadata).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+        Text(metadata + " · " + Presentation.createdShort(session.snapshot)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
         HStack(spacing: 7) {
           Image(
             systemName: session.snapshot.tools.isEmpty ? "circle.dotted" : "wrench.and.screwdriver"
@@ -95,8 +95,8 @@ struct SessionCard: View {
         if island {
           HStack(spacing: 8) {
             Button("查看详情", action: onSelect).buttonStyle(.bordered)
-            Button("打开原会话") { model.openOriginal(identity: session.snapshot.identity) }.buttonStyle(
-              .borderless)
+            Button(model.originalRouteLabel(identity: session.snapshot.identity)) { model.openOriginal(identity: session.snapshot.identity) }.buttonStyle(.borderless)
+              .disabled(!model.canOpenOriginal(identity: session.snapshot.identity))
             Spacer()
             if session.connection == .connected {
               Button {
@@ -200,8 +200,8 @@ struct SessionActions: View {
         Button {
           model.openOriginal(identity: session.snapshot.identity)
         } label: {
-          Label("打开原会话", systemImage: "arrow.up.right")
-        }.buttonStyle(.borderedProminent).disabled(session.connection != .connected)
+          Label(model.originalRouteLabel(identity: session.snapshot.identity), systemImage: "arrow.up.right")
+        }.buttonStyle(.borderedProminent).disabled(!model.canOpenOriginal(identity: session.snapshot.identity))
         Button("追加要求") { mode = "followUp" }.buttonStyle(.bordered).disabled(
           session.connection != .connected)
         Button("纠偏") { mode = "steer" }.buttonStyle(.bordered).disabled(

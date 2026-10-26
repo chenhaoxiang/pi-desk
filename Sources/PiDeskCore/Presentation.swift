@@ -46,6 +46,27 @@ public enum Presentation {
     }
     return 4
   }
+  public static func createdShort(_ s: Snapshot, now: Date = Date()) -> String {
+    guard let value = s.display.createdAt else { return "创建：未知" }
+    let date = Date(timeIntervalSince1970: value / 1000)
+    let calendar = Calendar.current
+    let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = calendar.isDate(date, inSameDayAs: now) ? "今天 HH:mm" : "M/d HH:mm"
+    return "创建：" + formatter.string(from: date)
+  }
+  public static func createdAbsolute(_ s: Snapshot, now: Date = Date()) -> String {
+    guard let value = s.display.createdAt else { return "创建时间未知（未从session header取得）" }
+    let date = Date(timeIntervalSince1970: value / 1000)
+    let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = "yyyy-MM-dd HH:mm:ss Z"
+    let elapsed = now.timeIntervalSince(date)
+    let relative: String
+    if elapsed < 0 { relative = "未来时间，待核对时钟" }
+    else if elapsed < 60 { relative = "刚刚" }
+    else if elapsed < 3600 { relative = "\(Int(elapsed / 60))分钟前" }
+    else if elapsed < 86400 { relative = "\(Int(elapsed / 3600))小时前" }
+    else { relative = "\(Int(min(elapsed / 86400, Double(Int.max - 1))))天前" }
+    let source = s.display.createdAtSource == "session-header" ? "session header" : "未知"
+    return "创建时间：" + formatter.string(from: date) + "（" + relative + "，来源：" + source + "）"
+  }
   public static func project(_ s: Snapshot) -> String {
     guard let cwd = s.display.cwd else { return "项目未提供" }
     let part = URL(fileURLWithPath: cwd).lastPathComponent

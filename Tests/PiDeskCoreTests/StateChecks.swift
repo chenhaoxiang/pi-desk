@@ -39,6 +39,17 @@ enum StateChecks {
         identity: fixture.identity, action: .abortCurrent, target: Target(owner: "pi"),
         now: now + 2000) == nil)
     precondition(store.totalUsage() == nil)
+    var created = fixture
+    created.display.createdAt = 0
+    created.display.createdAtSource = "session-header"
+    precondition(created.valid && Presentation.createdShort(created).contains("创建："))
+    created.display.createdAt = 7_258_118_400_001
+    precondition(!created.valid, "createdAt above safe business bound must be rejected")
+    created.display.createdAt = 7_258_118_400_000
+    created.display.createdAtSource = "unknown"
+    precondition(created.valid && Presentation.createdAbsolute(created).contains("来源：未知"))
+    created.display.createdAt = nil
+    precondition(created.valid && Presentation.createdAbsolute(created).contains("创建时间未知"))
     let raw: [String: Any] = [
       "panes": [
         [

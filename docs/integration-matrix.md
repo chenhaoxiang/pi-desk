@@ -32,7 +32,7 @@ verification_scope: 指定公开源码基线、隔离Pi1.4与Subagents0.80及Sch
 
 | 目标 | 已核实接口/事实 | Pi Desk设计及限制 |
 |---|---|---|
-| 生命周期 | `session_start/shutdown`、`agent_settled`、`model_select`、`tool_execution_start/end` | 需bridge；不从agent_end推断稳定结束，不用tool_call gate做观察 |
+| 生命周期 | `session_start/shutdown`、`agent_settled`、`model_select`、`tool_execution_start/end` | 需bridge；不从agent_end推断稳定结束，不用tool_call gate做观察；session header createdAt只投影标量，旧bridge缺失为unknown |
 | 直接消息 | `pi.sendUserMessage(content,{deliverAs:'steer'|'followUp'})`返回void | 需bridge；提交不等于模型接收/任务完成，不承诺native durable requestId |
 | 中止当前回合 | `ctx.abort():void` | 只对当前身份/epoch；读后续生命周期，不等同清队列/停计划/停所有孩子 |
 | 独立RPC宿主 | `get_state`、`get_session_stats`、`prompt`、`abort`等 | 只能复用已有owner宿主，不把所有TUI迁成RPC，不新开同session竞争writer |
@@ -50,6 +50,8 @@ verification_scope: 指定公开源码基线、隔离Pi1.4与Subagents0.80及Sch
 | 待输入 | `ui_prompt_start/end`；question producer提供`pi:input-required`内容无关生命周期 | 先提醒+跳转，generic custom不猜来源，不拦工具制造新等待，不自动代答 |
 | Guard/Gate/CI | 各owner只读状态/受限观察，可有head/freshness | 当前没有通用Pi Desk producer；先明示未接入，不读raw审计或把自报passed当权威 |
 | 现有服务控制台 | 用户显式配置的精确页面/受限API | 首版打开原管理页；不复制私有源码、机器地址、路径、scope或凭据进公开仓 |
+| 原会话定位 | Herdr精确pane；本轮补Terminal.app唯一TTY/TERM_SESSION_ID route，tmux仅在一次性client_tty可核对时转外层TTY | count非1/Automation拒绝/旧bridge缺route显示不可定位；不按cwd/名称猜，不对活跃session自动`pi --session`开第二writer |
+| Pi原生设置 | user `<agentDir>/settings.json`按Pi settings schema白名单读写；project `.pi/settings.json`只读来源提示 | PiSettingsStore兼容`.lock`、revision/hash CAS、owner-only backup、atomic rename/readback；auth/models/mcp/resources/proxy/trust/permissions/defaultModel/defaultTools排除 |
 
 ## 3. 原生模式差异
 
@@ -73,6 +75,6 @@ verification_scope: 指定公开源码基线、隔离Pi1.4与Subagents0.80及Sch
 
 `packages/desk-bridge/src/` 已实现上述native/UDS/Subagents路径。隔离faux-native组合实际加载 Pi1.4.0-fork.1 和 Subagents0.80.0-fork.1；Workflow后台孩子使用定向status返回的真实child runId，前台Fleet仍是display-only，不猜ID。stop仅回执stopping，收到owner terminal proof才报告终态；resume保留owner拒绝/资格。
 
-Schedule在线管理seam位于该owner的本地 `249a8fa8529c4ac988f1b5a4845426ce6aa2dd79`（含 `85c58cd`），原0.4.1-fork.4旧运行不因此获得能力。Intercom v1 outbox未改、不用于精确递送；管理已接入会话走本身native API。原生输入事件可用，question producer按其实际加载能力出现；未配置的Gate/CI来源明确unknown，Herdr实机跳转未验。详见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
+Schedule在线管理seam位于该owner的本地 `249a8fa8529c4ac988f1b5a4845426ce6aa2dd79`（含 `85c58cd`），原0.4.1-fork.4旧运行不因此获得能力。Intercom v1 outbox未改、不用于精确递送；管理已接入会话走本身native API。原生输入事件可用，question producer按其实际加载能力出现；Terminal Automation/Herdr实机跳转、VoiceOver和OS通知交付仍unknown。详见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
 
 公开参考：[Pi扩展声明](https://github.com/chenhaoxiang/pi/blob/aabcd6e46d5d6f80338f41c41554d1dea5e7eea7/packages/coding-agent/src/core/extensions/types.ts)、[Subagents公共合同](https://github.com/chenhaoxiang/pi-subagents/blob/7ff515bf5fa8873a678c444885903ba1eeb9f061/docs/extension-api.md)、[Intercom扩展合同](https://github.com/chenhaoxiang/pi-intercom/blob/8953e0689b05368295540692525d688ad57494bd/extension-api.ts)、[Schedule常驻合同](https://github.com/chenhaoxiang/pi-schedule-prompt/blob/6ac872f0b090fbcbc0708e7ceff91d7a5506a3b5/docs/durable-supervisor.md)、[Vista非授权边界](https://github.com/chenhaoxiang/pi-vista/blob/0295559fef2d00dddd1a706731c04329108d3ffd/docs/pi-continuum.md)。

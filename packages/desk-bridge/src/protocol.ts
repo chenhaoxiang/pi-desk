@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
+export const MAX_CREATED_AT_MS = 7_258_118_400_000; // 2200-01-01 UTC; a bounded UI date, not arbitrary IEEE doubles.
 export const ACTIONS = [
 	"session.message",
 	"session.abort-current",
@@ -94,7 +95,21 @@ export type Snapshot = {
 		model?: string;
 		effort?: string;
 		mode: string;
-		route?: { kind: string; sessionId: string; sessionFile?: string };
+		route?: {
+		kind: string;
+		sessionId: string;
+		sessionFile?: string;
+		cwd?: string;
+		ttyPath?: string;
+		terminalApp?: string;
+		terminalSessionId?: string;
+		tmuxPane?: string;
+		weztermPane?: string;
+		cmuxWorkspace?: string;
+		surface?: string;
+	};
+	createdAt?: number | null;
+	createdAtSource?: "session-header" | "unknown";
 	};
 	execution: string;
 	pending: boolean | null;
@@ -192,6 +207,19 @@ export function validate(v: unknown): asserts v is RecordV1 {
 			!object(s.display)
 		)
 			throw new Error("invalid-snapshot");
+		const display = s.display as Snapshot["display"];
+		if (display.createdAt !== undefined && display.createdAt !== null &&
+			(!Number.isSafeInteger(display.createdAt) || display.createdAt < 0 || display.createdAt > MAX_CREATED_AT_MS))
+			throw new Error("invalid-snapshot");
+		if (display.createdAtSource !== undefined && !["session-header", "unknown"].includes(String(display.createdAtSource)))
+			throw new Error("invalid-snapshot");
+		if (display.route !== undefined) {
+			const route = display.route;
+			if (!object(route) || !safeId(route.kind) || !safeId(route.sessionId)) throw new Error("invalid-snapshot");
+			if (route.ttyPath !== undefined && (typeof route.ttyPath !== "string" || !/^\/dev\/(?:ttys[0-9A-Za-z]+|pts\/[0-9]+)$/.test(route.ttyPath))) throw new Error("invalid-snapshot");
+			for (const value of [route.sessionFile, route.cwd, route.ttyPath, route.terminalApp, route.terminalSessionId, route.tmuxPane, route.weztermPane, route.cmuxWorkspace, route.surface])
+				if (value !== undefined && (typeof value !== "string" || Buffer.byteLength(value) > 512)) throw new Error("invalid-snapshot");
+		}
 		for (const [key, max] of [
 			["tools", 32],
 			["runs", 64],

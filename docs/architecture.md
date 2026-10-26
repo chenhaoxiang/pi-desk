@@ -162,6 +162,12 @@ manager自身NSWindowDelegate传递可见/occlusion/miniaturize/close及App hide
 
 性能原件使用只读proc_pid_rusage累计CPU时间/物理磁盘IO/RSS，30–60秒按统计可见/其他页/最小化/关窗分开；记录同range/origin/model与期间实际新增行，磁盘页缓存0读不解释为无工作或零开销。真实usage与进程原件只在本机tmp，公开文档不保存用户具体消费。
 
+### 原会话定位、创建时间与Pi设置边界
+
+bridge在session_start一次性从公开SessionManager header读取ISO timestamp，投影为有界`display.createdAt`毫秒和`createdAtSource`（`session-header`/`unknown`）；不读历史正文、不把observedAt/首次接入当创建时间，超界或非法时间拒绝。route只在当前主动接入context中捕获：Herdr route保存精确pane/sessionFile；Terminal.app route一次性读取本进程TTY（macOS `/dev/fd`不可靠时用固定`/usr/bin/tty`继承fd，最多500ms），保存严格ttyPath、TERM_SESSION_ID和可选tmux/WezTerm/cmux标量。tmux若不能一次性解析client_tty则保持不可用，不把内层pty冒称Terminal tab。UI只对唯一精确route聚焦，AppleScript先收集匹配tab，count非1不解最小化/不激活；Automation拒绝/route缺失显示unknown。绝不按cwd/名称挑第一个窗口，不对活跃会话自动`pi --session`启动第二writer；仅用户后续明确选择且源已确认不活跃时才可另行设计恢复。
+
+Pi设置首批只投影canonical user `<agentDir>/settings.json`的白名单字段：theme、defaultThinkingLevel、steeringMode、followUpMode、compaction.enabled/reserveTokens/keepRecentTokens、retry.enabled/maxRetries/baseDelayMs/maxAgentDelayMs、quietStartup、tuiMode、terminal.showImages/showTerminalProgress。SettingsManager公开schema作为字段依据；项目overlay只读显示来源，不把两层合并回写；auth/models/mcp/packages/resources/proxy/trust/permissions/defaultModel/defaultTools等排除。原文件读取/写入在utility queue，兼容Pi的atomic mkdir `settings.json.lock`（不清理未知锁，短事务）、owner-only revision backup、mtime/hash CAS、atomic temp+rename+fsync和readback；坏JSON、权限、锁、冲突、未知类型只读保全，未创建文件明确显示尚未创建。
+
 ## 8. 隐私、展示与诊断
 
 默认白名单只含身份、状态枚举、工具名、计数、模型/effort标签及必要本机显示信息。项目/分支/本地路由属于私有display字段，只留当前用户内存，不写公开fixture、持久日志或外发通知。默认不传prompt、代码、命令参数、tool result、思考、会话正文或凭据。

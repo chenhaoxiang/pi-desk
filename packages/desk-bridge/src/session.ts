@@ -31,10 +31,16 @@ import { BridgeTransport } from "./transport.ts";
 import { runtimePath, helperPath } from "./security.ts";
 import { projectMetadata } from "./metadata.ts";
 import { displayBudget } from "./budget.ts";
+import { captureTerminalRoute } from "./terminal-route.ts";
+import { MAX_CREATED_AT_MS } from "./protocol.ts";
 export type TransportLike = Pick<
 	BridgeTransport,
 	"start" | "publish" | "reply" | "close" | "dropped"
 >;
+export function sessionCreatedAt(timestamp: unknown): { createdAt: number | null; source: "session-header" | "unknown" } {
+	const value = typeof timestamp === "string" ? Date.parse(timestamp) : NaN;
+	return Number.isSafeInteger(value) && value >= 0 && value <= MAX_CREATED_AT_MS ? { createdAt: value, source: "session-header" } : { createdAt: null, source: "unknown" };
+}
 export type SessionOptions = {
 	transport?: (
 		hello: () => RecordV1,
@@ -77,6 +83,7 @@ export class DeskSession {
 	private observationDrops = 0;
 	private metadataLoaded = false;
 	private bridgeSource: string;
+	private terminalRoute?: NonNullable<Snapshot["display"]["route"]>;
 	constructor(
 		private pi: ExtensionAPI,
 		ctx: ExtensionContext,
@@ -98,6 +105,8 @@ export class DeskSession {
 		};
 		if (!safeId(identity.nativeSessionId)) throw Error("invalid-session-id");
 		this.usage = new AttachmentUsage(identity.runtimeEpoch, this.now());
+		const header = typeof ctx.sessionManager.getHeader === "function" ? ctx.sessionManager.getHeader() : null;
+		const created = sessionCreatedAt(header?.timestamp);
 		this.snapshot = {
 			identity,
 			seq: 0,
@@ -115,7 +124,10 @@ export class DeskSession {
 					"pi-desk-bridge": this.bridgeSource,
 				},
 			},
-			display: { name: "Pi", mode: ctx.mode },
+			display: {
+				name: "Pi", mode: ctx.mode,
+				createdAt: created.createdAt, createdAtSource: created.source,
+			},
 			execution: ctx.isIdle() ? "unknown" : "running",
 			pending: null,
 			childCoverage: "unknown",
@@ -226,6 +238,12 @@ export class DeskSession {
 		);
 		// Optional safe summary seam. This does not claim a real Gate/CI producer exists.
 		this.off.push(pi.events.on("pi-desk:evidence:v1", (r) => this.evidence(r)));
+		const sessionFile = typeof ctx.sessionManager.getSessionFile === "function" ? ctx.sessionManager.getSessionFile() : undefined;
+		void captureTerminalRoute(identity.nativeSessionId, sessionFile, ctx.cwd).then((route) => {
+			if (this.stopped) return;
+			if (route.kind !== "unavailable") this.terminalRoute = route;
+			this.changed();
+		});
 		try {
 			this.observe(ctx);
 			this.transport.start();
@@ -279,6 +297,7 @@ export class DeskSession {
 		if (this.stopped) return;
 		this.ctx = ctx;
 		this.snapshot.display = {
+			...this.snapshot.display,
 			name: this.snapshot.display.name,
 			cwd: text(ctx.cwd),
 			branch: this.snapshot.display.branch,
@@ -289,15 +308,7 @@ export class DeskSession {
 			effort: text(ctx.thinkingLevel ?? this.pi.getThinkingLevel(), 64),
 			mode: ctx.mode,
 		};
-		if (process.env.HERDR_PANE_ID) {
-			const sessionFile = ctx.sessionManager.getSessionFile();
-			if (typeof sessionFile === "string" && sessionFile.length <= 512)
-				this.snapshot.display.route = {
-					kind: "herdr",
-					sessionId: this.snapshot.identity.nativeSessionId,
-					sessionFile,
-				};
-		}
+		if (this.terminalRoute) this.snapshot.display.route = this.terminalRoute;
 		this.snapshot.pending = ctx.hasPendingMessages();
 		this.changed();
 	}

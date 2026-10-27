@@ -82,6 +82,7 @@ export class DeskSession {
 	private now: () => number;
 	private finalError = false;
 	private awaitingSettled = false;
+	private settledObserved = false;
 	private observationDrops = 0;
 	private metadataLoaded = false;
 	private bridgeSource: string;
@@ -312,6 +313,11 @@ export class DeskSession {
 			if (typeof idle !== "boolean" || typeof pending !== "boolean") return;
 			const previousIdle = this.snapshot.executionObservation?.idle;
 			this.snapshot.pending = pending;
+			if (this.settledObserved && !this.awaitingSettled && !idle) {
+				// A late/stale false scalar cannot reopen a turn after the
+				// lifecycle's terminal boundary. Keep the final proof/state.
+				return;
+			}
 			if (this.awaitingSettled && idle) {
 				// agent_start is authoritative until agent_settled. Some Pi
 				// versions expose a stale idle scalar during that event turn;
@@ -322,7 +328,7 @@ export class DeskSession {
 			}
 			this.snapshot.executionObservation = { version: 1, observedAt, source: "ctx.isIdle", idle };
 			if (!idle) {
-				if (previousIdle === true) this.finalError = false;
+				if (previousIdle === true && !this.settledObserved) this.finalError = false;
 				this.snapshot.execution = "running";
 			} else {
 				// Idle is native evidence that no tool remains in this Pi run.
@@ -407,6 +413,7 @@ export class DeskSession {
 		this.observe(ctx);
 		if (kind === "agent_start") {
 			this.finalError = false;
+			this.settledObserved = false;
 			this.awaitingSettled = true;
 			this.snapshot.execution = "running";
 			this.snapshot.executionObservation = { version: 1, observedAt: this.now(), source: "lifecycle", idle: false };
@@ -414,6 +421,7 @@ export class DeskSession {
 		// agent_end is deliberately not a completion boundary.
 		if (kind === "agent_settled") {
 			this.awaitingSettled = false;
+			this.settledObserved = true;
 			this.snapshot.execution = aborted ? "aborted" : this.finalError ? "failed" : this.hasActiveChildren() ? "waiting-children" : "settled";
 			this.snapshot.executionObservation = { version: 1, observedAt: this.now(), source: "lifecycle", idle: true };
 			this.tools.clear(); this.snapshot.tools = [];

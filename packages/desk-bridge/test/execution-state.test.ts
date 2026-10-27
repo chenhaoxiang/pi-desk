@@ -55,6 +55,8 @@ test("agent_start lifecycle evidence wins over a stale idle scalar until agent_s
     f.session.lifecycle("agent_settled", f.ctx);
     assert.equal(f.snapshot().execution, "settled");
     assert.equal(f.snapshot().executionObservation?.idle, true);
+    f.state({ idle: false });
+    assert.equal(f.snapshot().execution, "settled", "a late false scalar cannot reopen a settled lifecycle");
   } finally { f.session.close(); }
 });
 

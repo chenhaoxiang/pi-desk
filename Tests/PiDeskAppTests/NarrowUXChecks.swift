@@ -44,6 +44,9 @@ private final class FakeLedger: UsageLedgerClient {
     defer { model.stop() }
     await spin { model.notificationStatus.contains("尚未授权") }
     precondition(fake.requested == 0 && fake.posts == 0, "startup must not request OS consent")
+    precondition(TerminalRouteActivator.acceptsTTY("/dev/ttys035", terminalRunning: true), "strict peer TTY is sufficient without a Terminal ancestor")
+    precondition(!TerminalRouteActivator.acceptsTTY("/dev/ttys035", terminalRunning: false), "do not auto-launch Terminal")
+    precondition(!TerminalRouteActivator.acceptsTTY(nil, terminalRunning: true) && !TerminalRouteActivator.acceptsTTY("/dev/random", terminalRunning: true), "missing/invalid TTY stays unavailable")
     let requestsBefore = model.store.requests.count
     model.page = "Token"
     precondition(!model.managerIsVisible && model.usageRefreshInterval == 60, "no manager cannot retain the Token page's fast interest")

@@ -5,6 +5,11 @@ import Foundation
 enum TerminalRouteActivator {
   enum Error: Swift.Error { case unavailable, noMatch, ambiguous, identityMismatch }
   private static let queue = DispatchQueue(label: "pi-desk.terminal-permission", qos: .utility)
+  static func isTerminalRunning() -> Bool { !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Terminal").isEmpty }
+  static func acceptsTTY(_ path: String?, terminalRunning: Bool) -> Bool {
+    guard terminalRunning, let path else { return false }
+    return path.range(of: "^/dev/(ttys[A-Za-z0-9]+|pts/[0-9]+)$", options: .regularExpression) != nil
+  }
   static func permissionStatus(requestConsent: Bool = false) async -> String {
     await withCheckedContinuation { continuation in
       queue.async {

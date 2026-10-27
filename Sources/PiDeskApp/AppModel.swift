@@ -273,11 +273,11 @@ struct DeskSettings: Codable {
         guard let self, let current = self.store.sessions[identity.sessionKey], current.connectionId == connection, current.snapshot.identity == identity, current.connection == .connected else { return }
         guard let info else { self.routeNotes[identity] = "无法核验连接进程或出生时间；未采用旧PID"; return }
         guard let tty = info.ttyPath else { self.routeNotes[identity] = "当前Pi进程没有controlling TTY；可能是非终端宿主"; return }
-        guard info.terminalPID != nil else { self.routeNotes[identity] = "已核验TTY，但没有受限Terminal.app祖先；此宿主暂不可定位"; return }
+        guard TerminalRouteActivator.acceptsTTY(tty, terminalRunning: TerminalRouteActivator.isTerminalRunning()) else { self.routeNotes[identity] = "已核验TTY，但Terminal.app未运行；不会自动启动终端"; return }
         let route = Route(kind: "terminal", sessionId: identity.nativeSessionId, cwd: current.snapshot.display.cwd, ttyPath: tty, terminalApp: "com.apple.Terminal")
         self.peerRoutes[identity] = PeerRouteBinding(connection: connection, process: info, route: route)
         _ = self.store.updateRoute(route, identity: identity, connection: connection)
-        self.routeNotes[identity] = "已从当前连接核验Terminal TTY（兼容旧桥接）"
+        self.routeNotes[identity] = info.terminalPID == nil ? "已核验TTY；Terminal.app祖先不可从进程树确认，focus时用唯一TTY回读" : "已从当前连接核验Terminal TTY（兼容旧桥接）"
       }
     }
   }
@@ -571,7 +571,7 @@ struct DeskSettings: Codable {
   func canOpenOriginal(identity: Identity) -> Bool {
     guard let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity, session.connection == .connected,
       let route = session.snapshot.display.route, route.sessionId == identity.nativeSessionId else { return false }
-    if route.kind == "terminal" { return route.terminalApp == "com.apple.Terminal" && route.ttyPath != nil }
+    if route.kind == "terminal" { return route.ttyPath != nil && (route.terminalApp == nil || route.terminalApp == "com.apple.Terminal") }
     return route.kind == "herdr" && route.sessionFile != nil && !settings.herdrExecutable.isEmpty
   }
   func originalRouteLabel(identity: Identity) -> String {
@@ -586,7 +586,7 @@ struct DeskSettings: Codable {
     else { actionNote = "没有精确的当前终端/Herdr路由；未打开同名对象或第二个Pi"; return }
     let currentIdentity = s.snapshot.identity
     if route.kind == "terminal" {
-      guard route.terminalApp == "com.apple.Terminal", let ttyPath = route.ttyPath else {
+      guard (route.terminalApp == nil || route.terminalApp == "com.apple.Terminal"), let ttyPath = route.ttyPath, TerminalRouteActivator.acceptsTTY(ttyPath, terminalRunning: TerminalRouteActivator.isTerminalRunning()) else {
         actionNote = "当前会话没有可验证的Terminal.app TTY路由；不会打开新终端或恢复第二个Pi"
         return
       }

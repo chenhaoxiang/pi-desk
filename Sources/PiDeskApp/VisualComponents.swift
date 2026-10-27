@@ -75,26 +75,36 @@ struct SessionCard: View {
             .system(size: island ? 15 : 14, weight: .semibold)
           ).lineLimit(island ? 1 : 2).fixedSize(horizontal: false, vertical: true).help(session.snapshot.display.name)
           Spacer(minLength: 0)
-          HStack(spacing: 6) {
-            StatusPill(status: Presentation.connectionStatus(session))
-            StatusPill(status: Presentation.status(session))
-          }
-        }
-        Text(metadata + " · " + Presentation.createdShort(session.snapshot)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+          StatusPill(status: Presentation.status(session))
+        }.frame(height: island ? 24 : 38, alignment: .top)
+        HStack(spacing: 4) {
+          Circle().fill(Presentation.connectionStatus(session).tone.color).frame(width: 5, height: 5)
+          Text(Presentation.connection(session.connection))
+          Text("·").foregroundStyle(.tertiary)
+          Text(metadata)
+          Text("·").foregroundStyle(.tertiary)
+          Text(Presentation.createdShort(session.snapshot))
+        }.font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+          .frame(height: 16, alignment: .leading)
         HStack(spacing: 7) {
           Image(
             systemName: session.snapshot.tools.isEmpty ? "circle.dotted" : "wrench.and.screwdriver"
           ).foregroundStyle(Presentation.status(session).tone.color)
           Text(Presentation.activity(session)).lineLimit(island ? 1 : 2)
         }.font(.system(size: 12)).foregroundStyle(.primary.opacity(0.86))
-        if !session.snapshot.runs.isEmpty {
-          Label(
-            session.connection != .connected
-              ? "子任务状态待更新"
-              : session.snapshot.runs.contains(where: { $0.state == "running" })
-                ? "有已报告的子任务正在运行" : "子任务状态已更新", systemImage: "point.3.connected.trianglepath.dotted"
-          ).font(.system(size: 10)).foregroundStyle(.secondary)
-        }
+          .frame(height: island ? 17 : 34, alignment: .top)
+        Group {
+          if !session.snapshot.runs.isEmpty {
+            Label(
+              session.connection != .connected
+                ? "子任务状态待更新"
+                : session.snapshot.runs.contains(where: { $0.state == "running" })
+                  ? "有已报告的子任务正在运行" : "子任务状态已更新", systemImage: "point.3.connected.trianglepath.dotted"
+            ).font(.system(size: 10)).foregroundStyle(.secondary)
+          } else {
+            Color.clear
+          }
+        }.frame(height: 14, alignment: .leading)
         if island {
           HStack(spacing: 8) {
             Button("查看详情", action: onSelect).buttonStyle(.bordered)
@@ -110,11 +120,15 @@ struct SessionCard: View {
             }
           }.font(.system(size: 11))
         }
-        if !island && session.snapshot.childCoverage != "owner-reported" {
-          Text("子任务信息待核 · " + Presentation.usage(session.snapshot).coverage).font(.system(size: 10))
-            .foregroundStyle(.secondary)
-        }
-      }
+        Group {
+          if !island && session.snapshot.childCoverage != "owner-reported" {
+            Text("子任务信息待核 · " + Presentation.usage(session.snapshot).coverage).font(.system(size: 10))
+              .foregroundStyle(.secondary)
+          } else {
+            Color.clear
+          }
+        }.frame(height: island ? 0 : 14, alignment: .leading)
+      }.frame(minHeight: island ? 118 : 132, alignment: .top)
     }.padding(island ? 13 : 12).background(
       selected ? Color.accentColor.opacity(0.10) : Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 14)
@@ -127,9 +141,7 @@ struct SessionCard: View {
   }
   var metadata: String {
     let s = session.snapshot
-    let project = [Presentation.project(s), s.display.branch, Presentation.shortModel(s)].compactMap { $0 }
-      .filter { !$0.isEmpty }.joined(separator: " · ")
-    return [Presentation.connection(session.connection), Presentation.status(session).title, project]
+    return [Presentation.project(s), s.display.branch, Presentation.shortModel(s)].compactMap { $0 }
       .filter { !$0.isEmpty }.joined(separator: " · ")
   }
 }

@@ -6,6 +6,7 @@ public struct SessionView: Sendable {
   public var connectionId: UUID
   public var connection: ConnectionState
   public var receivedAt: Double
+  public var firstSeenAt: Double
   public var coalesced: Int = 0
 }
 public struct PendingAction: Identifiable, Sendable {
@@ -58,7 +59,7 @@ public struct SessionStore {
       }
       sessions[key] = SessionView(
         snapshot: snapshot, connectionId: connection, connection: .connected, receivedAt: now,
-        coalesced: coalesced)
+        firstSeenAt: sessions[key]?.firstSeenAt ?? now, coalesced: coalesced)
       return true
     }
     guard let current = sessions[key], current.connectionId == connection,

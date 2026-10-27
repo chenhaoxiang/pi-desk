@@ -128,6 +128,8 @@ struct DeskSettings: Codable {
     if now.timeIntervalSince(lastUsageRefresh) >= usageRefreshInterval { refreshUsage() }
   }
   private var ownerQueryTimes: [String: Date] = [:]
+  private var sessionOrder: [String: Int] = [:]
+  private var nextSessionOrder = 0
   let isPreview: Bool
   var showManager: () -> Void = {}
   var showIsland: () -> Void = {}
@@ -150,7 +152,7 @@ struct DeskSettings: Codable {
     let index = selected.flatMap { key in candidates.firstIndex { $0.snapshot.identity.sessionKey == key } }.map { ($0 + 1) % candidates.count } ?? 0
     page = "会话"; select(candidates[index].snapshot.identity, refreshOwner: false); showManager()
   }
-  func select(_ identity: Identity, refreshOwner: Bool = true) {
+  func select(_ identity: Identity, refreshOwner: Bool = false) {
     guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
     if !visibleSessions.contains(where: { $0.snapshot.identity == identity }) {
       search = ""
@@ -284,11 +286,24 @@ struct DeskSettings: Codable {
   private var timer: Timer?
   private let settingsURL: URL
   let socketPath: String
+  private func rememberSessionOrder(_ identity: Identity) {
+    guard sessionOrder[identity.sessionKey] == nil else { return }
+    sessionOrder[identity.sessionKey] = nextSessionOrder
+    nextSessionOrder += 1
+  }
   var sessions: [SessionView] {
     store.sessions.values.sorted {
-      let a = Presentation.priority($0)
-      let b = Presentation.priority($1)
-      return a == b ? $0.snapshot.display.name < $1.snapshot.display.name : a < b
+      let a = sessionOrder[$0.snapshot.identity.sessionKey] ?? Int.max
+      let b = sessionOrder[$1.snapshot.identity.sessionKey] ?? Int.max
+      if a != b { return a < b }
+      let createdA = $0.snapshot.display.createdAt ?? Double.greatestFiniteMagnitude
+      let createdB = $1.snapshot.display.createdAt ?? Double.greatestFiniteMagnitude
+      if createdA != createdB { return createdA < createdB }
+      let nameA = $0.snapshot.display.name
+      let nameB = $1.snapshot.display.name
+      return nameA == nameB
+        ? $0.snapshot.identity.sessionKey < $1.snapshot.identity.sessionKey
+        : nameA < nameB
     }
   }
   var current: SessionView? { selected.flatMap { key in visibleSessions.first { $0.snapshot.identity.sessionKey == key } } }
@@ -428,6 +443,7 @@ struct DeskSettings: Codable {
             record, connection: connection,
             now: preview.connections?[record.identity.nativeSessionId] == "stale"
               ? now - 20000 : now)
+          rememberSessionOrder(record.identity)
           if preview.connections?[record.identity.nativeSessionId] == "disconnected" {
             store.disconnect(connection)
           }
@@ -439,6 +455,7 @@ struct DeskSettings: Codable {
             snap.identity.runtimeEpoch = "synthetic-epoch-\(index)"
             snap.display.name = "合成项目 \(index) · 长会话名称的搜索与键盘导航检查"
             _ = store.apply(WireRecord(kind: "hello", identity: snap.identity, snapshot: snap), connection: UUID(), now: Date().timeIntervalSince1970 * 1000)
+            rememberSessionOrder(snap.identity)
           }
         }
         store.tick(now: Date().timeIntervalSince1970 * 1000)
@@ -491,11 +508,13 @@ struct DeskSettings: Codable {
   private func consume(_ event: SocketServer.Event) {
     switch event {
     case .record(let record, let connection):
+      let wasKnown = store.sessions[record.identity.sessionKey] != nil
       guard store.apply(record, connection: connection, now: Date().timeIntervalSince1970 * 1000)
       else {
         if record.kind == "hello" { server.close(connection) }
         return
       }
+      if !wasKnown { rememberSessionOrder(record.identity) }
       peerRoutes = peerRoutes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
       routeNotes = routeNotes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
       if let session = store.sessions[record.identity.sessionKey] { resolveOriginalRoute(session) }

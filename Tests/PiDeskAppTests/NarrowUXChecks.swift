@@ -93,7 +93,17 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     var legacy = snapshot; legacy.identity.nativeSessionId = "legacy-active-unknown"; legacy.executionObservation = nil
     precondition(stateStore.apply(WireRecord(kind: "hello", identity: legacy.identity, snapshot: legacy), connection: UUID(), now: legacy.observedAt))
     model.store = stateStore; model.search = ""; model.sessionFilter = "在线"
+    let orderBeforeStateChange = model.sessions.map { $0.snapshot.identity.sessionKey }
+    var settledCopy = stateStore
+    var settledSnapshot = snapshot
+    settledSnapshot.seq += 1; settledSnapshot.execution = .settled; settledSnapshot.executionObservation?.idle = true
+    precondition(settledCopy.apply(WireRecord(kind: "snapshot", identity: settledSnapshot.identity, snapshot: settledSnapshot), connection: liveConnection, now: settledSnapshot.observedAt))
+    model.store = settledCopy
+    precondition(model.sessions.map { $0.snapshot.identity.sessionKey } == orderBeforeStateChange, "execution priority changes must not reorder the management list")
+    model.store = stateStore
     precondition(model.visibleSessions.count == 3 && model.connectedCount == 3 && model.activeCount == 1 && model.unknownExecutionCount == 1, "online includes idle/legacy, active is a lower bound and old busy is explicitly pending")
+    model.select(snapshot.identity)
+    precondition(model.sectionRefreshRequestedAt.isEmpty, "ordinary row selection must not query owner status")
     model.sessionFilter = "运行中"
     precondition(model.visibleSessions.count == model.activeCount && model.visibleSessions.first?.snapshot.identity == snapshot.identity)
     snapshot.seq += 1

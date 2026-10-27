@@ -245,6 +245,7 @@ struct SessionList: View {
               }
           }
         }.padding(.horizontal, 12).padding(.bottom, 16)
+          .transaction { transaction in transaction.animation = nil }
       }
     }.background(Color(nsColor: .windowBackgroundColor))
       .onAppear { if model.searchFocusRequest > 0 { searchFocused = true; model.searchFocusRequest = 0 } }

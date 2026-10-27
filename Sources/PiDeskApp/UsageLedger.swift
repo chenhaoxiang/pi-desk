@@ -90,10 +90,15 @@ public struct UsageViewState: Codable, Equatable {
   public var dismissedKeyHashes: [String] = []
 
   public init() {}
+  public var migratedNavigation: UsageViewState {
+    var result = self
+    if !["会话", "Token", "重要事项", "设置"].contains(result.page) { result.page = "会话" }
+    return result
+  }
   public var valid: Bool {
     func hash(_ value: String) -> Bool { value.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil }
     let validDates = [customStartMS, customEndMS].allSatisfy { $0 == nil || (946684800000...7258118400000).contains($0!) }
-    return version == Self.currentVersion && ["会话", "子任务", "计划", "Token", "重要事项", "设置"].contains(page)
+    return version == Self.currentVersion && !page.isEmpty && page.utf8.count <= 64 && !page.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
       && ["在线", "全部", "运行中", "需输入", "断连"].contains(sessionFilter)
       && UsagePreset(rawValue: usagePreset) != nil && UsageMetric(rawValue: usageMetric) != nil && UsageOrigin(rawValue: usageOrigin) != nil
       && (usageModel.isEmpty || usageModel.range(of: "^[A-Za-z0-9._:/+@ -]{1,128}$", options: .regularExpression) != nil)
@@ -405,8 +410,9 @@ public final class UsageLedger: UsageLedgerClient {
     queue.async { [weak self] in
       guard let self else { DispatchQueue.main.async { completion(nil, nil) }; return }
       do {
-        let value = try self.openDatabase().loadViewState()
-        self.persistedViewState = value
+        let stored = try self.openDatabase().loadViewState()
+        self.persistedViewState = stored
+        let value = stored?.migratedNavigation
         DispatchQueue.main.async { completion(value, nil) }
       } catch { DispatchQueue.main.async { completion(nil, "视图偏好未恢复；旧数据已保留，本次使用默认视图。") } }
     }

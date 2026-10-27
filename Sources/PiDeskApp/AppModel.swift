@@ -45,6 +45,7 @@ struct DeskSettings: Codable {
   @Published var muted = false
   @Published var drafts: [Identity: String] = [:]
   @Published var search = ""
+  @Published var searchFocusRequest = 0
   @Published var sessionFilter = "在线"
   @Published var hiddenSessions: Set<String> = []
   @Published var usagePreset: UsagePreset = .today
@@ -57,6 +58,8 @@ struct DeskSettings: Codable {
   @Published var usageLoading = false
   @Published var notificationStatus = "尚未检查系统通知状态"
   @Published var requestingNotifications = false
+  @Published var notificationsAuthorized = false
+  @Published var sectionRefreshRequestedAt: [Identity: Date] = [:]
   @Published var piSettingsSnapshot: PiSettingsSnapshot?
   @Published var piSettingsSelections: [String: String] = [:]
   @Published var piSettingsLoading = false
@@ -134,7 +137,20 @@ struct DeskSettings: Codable {
     }
     drafts[identity] = value
   }
-  func select(_ identity: Identity) {
+  func navigate(to page: String) {
+    self.page = ["会话", "Token", "重要事项", "设置"].contains(page) ? page : "会话"
+    showManager(); persistViewState()
+  }
+  func focusSessionSearch() { navigate(to: "会话"); searchFocusRequest += 1 }
+  func nextAttentionSession() {
+    let candidates = sessions.filter { session in
+      session.connection == .connected && (session.snapshot.execution == .failed || session.snapshot.inputs.contains { !isRead($0, session: session.snapshot.identity) })
+    }
+    guard !candidates.isEmpty else { actionNote = "当前没有未读需关注会话"; return }
+    let index = selected.flatMap { key in candidates.firstIndex { $0.snapshot.identity.sessionKey == key } }.map { ($0 + 1) % candidates.count } ?? 0
+    page = "会话"; select(candidates[index].snapshot.identity, refreshOwner: false); showManager()
+  }
+  func select(_ identity: Identity, refreshOwner: Bool = true) {
     guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
     if !visibleSessions.contains(where: { $0.snapshot.identity == identity }) {
       search = ""
@@ -145,7 +161,7 @@ struct DeskSettings: Codable {
     selectionPinned = true
     pendingSelectionHash = UsageViewStateKey.hash(identity.sessionKey)
     persistViewState()
-    refresh(identity: identity)
+    if refreshOwner { refresh(identity: identity) }
   }
   private func preferredSessionKey() -> String? {
     if let pendingSelectionHash,
@@ -167,13 +183,14 @@ struct DeskSettings: Codable {
     hiddenSessions.insert(identity.sessionKey)
   }
   private func applyViewState(_ state: UsageViewState?) {
-    guard let state, state.valid else { return }
+    guard let stored = state, stored.valid else { return }
+    let state = stored.migratedNavigation
     restoringViewState = true
     defer { restoringViewState = false }
     if let value = UsagePreset(rawValue: state.usagePreset) { usagePreset = value }
     if let value = UsageMetric(rawValue: state.usageMetric) { usageMetric = value }
     if let value = UsageOrigin(rawValue: state.usageOrigin) { usageOrigin = value }
-    if ["会话", "子任务", "计划", "Token", "重要事项", "设置"].contains(state.page) { page = state.page }
+    page = state.page
     if ["在线", "全部", "运行中", "需输入", "断连"].contains(state.sessionFilter) { sessionFilter = state.sessionFilter }
     usageModel = state.usageModel
     if let start = state.customStartMS { usageCustomStart = Date(timeIntervalSince1970: Double(start) / 1000) }
@@ -217,7 +234,53 @@ struct DeskSettings: Codable {
     if !ledger.flushViewState(currentViewState()) { actionNote = "视图状态退出写入未确认；本次状态保留在内存，旧SQLite数据未覆盖" }
   }
   private var notified: Set<String> = []
+  private struct PeerRouteBinding {
+    let connection: UUID
+    let process: PeerProcessInfo
+    let route: Route
+  }
+  @Published private(set) var routeNotes: [Identity: String] = [:]
+  private var peerRoutes: [Identity: PeerRouteBinding] = [:]
+  private var routeAttempts: [UUID: Identity] = [:]
   private var server: SocketServer!
+  func checkOriginalRoutePermission(identity: Identity, requestConsent: Bool = false) {
+    Task {
+      let status = await TerminalRouteActivator.permissionStatus(requestConsent: requestConsent)
+      guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
+      routeNotes[identity] = status
+    }
+  }
+  func refreshOriginalRoute(identity: Identity) {
+    guard let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity else { return }
+    routeAttempts.removeValue(forKey: session.connectionId)
+    peerRoutes.removeValue(forKey: identity)
+    resolveOriginalRoute(session)
+  }
+  private func resolveOriginalRoute(_ session: SessionView) {
+    let identity = session.snapshot.identity, connection = session.connectionId
+    guard !isPreview, session.connection == .connected else { routeNotes[identity] = "会话已断开；不会聚焦最后一次旧路由"; return }
+    if let binding = peerRoutes[identity], binding.connection == connection {
+      _ = store.updateRoute(binding.route, identity: identity, connection: connection)
+      return
+    }
+    guard routeAttempts[connection] != identity else { return }
+    if let route = session.snapshot.display.route, route.kind == "terminal", route.terminalApp == "com.apple.Terminal", route.ttyPath != nil { routeNotes[identity] = "桥接已提供精确Terminal TTY"; return }
+    if session.snapshot.display.route?.kind == "herdr" && !settings.herdrExecutable.isEmpty { return }
+    routeAttempts[connection] = identity
+    routeNotes[identity] = "正在从当前连接解析终端；无需重载Pi"
+    server.peerProcessInfo(connection) { [weak self] info in
+      Task { @MainActor in
+        guard let self, let current = self.store.sessions[identity.sessionKey], current.connectionId == connection, current.snapshot.identity == identity, current.connection == .connected else { return }
+        guard let info else { self.routeNotes[identity] = "无法核验连接进程或出生时间；未采用旧PID"; return }
+        guard let tty = info.ttyPath else { self.routeNotes[identity] = "当前Pi进程没有controlling TTY；可能是非终端宿主"; return }
+        guard info.terminalPID != nil else { self.routeNotes[identity] = "已核验TTY，但没有受限Terminal.app祖先；此宿主暂不可定位"; return }
+        let route = Route(kind: "terminal", sessionId: identity.nativeSessionId, cwd: current.snapshot.display.cwd, ttyPath: tty, terminalApp: "com.apple.Terminal")
+        self.peerRoutes[identity] = PeerRouteBinding(connection: connection, process: info, route: route)
+        _ = self.store.updateRoute(route, identity: identity, connection: connection)
+        self.routeNotes[identity] = "已从当前连接核验Terminal TTY（兼容旧桥接）"
+      }
+    }
+  }
   private var timer: Timer?
   private let settingsURL: URL
   let socketPath: String
@@ -283,6 +346,7 @@ struct DeskSettings: Codable {
     }
     notificationClient.settings { status in
       Task { @MainActor in
+        self.notificationsAuthorized = [.authorized, .provisional, .ephemeral].contains(status)
         switch status {
         case .authorized, .provisional, .ephemeral: self.notificationStatus = "系统通知已授权；发送失败仍保留原入口兜底"
         case .denied: self.notificationStatus = "系统通知已拒绝；Pi原通知和自动化不受影响"
@@ -308,6 +372,12 @@ struct DeskSettings: Codable {
         case .failure: self.notificationStatus = "开启系统通知失败；请稍后重试。Pi原通知和自动化不受影响"
         }
       }
+    }
+  }
+  func sendTestNotification() {
+    guard !isPreview, notificationsAuthorized, let notificationClient else { return }
+    notificationClient.post(id: "pi-desk-synthetic-test-" + UUID().uuidString, title: "Pi Desk 测试通知", body: "这是一条合成测试通知，不会触发Pi模型、工具或原问题操作。") { [weak self] error in
+      Task { @MainActor in self?.notificationStatus = error == nil ? "测试通知已由系统受理；不等于横幅已显示，请以实际可见结果为准" : "测试通知发送失败；原Pi执行和通知兜底不变" }
     }
   }
   func sendNotification(for input: InputNotice, session: Identity) {
@@ -431,10 +501,16 @@ struct DeskSettings: Codable {
         if record.kind == "hello" { server.close(connection) }
         return
       }
+      peerRoutes = peerRoutes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
+      routeNotes = routeNotes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
+      if let session = store.sessions[record.identity.sessionKey] { resolveOriginalRoute(session) }
       restoreHidden(record.identity, connection: store.sessions[record.identity.sessionKey]?.connection ?? .connected)
       selectPreferredSession()
       notify()
     case .disconnected(let id):
+      peerRoutes = peerRoutes.filter { $0.value.connection != id }
+      routeAttempts.removeValue(forKey: id)
+      for session in sessions where session.connectionId == id { routeNotes[session.snapshot.identity] = "会话已断开；当前连接定位已失效" }
       store.disconnect(id)
       for session in sessions where session.connectionId == id { restoreHidden(session.snapshot.identity, connection: session.connection) }
       selectPreferredSession()
@@ -455,6 +531,8 @@ struct DeskSettings: Codable {
     guard now.timeIntervalSince(ownerQueryTimes[key] ?? .distantPast) >= (usage ? 5 : 2) else { return }
     if ownerQueryTimes.count >= 128 { ownerQueryTimes.removeAll(keepingCapacity: true) }
     ownerQueryTimes[key] = now
+    sectionRefreshRequestedAt[s.snapshot.identity] = now
+    if sectionRefreshRequestedAt.count > 64 { sectionRefreshRequestedAt = [s.snapshot.identity: now] }
     server.send(
       WireRecord(
         kind: "query", identity: s.snapshot.identity, requestId: UUID().uuidString,
@@ -514,10 +592,32 @@ struct DeskSettings: Codable {
       }
       Task {
         do {
+          guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
+          if let binding = peerRoutes[currentIdentity] {
+            let info: PeerProcessInfo? = await withCheckedContinuation { continuation in server.peerProcessInfo(s.connectionId) { continuation.resume(returning: $0) } }
+            guard let info, info == binding.process else { throw NavigationError.unavailable }
+          }
+          let permission = await TerminalRouteActivator.permissionStatus()
+          guard permission == "终端Automation已授权" else {
+            routeNotes[currentIdentity] = permission
+            actionNote = "请在定位诊断主动请求终端权限；是否允许由系统提示中的用户决定"
+            return
+          }
           let result = try await TerminalRouteActivator.focus(ttyPath: ttyPath)
           guard store.sessions[currentIdentity.sessionKey]?.snapshot.identity == currentIdentity else { throw NavigationError.unavailable }
           actionNote = "已定位准确Terminal tab（\(result)）；未启动新的Pi writer"
-        } catch { actionNote = "无法定位准确Terminal tab；请回到原入口，不会自动执行pi --session" }
+        } catch {
+          let permission = await TerminalRouteActivator.permissionStatus()
+          if let routeError = error as? TerminalRouteActivator.Error {
+            switch routeError {
+            case .noMatch: routeNotes[currentIdentity] = "Terminal中没有精确TTY匹配（0匹配）；未改变其他窗口"
+            case .ambiguous: routeNotes[currentIdentity] = "Terminal中出现多个TTY匹配；未选择第一个窗口"
+            case .identityMismatch: routeNotes[currentIdentity] = "终端选中TTY回读不一致；未宣称定位成功"
+            case .unavailable: routeNotes[currentIdentity] = "TTY或当前连接不可核验；未启动替代Pi"
+            }
+          } else { routeNotes[currentIdentity] = permission }
+          actionNote = "无法定位准确Terminal tab；请检查定位诊断，不会自动执行pi --session"
+        }
       }
       return
     }

@@ -69,6 +69,9 @@ public struct Route: Codable, Equatable, Sendable {
   public var weztermPane: String? = nil
   public var cmuxWorkspace: String? = nil
   public var surface: String? = nil
+  public init(kind: String, sessionId: String, sessionFile: String? = nil, cwd: String? = nil, ttyPath: String? = nil, terminalApp: String? = nil) {
+    self.kind = kind; self.sessionId = sessionId; self.sessionFile = sessionFile; self.cwd = cwd; self.ttyPath = ttyPath; self.terminalApp = terminalApp
+  }
   public var valid: Bool {
     func safe(_ value: String) -> Bool { value.range(of: "^[A-Za-z0-9._-]{1,128}$", options: .regularExpression) != nil }
     let values = [sessionFile, cwd, ttyPath, terminalApp, terminalSessionId, tmuxPane, weztermPane, cmuxWorkspace, surface]

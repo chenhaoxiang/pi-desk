@@ -2,7 +2,28 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { routeFromMetadata } from "../src/terminal-route.ts";
 import { validate } from "../src/protocol.ts";
-import { sessionCreatedAt } from "../src/session.ts";
+import { DeskSession, sessionCreatedAt } from "../src/session.ts";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { RecordV1 } from "../src/protocol.ts";
+
+test("startup asynchronously publishes terminal route without a later turn or observe event", async () => {
+  const records: RecordV1[] = [];
+  const ctx = { mode: "rpc", cwd: "/fixture", sessionManager: { getSessionId: () => "startup-session", getHeader: () => null, getSessionFile: () => undefined }, isIdle: () => true, hasPendingMessages: () => false } as unknown as ExtensionContext;
+  const pi = { events: { on: () => () => {}, emit() {} }, getSessionName: () => "fixture" } as unknown as ExtensionAPI;
+  let resolveRoute!: (value: any) => void;
+  const session = new DeskSession(pi, ctx, {
+    usageRoot: false,
+    captureTerminalRoute: () => new Promise(resolve => { resolveRoute = resolve; }),
+    transport: () => ({ start() {}, publish: record => records.push(structuredClone(record)), reply() {}, close() {}, dropped: 0 }),
+  });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(records.at(-1)?.snapshot?.display.route, undefined);
+    resolveRoute({ kind: "terminal", sessionId: "startup-session", terminalApp: "com.apple.Terminal", ttyPath: "/dev/ttys034" });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(records.at(-1)?.snapshot?.display.route?.ttyPath, "/dev/ttys034");
+  } finally { session.close(); }
+});
 
 test("terminal route keeps exact tty/session metadata and never falls back to cwd", () => {
   const route = routeFromMetadata("session-a", "/private/session-a.jsonl", "/private/project", {

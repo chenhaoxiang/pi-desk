@@ -18,6 +18,9 @@ public enum Presentation {
     if !session.snapshot.inputs.isEmpty {
       return HumanStatus(title: "需要输入", symbol: "questionmark.circle.fill", tone: .amber)
     }
+    if session.snapshot.pending == true && [.settled, .unknown].contains(session.snapshot.execution) {
+      return HumanStatus(title: "等待后续推进", symbol: "clock", tone: .blue)
+    }
     switch session.snapshot.execution {
     case .starting: return HumanStatus(title: "正在启动", symbol: "circle.dotted", tone: .blue)
     case .running: return HumanStatus(title: "正在运行", symbol: "play.circle.fill", tone: .green)
@@ -39,6 +42,7 @@ public enum Presentation {
     if s.connection == .connected && !s.snapshot.inputs.isEmpty { return 0 }
     if s.snapshot.execution == .failed { return 1 }
     if s.connection != .connected { return 3 }
+    if s.snapshot.pending == true { return 2 }
     if [.running, .retrying, .compacting, .waitingChildren, .starting].contains(
       s.snapshot.execution)
     {
@@ -120,6 +124,7 @@ public enum Presentation {
     if !s.snapshot.tools.isEmpty {
       return s.snapshot.tools.prefix(3).map(tool).joined(separator: " · ")
     }
+    if s.snapshot.pending == true { return "原会话仍有待处理消息，自动化继续推进" }
     switch s.snapshot.execution {
     case .settled: return "本轮对话已结束，目标验收状态未核"
     case .waitingChildren: return "原系统正在等待子任务，自动化仍独立推进"

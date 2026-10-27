@@ -75,6 +75,14 @@ import SwiftUI
           Button("打开管理窗口") { delegate.showManager() }.keyboardShortcut("0", modifiers: .command)
           Button("展开顶部速览") { delegate.island.expand() }
         }
+        CommandMenu("导航") {
+          Button("会话") { delegate.model.navigate(to: "会话") }.keyboardShortcut("1", modifiers: .command)
+          Button("Token") { delegate.model.navigate(to: "Token") }.keyboardShortcut("2", modifiers: .command)
+          Button("重要事项") { delegate.model.navigate(to: "重要事项") }.keyboardShortcut("3", modifiers: .command)
+          Divider()
+          Button("搜索会话") { delegate.model.focusSessionSearch() }.keyboardShortcut("f", modifiers: .command)
+          Button("下一个需关注会话") { delegate.model.nextAttentionSession() }
+        }
       }
   }
 }
@@ -112,7 +120,7 @@ struct MenuContents: View {
 struct DeskWindow: View {
   @EnvironmentObject var model: AppModel
   @Environment(\.colorScheme) private var scheme
-  let pages = ["会话", "子任务", "计划", "Token", "重要事项", "设置"]
+  let pages = ["会话", "Token", "重要事项", "设置"]
   var body: some View {
     NavigationSplitView {
       VStack(spacing: 0) {
@@ -182,13 +190,13 @@ struct DeskWindow: View {
   }
   func icon(_ p: String) -> String {
     [
-      "会话": "rectangle.stack", "子任务": "point.3.connected.trianglepath.dotted", "计划": "calendar",
-      "Token": "chart.bar", "重要事项": "bell", "设置": "gearshape",
+      "会话": "rectangle.stack", "Token": "chart.bar", "重要事项": "bell", "设置": "gearshape",
     ][p] ?? "circle"
   }
 }
 struct SessionList: View {
   @EnvironmentObject var model: AppModel
+  @FocusState private var searchFocused: Bool
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack {
@@ -197,7 +205,7 @@ struct SessionList: View {
         Text("显示 \(model.visibleSessions.count) / 共 \(model.sessions.count)").font(.caption2).foregroundStyle(.secondary)
       }.padding(17)
       VStack(spacing: 10) {
-        TextField("搜索会话、项目或模型", text: $model.search).textFieldStyle(.roundedBorder).accessibilityLabel("搜索已接入会话")
+        TextField("搜索会话、项目或模型", text: $model.search).textFieldStyle(.roundedBorder).focused($searchFocused).accessibilityLabel("搜索已接入会话")
         Picker("状态筛选", selection: $model.sessionFilter) {
           ForEach(["在线", "全部", "运行中", "需输入", "断连"], id: \.self) { Text($0).tag($0) }
         }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("按状态筛选会话")
@@ -233,6 +241,8 @@ struct SessionList: View {
         }.padding(.horizontal, 12).padding(.bottom, 16)
       }
     }.background(Color(nsColor: .windowBackgroundColor))
+      .onAppear { if model.searchFocusRequest > 0 { searchFocused = true; model.searchFocusRequest = 0 } }
+      .onChange(of: model.searchFocusRequest) { _, request in if request > 0 { searchFocused = true; model.searchFocusRequest = 0 } }
   }
 }
 struct SessionDetail: View {
@@ -256,8 +266,18 @@ struct SessionDetail: View {
           StatusPill(status: Presentation.status(session))
         }
         SessionActions(session: session).id(snap.identity)
+        DisclosureGroup("原会话定位诊断") {
+          VStack(alignment: .leading, spacing: 7) {
+            Text(model.routeNotes[snap.identity] ?? "没有可用的精确路由；将从当前连接核验，不按cwd猜窗口或启动第二Pi。")
+            HStack {
+              Button("刷新定位") { model.refreshOriginalRoute(identity: snap.identity) }.disabled(session.connection != .connected)
+              Button("检查终端权限（只读）") { model.checkOriginalRoutePermission(identity: snap.identity) }.disabled(session.connection != .connected)
+              Button("请求终端定位权限") { model.checkOriginalRoutePermission(identity: snap.identity, requestConsent: true) }.disabled(session.connection != .connected)
+            }
+          }.font(.caption).foregroundStyle(.secondary).padding(.top, 7)
+        }.font(.caption)
         if !model.canOpenOriginal(identity: snap.identity) {
-          Text("没有精确的当前终端/Herdr路由；旧桥接需等待自然加载。不会按cwd猜窗口或启动第二个Pi。").font(.caption).foregroundStyle(.secondary)
+          Text(model.routeNotes[snap.identity] ?? "当前原会话不可定位；详见定位诊断，不会启动第二Pi。").font(.caption).foregroundStyle(.secondary)
         }
         if !snap.inputs.isEmpty {
           DeskCard {
@@ -298,11 +318,12 @@ struct SessionDetail: View {
           }
         }
         DeskCard { UsageTiles(snapshot: snap) }
-        if model.page == "子任务" { RunsSection(session: session) }
-        else if !snap.runs.isEmpty {
-          DisclosureGroup("子任务 \(snap.runs.count) · 展开查看与操作") { RunsSection(session: session) }.font(.caption)
-        }
-        if model.page == "计划" { SchedulesSection(session: session) }
+        DisclosureGroup("子任务 \(snap.runs.count) · " + Presentation.coverage(snap.childCoverage)) {
+          RunsSection(session: session)
+        }.font(.caption)
+        DisclosureGroup("已有计划 \(snap.schedules.count) · 按原系统管理") {
+          SchedulesSection(session: session)
+        }.font(.caption)
         if !model.actionNote.isEmpty {
           Label(model.actionNote, systemImage: "info.circle").font(.caption).foregroundStyle(
             .secondary
@@ -327,7 +348,13 @@ struct RunsSection: View {
   var body: some View {
     DeskCard {
       VStack(alignment: .leading, spacing: 14) {
-        Text("子任务").font(.subheadline.weight(.semibold))
+        HStack {
+          Text("子任务 \(session.snapshot.runs.count)").font(.subheadline.weight(.semibold))
+          Spacer()
+          Button("刷新子任务") { model.refresh(identity: session.snapshot.identity) }.font(.caption).disabled(session.connection != .connected)
+        }
+        Text("来源：当前选定会话 · " + Presentation.coverage(session.snapshot.childCoverage) + " · " + Presentation.connection(session.connection)).font(.caption).foregroundStyle(.secondary)
+        if let time = model.sectionRefreshRequestedAt[session.snapshot.identity] { Text("已请求刷新 " + time.formatted(date: .omitted, time: .standard) + "；受理不等于原系统已返回。").font(.caption2).foregroundStyle(.secondary) }
         if session.snapshot.runs.isEmpty {
           Text("暂无可用的子任务信息，不推断它们已经全部结束。").font(.caption).foregroundStyle(.secondary)
         }
@@ -389,7 +416,13 @@ struct SchedulesSection: View {
   var body: some View {
     DeskCard {
       VStack(alignment: .leading, spacing: 13) {
-        Text("已有计划").font(.subheadline.weight(.semibold))
+        HStack {
+          Text("已有计划 \(session.snapshot.schedules.count)").font(.subheadline.weight(.semibold))
+          Spacer()
+          Button("刷新计划") { model.refresh(identity: session.snapshot.identity) }.font(.caption).disabled(session.connection != .connected)
+        }
+        Text("暂停只影响未来触发，不撤销当前运行；来源与控制按owner分开。" + Presentation.connection(session.connection)).font(.caption).foregroundStyle(.secondary)
+        if let time = model.sectionRefreshRequestedAt[session.snapshot.identity] { Text("已请求刷新 " + time.formatted(date: .omitted, time: .standard) + "；返回状态仍以原系统为准。").font(.caption2).foregroundStyle(.secondary) }
         if session.snapshot.schedules.isEmpty {
           Text("暂无可在线管理的计划信息，可回原系统查看；不直接修改其存储。").font(.caption).foregroundStyle(.secondary)
         }
@@ -583,6 +616,7 @@ struct SettingsPage: View {
           HStack {
             Button("开启系统通知") { model.enableNotifications() }.disabled(model.isPreview || model.requestingNotifications)
             Button("检查系统通知状态") { model.checkNotificationStatus() }
+            Button("发送测试通知") { model.sendTestNotification() }.disabled(!model.notificationsAuthorized || model.isPreview)
           }.font(.caption)
           Text("仅主动点击开启时向系统申请许可；是否允许由你在系统提示中决定。拒绝或发送失败不影响原Pi通知与自动化。").font(.caption).foregroundStyle(.secondary)
           Button("保存本 App 设置") { model.saveSettings() }.buttonStyle(.bordered)

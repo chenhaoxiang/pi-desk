@@ -26,6 +26,13 @@ import Darwin
     precondition(ledger.flushViewState(state), "view state flush must complete before shutdown returns")
     let restored = await loadState(ledger)
     precondition(restored == state && restored?.version == UsageViewState.currentVersion, "low-sensitivity view state round trips in the existing SQLite")
+    for legacyPage in ["子任务", "计划", "旧版其他页面"] {
+      var legacy = state; legacy.page = legacyPage; legacy.sessionFilter = "需输入"; legacy.usagePreset = UsagePreset.month.rawValue
+      precondition(ledger.flushViewState(legacy))
+      let migrated = await loadState(ledger)
+      var expected = legacy; expected.page = "会话"
+      precondition(migrated == expected, "legacy navigation migrates only page, preserving filters/token preferences/hash selection")
+    }
     let first = await refresh(ledger,range);precondition(first.recordCount==2 && first.models.count==2)
     _ = await refresh(ledger,range) // One post-unlink metadata change is allowed.
     let before = await diagnostics(ledger)

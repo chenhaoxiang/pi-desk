@@ -112,6 +112,13 @@
 - [x] 14.3 PiSettingsStore只读/白名单卡片与canonical user settings.json安全写 fixture：Pi兼容`.lock`、unknown字段保留、project overlay只读、revision/坏JSON/类型/权限/锁冲突拒写、owner-only backup/atomic readback；view-state退出flush bounded回读。
 - [ ] 14.4 真实Terminal.app唯一tab/Automation授权与完整键盘/VoiceOver/Herdr/OS通知仍需现场条件；未验不勾2.4/6.3，不把隔离PTY或合成fixture冒称现场通过。
 
+## 15. 会话合并与旧bridge定位
+
+- [x] 15.1 侧栏仅会话/Token/重要事项/设置，子任务/计划在准确会话详情保留count、owner/覆盖、空态与刷新/未来触发语义；旧page迁移不丢其他偏好。
+- [x] 15.2 ⌘1/⌘2/⌘3/⌘F与下一需关注会话，只用本地缓存；native pending/input长工具状态不误报idle。
+- [x] 15.3 App UDS peer PID/birth+connection/identity/epoch绑定，utility一次性TTY/有界Terminal祖先fallback；旧bridge不reload，新bridge startup异步route直接发布，失效不复用旧PID。
+- [ ] 15.4 真实A/B Terminal、OS Automation/通知与键盘/VoiceOver尝试后逐项记录pass/失败/必要条件，不把fixture冒称现场通过。
+
 ## Workflow follow-up
 
 - 共享源码交付按当时适用的独立只读审查、PR、检查和普通merge流程；空仓首main的初始化需匹配实际授权，不默认直推。

@@ -87,6 +87,12 @@ public struct SessionStore {
     }
     return false
   }
+  @discardableResult public mutating func updateRoute(_ route: Route, identity: Identity, connection: UUID) -> Bool {
+    guard var current = sessions[identity.sessionKey], current.connectionId == connection, current.snapshot.identity == identity, current.snapshot.display.route == nil, current.connection == .connected, route.valid, route.sessionId == identity.nativeSessionId else { return false }
+    current.snapshot.display.route = route
+    sessions[identity.sessionKey] = current
+    return true
+  }
   public mutating func disconnect(_ id: UUID) {
     for (key, var value) in sessions where value.connectionId == id {
       value.connection = .disconnected

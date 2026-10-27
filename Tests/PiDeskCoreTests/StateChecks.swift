@@ -99,7 +99,11 @@ enum StateChecks {
         InputNotice.self,
         from: Data(#"{"id":"q","source":"fixture","kind":"question","startedAt":1000}"#.utf8))
     ]
-    precondition(Presentation.status(inputView).title == "需要输入")
+    inputView.snapshot.tools = ["long-running-tool"]
+    precondition(Presentation.status(inputView).title == "需要输入", "actual input wins over long tool progress")
+    inputView.snapshot.inputs = []; inputView.snapshot.execution = .settled; inputView.snapshot.pending = true
+    precondition(Presentation.status(inputView).title == "等待后续推进", "native pending cannot advertise idle/completion")
+    precondition(Presentation.activity(inputView).contains("long-running-tool"), "tool progress remains visible")
     let island = IslandGeometry.calculate(
       screen: CGRect(x: 0, y: 0, width: 1440, height: 900),
       visible: CGRect(x: 0, y: 0, width: 1440, height: 868), safeTop: 0, cameraGap: 0)
@@ -136,6 +140,17 @@ enum StateChecks {
     precondition(mixed.request(identity: legacy.identity, action: .message, target: Target(owner: "pi"), now: now) != nil)
     precondition(mixed.request(identity: modern.identity, action: .message, target: Target(owner: "pi"), now: now) != nil)
     precondition(mixed.request(identity: legacy.identity, action: .abortCurrent, target: Target(owner: "pi"), now: now) != nil)
+    var legacyRoute = fixture; legacyRoute.identity.nativeSessionId = "legacy-peer-route"; legacyRoute.display.route = nil
+    let routeConnection = UUID()
+    precondition(mixed.apply(WireRecord(kind: "hello", identity: legacyRoute.identity, snapshot: legacyRoute), connection: routeConnection, now: now))
+    let resolved = Route(kind: "terminal", sessionId: legacyRoute.identity.nativeSessionId, ttyPath: "/dev/ttys035", terminalApp: "com.apple.Terminal")
+    precondition(mixed.updateRoute(resolved, identity: legacyRoute.identity, connection: routeConnection))
+    precondition(!mixed.updateRoute(resolved, identity: modern.identity, connection: routeConnection), "peer route cannot cross session identity")
+    var staleRouteIdentity = legacyRoute.identity; staleRouteIdentity.runtimeEpoch = "retired-epoch"
+    precondition(!mixed.updateRoute(resolved, identity: staleRouteIdentity, connection: routeConnection), "retired epoch cannot receive peer route")
+    precondition(!mixed.updateRoute(resolved, identity: legacyRoute.identity, connection: UUID()), "connection is part of the route binding")
+    mixed.disconnect(routeConnection)
+    precondition(!mixed.updateRoute(resolved, identity: legacyRoute.identity, connection: routeConnection), "disconnected route resolution must be rejected")
     precondition(LinkPolicy.exactHTTPS("https://example.invalid/console") != nil)
     for url in [
       "file:///fixture", "javascript:alert(1)", "https://user:pass@example.invalid",

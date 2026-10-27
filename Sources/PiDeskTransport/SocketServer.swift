@@ -5,6 +5,14 @@ import PiDeskCore
 public enum SocketFailure: Error {
   case unsafePath, unsafeDirectory, unsafeSocket, alreadyRunning, systemCall
 }
+public struct PeerProcessInfo: Sendable, Equatable {
+  public let pid: Int32
+  public let parentPID: Int32
+  public let ttyPath: String?
+  public let startSeconds: UInt64
+  public let startMicroseconds: UInt64
+  public let terminalPID: Int32?
+}
 public final class SocketServer: @unchecked Sendable {
   public enum Event: Sendable {
     case record(WireRecord, UUID)
@@ -15,12 +23,14 @@ public final class SocketServer: @unchecked Sendable {
     let fd: Int32
     let id = UUID()
     let connectedAt = Date()
+    let peerPID: Int32?
+    let peerBirth: (UInt64, UInt64)?
     var identity: Identity?
     var framer = LineFramer()
     var source: DispatchSourceRead?
     var output: [Data] = []
     var offset = 0
-    init(_ fd: Int32) { self.fd = fd }
+    init(_ fd: Int32, peerPID: Int32?, peerBirth: (UInt64, UInt64)?) { self.fd = fd; self.peerPID = peerPID; self.peerBirth = peerBirth }
     var bytes: Int { output.reduce(0) { $0 + $1.count } - offset }
   }
   private let queue = DispatchQueue(label: "pi-desk.socket", qos: .utility)
@@ -65,6 +75,44 @@ public final class SocketServer: @unchecked Sendable {
     }
   }
   public func close(_ id: UUID) { queue.async { self.closeClient(id) } }
+  public func peerProcessInfo(_ id: UUID, completion: @escaping (PeerProcessInfo?) -> Void) {
+    queue.async {
+      guard let client = self.clients[id], let pid = client.peerPID, let birth = client.peerBirth,
+        let info = Self.readPeerProcessInfo(pid), info.startSeconds == birth.0, info.startMicroseconds == birth.1 else { completion(nil); return }
+      completion(info)
+    }
+  }
+  private static func readBirth(_ pid: Int32) -> (UInt64, UInt64)? {
+    var info = proc_bsdinfo()
+    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)) == Int32(MemoryLayout<proc_bsdinfo>.size), info.pbi_uid == getuid() else { return nil }
+    return (info.pbi_start_tvsec, info.pbi_start_tvusec)
+  }
+  private static func readPeerProcessInfo(_ pid: Int32) -> PeerProcessInfo? {
+    var info = proc_bsdinfo()
+    let count = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
+    guard count == Int32(MemoryLayout<proc_bsdinfo>.size), info.pbi_uid == getuid() else { return nil }
+    var tty: String?
+    if info.e_tdev != UInt32.max {
+      var name = [CChar](repeating: 0, count: 128)
+      name.withUnsafeMutableBufferPointer { buffer in
+        if devname_r(dev_t(bitPattern: info.e_tdev), mode_t(S_IFCHR), buffer.baseAddress, Int32(buffer.count)) != nil {
+          let value = "/dev/" + String(cString: buffer.baseAddress!)
+          if value.range(of: "^/dev/(ttys[A-Za-z0-9]+|pts/[0-9]+)$", options: .regularExpression) != nil { tty = value }
+        }
+      }
+    }
+    var terminalPID: Int32?, parent = Int32(bitPattern: info.pbi_ppid), seen = Set<Int32>([pid])
+    for _ in 0..<12 {
+      guard parent > 1, seen.insert(parent).inserted else { break }
+      var ancestor = proc_bsdinfo()
+      guard proc_pidinfo(parent, PROC_PIDTBSDINFO, 0, &ancestor, Int32(MemoryLayout<proc_bsdinfo>.size)) == Int32(MemoryLayout<proc_bsdinfo>.size), ancestor.pbi_uid == getuid() else { break }
+      var executable = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+      let length = proc_pidpath(parent, &executable, UInt32(executable.count))
+      if length > 0 && String(cString: executable).hasSuffix("/Terminal.app/Contents/MacOS/Terminal") { terminalPID = parent; break }
+      parent = Int32(bitPattern: ancestor.pbi_ppid)
+    }
+    return PeerProcessInfo(pid: pid, parentPID: Int32(bitPattern: info.pbi_ppid), ttyPath: tty, startSeconds: info.pbi_start_tvsec, startMicroseconds: info.pbi_start_tvusec, terminalPID: terminalPID)
+  }
   private func checkedDirectory() throws {
     guard path.hasPrefix("/"), path.utf8.count <= 103,
       URL(fileURLWithPath: path).standardized.path == path
@@ -209,7 +257,11 @@ public final class SocketServer: @unchecked Sendable {
       }
       var yes: Int32 = 1
       _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, socklen_t(MemoryLayout<Int32>.size))
-      let c = Client(fd)
+      var peerPID: Int32 = 0
+      var peerLength = socklen_t(MemoryLayout<Int32>.size)
+      let peerResult = getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &peerPID, &peerLength) == 0 && peerLength == socklen_t(MemoryLayout<Int32>.size) && peerPID > 0 ? peerPID : nil
+      let birth = peerResult.flatMap { Self.readBirth($0) }
+      let c = Client(fd, peerPID: peerResult, peerBirth: birth)
       clients[c.id] = c
       let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
       c.source = source

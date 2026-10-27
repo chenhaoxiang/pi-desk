@@ -49,6 +49,7 @@ export type SessionOptions = {
 	now?: () => number;
 	sourceRevision?: string;
 	usageRoot?: string | false;
+	captureTerminalRoute?: typeof captureTerminalRoute;
 };
 export class DeskSession {
 	private ctx?: ExtensionContext;
@@ -239,9 +240,12 @@ export class DeskSession {
 		// Optional safe summary seam. This does not claim a real Gate/CI producer exists.
 		this.off.push(pi.events.on("pi-desk:evidence:v1", (r) => this.evidence(r)));
 		const sessionFile = typeof ctx.sessionManager.getSessionFile === "function" ? ctx.sessionManager.getSessionFile() : undefined;
-		void captureTerminalRoute(identity.nativeSessionId, sessionFile, ctx.cwd).then((route) => {
+		void (options.captureTerminalRoute ?? captureTerminalRoute)(identity.nativeSessionId, sessionFile, ctx.cwd).then((route) => {
 			if (this.stopped) return;
-			if (route.kind !== "unavailable") this.terminalRoute = route;
+			if (route.kind !== "unavailable") {
+				this.terminalRoute = route;
+				this.snapshot.display.route = route;
+			}
 			this.changed();
 		});
 		try {

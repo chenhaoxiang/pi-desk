@@ -29,10 +29,18 @@ private final class HarnessState: @unchecked Sendable {
 enum SocketHarness {
   static func serve(_ path: String) -> Never {
     let state = HarnessState()
-    let server = SocketServer(path: path) { event in
+    var server: SocketServer!
+    server = SocketServer(path: path) { event in
       switch event {
       case .record(let record, let id):
         state.set(record.identity, id)
+        if ProcessInfo.processInfo.environment["PI_DESK_TEST_PEER"] == "1" {
+          server.peerProcessInfo(id) { info in
+            var value: [String: Any] = ["event": "peer-info", "session": record.identity.nativeSessionId, "available": info != nil]
+            if let info { value["pid"] = info.pid; value["birth"] = info.startSeconds; value["tty"] = info.ttyPath ?? ""; value["terminalPID"] = info.terminalPID ?? 0 }
+            state.output(value)
+          }
+        }
         if let data = try? JSONEncoder().encode(record),
           let raw = try? JSONSerialization.jsonObject(with: data)
         {

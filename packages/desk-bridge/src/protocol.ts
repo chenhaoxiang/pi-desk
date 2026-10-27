@@ -72,6 +72,12 @@ export type InputNotice = {
 	kind: string;
 	startedAt: number;
 };
+export type ExecutionObservation = {
+	version: 1;
+	observedAt: number;
+	source: "ctx.isIdle" | "lifecycle";
+	idle: boolean;
+};
 export type Evidence = {
 	id: string;
 	source: string;
@@ -113,6 +119,7 @@ export type Snapshot = {
 	};
 	execution: string;
 	pending: boolean | null;
+	executionObservation?: ExecutionObservation;
 	childCoverage: string;
 	tools: string[];
 	runs: Run[];
@@ -213,6 +220,14 @@ export function validate(v: unknown): asserts v is RecordV1 {
 			throw new Error("invalid-snapshot");
 		if (display.createdAtSource !== undefined && !["session-header", "unknown"].includes(String(display.createdAtSource)))
 			throw new Error("invalid-snapshot");
+		if (s.executionObservation !== undefined) {
+			const observation = s.executionObservation;
+			if (!object(observation) || observation.version !== 1 ||
+				!Number.isSafeInteger(observation.observedAt) || Number(observation.observedAt) < 0 ||
+				!["ctx.isIdle", "lifecycle"].includes(String(observation.source)) ||
+				typeof observation.idle !== "boolean")
+				throw new Error("invalid-snapshot");
+		}
 		if (display.route !== undefined) {
 			const route = display.route;
 			if (!object(route) || !safeId(route.kind) || !safeId(route.sessionId)) throw new Error("invalid-snapshot");

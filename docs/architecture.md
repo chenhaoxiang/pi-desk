@@ -7,7 +7,7 @@ release_scope: 本地实现候选；完整首版验收仍未完成
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-26
+verified: 2026-10-27
 verification_scope: Swift/TS源码、UDS/隔离真实SDK与owner组合；不含业务会话/Herdr实机和长时可靠性
 ---
 
@@ -74,7 +74,9 @@ App断线重连同一epoch，要求全量当前快照并保留monotonic seq；�
 | management | ready / unsupported / unavailable + request状态 | 按钮可用不是授权或成功 |
 | verification | not-checked / pending / verified / stale / failed / unknown | 显示的成功不生成merge/部署许可 |
 
-`agent_end`只更新低层回合事件；最终闲置依`agent_settled`、原生pending与owner子任务/回传事实。没有子任务覆盖则保留unknown，不宣称全部结束。普通工具出错不自动把会话变成失败。
+`agent_end`不是完成边界；执行状态由`agent_settled`和公开`ctx.isIdle()`/`hasPendingMessages()`标量对账，启动后一次deferred reconcile消除startup暂时busy。observe及现有5秒heartbeat只重采这两个内存标量，不加owner RPC、模型或同步I/O。可选`executionObservation={version:1,observedAt,source,idle}`与连接`observedAt`分离：ctx不可用不刷新执行证明；失败/中止的已观测结果在idle时保留，native重新busy则回到运行。真实input优先，native idle清除遗留工具名；pending消息不冒称AI已开始执行。
+
+异步start/complete与process-terminal事件只按当前session/exact runId（必要child index）更新有界child cache；terminal proof清除running但不伪造业务成功，无法精确归属的Fleet cache置unknown。缺子任务覆盖不宣称全部工作结束。App的连接badge、执行badge独立，计数/运行中筛选/默认重点共用同一执行判断；仅统计已主动接入，旧wire缺执行proof时active标待核并给待核数量，不用source SHA差异决定busy/idle。旧terminal结果保留为“上次”观测，不能以新heartbeat当本轮事实。普通工具出错不自动把会话变成失败。
 
 ## 4. 连接、观察与背压
 
@@ -164,9 +166,9 @@ manager自身NSWindowDelegate传递可见/occlusion/miniaturize/close及App hide
 
 ### 原会话定位、创建时间与Pi设置边界
 
-App的UDS server在accept后读取LOCAL_PEERPID及peer birth；utility queue按connection+identity/epoch一次性核验同uid进程controlling TTY和最多12层Terminal祖先，PID复用/断开/epoch变化作废。fallback只补旧bridge缺route，不扫全进程/正文、不启动第二writer，新bridge route优先。Terminal权限分只读preflight与用户主动请求（OS决定）；未授权不靠3秒focus命令等待许可。
+App的UDS server在accept后读取LOCAL_PEERPID及peer birth；utility queue按connection+identity/epoch一次性核验同uid进程controlling TTY和最多12层Terminal祖先，PID复用/断开/epoch变化作废。fallback只补旧bridge缺route，不扫全进程/正文、不启动第二writer，新bridge route优先。Terminal权限分只读preflight与用户主动请求（OS决定）；preflight与实际AppleEvent都在Pi Desk进程内对相同Terminal PID发出，不再经osascript子进程。固定AE路径在utility串行队列运行，单次总12秒/单event最多2秒、单一在途，最多8个Terminal实例/512 tabs；不读终端内容或提供任意脚本入口。失败保留安全OSStatus与固定阶段，不用“已授权”覆盖真正send错误。
 
-bridge在session_start一次性从公开SessionManager header读取ISO timestamp，投影为有界`display.createdAt`毫秒和`createdAtSource`（`session-header`/`unknown`）；不读历史正文、不把observedAt/首次接入当创建时间，超界或非法时间拒绝。route只在当前主动接入context中捕获：Herdr route保存精确pane/sessionFile；Terminal.app route一次性读取本进程TTY（macOS `/dev/fd`不可靠时用固定`/usr/bin/tty`继承fd，最多500ms），保存严格ttyPath、TERM_SESSION_ID和可选tmux/WezTerm/cmux标量；携带tmux/WezTerm/cmux时不把内层pty冒称Terminal tab，当前保持不可用，待对应客户端精确focus合同另行接入。UI只对唯一精确route聚焦，AppleScript先收集匹配tab，count非1不解最小化/不激活；Automation拒绝/route缺失显示unknown。绝不按cwd/名称挑第一个窗口，不对活跃会话自动`pi --session`启动第二writer；仅用户后续明确选择且源已确认不活跃时才可另行设计恢复。
+bridge在session_start一次性从公开SessionManager header读取ISO timestamp，投影为有界`display.createdAt`毫秒和`createdAtSource`（`session-header`/`unknown`）；不读历史正文、不把observedAt/首次接入当创建时间，超界或非法时间拒绝。route只在当前主动接入context中捕获：Herdr route保存精确pane/sessionFile；Terminal.app route一次性读取本进程TTY（macOS `/dev/fd`不可靠时用固定`/usr/bin/tty`继承fd，最多500ms），保存严格ttyPath、TERM_SESSION_ID和可选tmux/WezTerm/cmux标量；携带tmux/WezTerm/cmux时不把内层pty冒称Terminal tab，当前保持不可用，待对应客户端精确focus合同另行接入。UI只对唯一精确route聚焦，同进程AE先收集所有已运行Terminal实例的窗口ID/tab TTY，count非1或枚举不完整不解最小化/不激活；以PID+launchDate守护实例，按稳定window ID与tab索引在变更前复核TTY，再只选准确tab/前置准确窗口/激活准确实例，回读front window ID、selected TTY和前台实例后才标成功。Automation拒绝/route缺失显示unknown。绝不按cwd/名称挑第一个窗口，不对活跃会话自动`pi --session`启动第二writer；仅用户后续明确选择且源已确认不活跃时才可另行设计恢复。
 
 Pi设置首批只投影canonical user `<agentDir>/settings.json`的白名单字段：theme、defaultThinkingLevel、steeringMode、followUpMode、compaction.enabled/reserveTokens/keepRecentTokens、retry.enabled/maxRetries/baseDelayMs/maxAgentDelayMs、quietStartup、tuiMode、terminal.showImages/showTerminalProgress。SettingsManager公开schema作为字段依据；项目overlay只读显示来源，不把两层合并回写；auth/models/mcp/packages/resources/proxy/trust/permissions/defaultModel/defaultTools等排除。原文件读取/写入在utility queue，兼容Pi的atomic mkdir `settings.json.lock`（不清理未知锁，短事务）、owner-only revision backup、mtime/hash CAS、atomic temp+rename+fsync和readback；坏JSON、权限、锁、冲突、未知类型只读保全，未创建文件明确显示尚未创建。
 

@@ -30,6 +30,20 @@ private final class FakeLedger: UsageLedgerClient {
   }
 }
 
+private final class FakeTerminal: TerminalRouteActivator.Client {
+  typealias Process = TerminalRouteActivator.TerminalProcess
+  typealias Tab = TerminalRouteActivator.Tab
+  var targets: [Process] = []
+  var rows: [Tab] = []
+  var chosen: [Tab] = []
+  var readback = TerminalRouteActivator.Selection(windowID: 9, tty: "/dev/ttys035", frontmost: true)
+  var failure: TerminalRouteActivator.Error?
+  func processes() throws -> [Process] { targets }
+  func tabs(in process: Process) throws -> [Tab] { if let failure { throw failure }; return rows.filter { $0.process == process } }
+  func select(_ tab: Tab) throws { chosen.append(tab) }
+  func selected(in process: Process) throws -> TerminalRouteActivator.Selection { readback }
+}
+
 @main enum NarrowUXChecks {
   @MainActor static func spin(_ condition: () -> Bool) async {
     for _ in 0..<100 {
@@ -39,6 +53,26 @@ private final class FakeLedger: UsageLedgerClient {
     precondition(condition(), "bounded completion missing")
   }
   @MainActor static func main() async throws {
+    let terminal = FakeTerminal(), first = FakeTerminal.Process(pid: 10, launchedAt: 1), second = FakeTerminal.Process(pid: 11, launchedAt: 2)
+    terminal.targets = [first, second]
+    terminal.rows = [.init(process: first, windowID: 8, index: 1, tty: "/dev/ttys001"), .init(process: second, windowID: 9, index: 2, tty: "/dev/ttys035")]
+    let focusResult = try TerminalRouteActivator.locateAndFocus(ttyPath: "/dev/ttys035", client: terminal)
+    precondition(focusResult.contains("Terminal PID:11"))
+    precondition(terminal.chosen.count == 1 && terminal.chosen[0].process == second, "match must span all Terminal instances, not the first bundle-default process")
+    terminal.chosen = []
+    func expectFocusError(_ expected: TerminalRouteActivator.Error) {
+      do { _ = try TerminalRouteActivator.locateAndFocus(ttyPath: "/dev/ttys035", client: terminal); fatalError("unproven focus admitted") }
+      catch { precondition(error as? TerminalRouteActivator.Error == expected) }
+    }
+    terminal.rows.append(.init(process: first, windowID: 7, index: 1, tty: "/dev/ttys035"))
+    expectFocusError(.ambiguous); precondition(terminal.chosen.isEmpty, "ambiguity cannot mutate any window")
+    terminal.rows = []; expectFocusError(.noMatch); precondition(terminal.chosen.isEmpty)
+    terminal.failure = .appleEvent(-1743); expectFocusError(.appleEvent(-1743)); precondition(terminal.chosen.isEmpty, "incomplete instance enumeration cannot pick a partial match")
+    terminal.failure = nil; terminal.rows = [.init(process: second, windowID: 9, index: 2, tty: "/dev/ttys035")]
+    terminal.readback = .init(windowID: 10, tty: "/dev/ttys035", frontmost: true); expectFocusError(.identityMismatch)
+    terminal.readback = .init(windowID: 9, tty: "/dev/ttys999", frontmost: true); expectFocusError(.identityMismatch)
+    terminal.readback = .init(windowID: 9, tty: "/dev/ttys035", frontmost: false); expectFocusError(.identityMismatch)
+    precondition(TerminalRouteActivator.diagnostic(TerminalRouteActivator.Error.appleEvent(-1728)).contains("-1728"))
     let fake = FakeNotifications(), ledger = FakeLedger()
     let model = AppModel(notificationClient: fake, usageLedger: ledger)
     defer { model.stop() }
@@ -48,6 +82,28 @@ private final class FakeLedger: UsageLedgerClient {
     precondition(!TerminalRouteActivator.acceptsTTY("/dev/ttys035", terminalRunning: false), "do not auto-launch Terminal")
     precondition(!TerminalRouteActivator.acceptsTTY(nil, terminalRunning: true) && !TerminalRouteActivator.acceptsTTY("/dev/random", terminalRunning: true), "missing/invalid TTY stays unavailable")
     let requestsBefore = model.store.requests.count
+    let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    var snapshot = try Wire.decode(Data(contentsOf: repo.appendingPathComponent("Fixtures/wire-v1.json"))).snapshot!
+    snapshot.executionObservation = try JSONDecoder().decode(ExecutionObservation.self, from: Data("{\"version\":1,\"observedAt\":\(snapshot.observedAt),\"source\":\"ctx.isIdle\",\"idle\":false}".utf8))
+    var stateStore = SessionStore()
+    let liveConnection = UUID()
+    precondition(stateStore.apply(WireRecord(kind: "hello", identity: snapshot.identity, snapshot: snapshot), connection: liveConnection, now: snapshot.observedAt))
+    var idle = snapshot; idle.identity.nativeSessionId = "online-but-idle"; idle.execution = .settled; idle.executionObservation?.idle = true
+    precondition(stateStore.apply(WireRecord(kind: "hello", identity: idle.identity, snapshot: idle), connection: UUID(), now: idle.observedAt))
+    var legacy = snapshot; legacy.identity.nativeSessionId = "legacy-active-unknown"; legacy.executionObservation = nil
+    precondition(stateStore.apply(WireRecord(kind: "hello", identity: legacy.identity, snapshot: legacy), connection: UUID(), now: legacy.observedAt))
+    model.store = stateStore; model.search = ""; model.sessionFilter = "在线"
+    precondition(model.visibleSessions.count == 3 && model.connectedCount == 3 && model.activeCount == 1 && model.unknownExecutionCount == 1, "online includes idle/legacy, active is a lower bound and old busy is explicitly pending")
+    model.sessionFilter = "运行中"
+    precondition(model.visibleSessions.count == model.activeCount && model.visibleSessions.first?.snapshot.identity == snapshot.identity)
+    snapshot.seq += 1
+    snapshot.inputs = [try JSONDecoder().decode(InputNotice.self, from: Data(#"{"id":"q1","source":"fixture","kind":"question","startedAt":1000}"#.utf8)), try JSONDecoder().decode(InputNotice.self, from: Data(#"{"id":"q2","source":"fixture","kind":"question","startedAt":1000}"#.utf8))]
+    precondition(model.store.apply(WireRecord(kind: "snapshot", identity: snapshot.identity, snapshot: snapshot), connection: liveConnection, now: snapshot.observedAt))
+    precondition(model.activeCount == 0 && model.visibleSessions.isEmpty && model.inputCount == 1, "one waiting session is excluded from active count/filter even with multiple prompts")
+    model.sessionFilter = "需输入"; precondition(model.visibleSessions.count == model.inputCount)
+    model.store.disconnect(liveConnection)
+    precondition(model.inputCount == 0 && model.visibleSessions.isEmpty, "disconnected old input cannot count as a current input")
+    model.store = SessionStore(); model.sessionFilter = "在线"
     model.page = "Token"
     precondition(!model.managerIsVisible && model.usageRefreshInterval == 60, "no manager cannot retain the Token page's fast interest")
     let backgroundCalls = ledger.calls

@@ -126,6 +126,7 @@ test("factory starts no resources, observation never changes host loadout or blo
 	await wait();
 	assert.ok(h.wires.length);
 	assert.ok(!JSON.stringify(h.wires).includes("SYNTHETIC_PRIVATE_VALUE"));
+	h.ctx.isIdle = () => false; // Native retry/continuation remains busy after agent_end.
 	h.emit("agent_start");
 	h.emit("agent_end");
 	await wait();

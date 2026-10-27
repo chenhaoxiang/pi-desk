@@ -93,17 +93,35 @@ enum StateChecks {
     precondition(!EvidencePolicy.isCurrentFact(evidence, head: "new-head", now: 1001))
     precondition(!EvidencePolicy.isCurrentFact(evidence, head: "abcdef1234", now: 400000))
     var inputView = store.sessions[other.identity.sessionKey]!
-    precondition(Presentation.status(inputView).title == "正在运行")
+    precondition(Presentation.status(inputView).title == "状态待核", "legacy heartbeat cannot prove current AI busy")
+    precondition(Presentation.connectionStatus(inputView).title == "Pi已接入")
+    inputView.snapshot.executionObservation = try JSONDecoder().decode(ExecutionObservation.self, from: Data("{\"version\":1,\"observedAt\":\(inputView.snapshot.observedAt),\"source\":\"ctx.isIdle\",\"idle\":false}".utf8))
+    precondition(Presentation.status(inputView).title == "本轮运行" && Presentation.isExecutionActive(inputView))
+    inputView.snapshot.capabilities.owners["pi-desk-bridge"] = "different-documentation-only-revision"
+    precondition(Presentation.isExecutionActive(inputView), "source SHA is not execution authority")
     inputView.snapshot.inputs = [
       try JSONDecoder().decode(
         InputNotice.self,
         from: Data(#"{"id":"q","source":"fixture","kind":"question","startedAt":1000}"#.utf8))
     ]
     inputView.snapshot.tools = ["long-running-tool"]
-    precondition(Presentation.status(inputView).title == "需要输入", "actual input wins over long tool progress")
-    inputView.snapshot.inputs = []; inputView.snapshot.execution = .settled; inputView.snapshot.pending = true
-    precondition(Presentation.status(inputView).title == "等待后续推进", "native pending cannot advertise idle/completion")
-    precondition(Presentation.activity(inputView).contains("long-running-tool"), "tool progress remains visible")
+    precondition(Presentation.status(inputView).title == "等待输入" && !Presentation.isExecutionActive(inputView), "actual input wins over long tool progress")
+    inputView.snapshot.inputs = []; inputView.snapshot.execution = .settled
+    precondition(Presentation.status(inputView).title == "本轮运行" && Presentation.activity(inputView).contains("long-running-tool"), "fresh native busy wins over an old settled enum")
+    inputView.snapshot.executionObservation?.idle = true; inputView.snapshot.pending = true
+    precondition(Presentation.status(inputView).title == "等待后续推进" && !Presentation.isExecutionActive(inputView), "a pending message is not a running AI call")
+    inputView.snapshot.pending = false
+    precondition(Presentation.status(inputView).title == "本轮已结束" && !Presentation.activity(inputView).contains("long-running-tool"), "native idle cannot show stale tool progress")
+    inputView.snapshot.execution = .failed
+    precondition(Presentation.status(inputView).title == "本轮出现异常")
+    inputView.snapshot.execution = .aborted
+    precondition(Presentation.status(inputView).title == "本轮已中止")
+    inputView.snapshot.execution = .running; inputView.snapshot.executionObservation?.idle = false
+    inputView.snapshot.observedAt += 16_000
+    precondition(Presentation.status(inputView).title == "状态待核" && !Presentation.isExecutionActive(inputView), "new transport heartbeat does not freshen an old execution sample")
+    inputView.snapshot.executionObservation?.observedAt = inputView.snapshot.observedAt
+    inputView.connection = .disconnected
+    precondition(!Presentation.isExecutionActive(inputView) && Presentation.connectionStatus(inputView).title == "已断开" && Presentation.status(inputView).title == "执行状态待核")
     let island = IslandGeometry.calculate(
       screen: CGRect(x: 0, y: 0, width: 1440, height: 900),
       visible: CGRect(x: 0, y: 0, width: 1440, height: 868), safeTop: 0, cameraGap: 0)

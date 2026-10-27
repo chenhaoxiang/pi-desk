@@ -75,7 +75,10 @@ struct SessionCard: View {
             .system(size: island ? 15 : 14, weight: .semibold)
           ).lineLimit(island ? 1 : 2).fixedSize(horizontal: false, vertical: true).help(session.snapshot.display.name)
           Spacer(minLength: 0)
-          StatusPill(status: Presentation.status(session))
+          HStack(spacing: 6) {
+            StatusPill(status: Presentation.connectionStatus(session))
+            StatusPill(status: Presentation.status(session))
+          }
         }
         Text(metadata + " · " + Presentation.createdShort(session.snapshot)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
         HStack(spacing: 7) {
@@ -124,7 +127,9 @@ struct SessionCard: View {
   }
   var metadata: String {
     let s = session.snapshot
-    return [Presentation.project(s), s.display.branch, Presentation.shortModel(s)].compactMap { $0 }
+    let project = [Presentation.project(s), s.display.branch, Presentation.shortModel(s)].compactMap { $0 }
+      .filter { !$0.isEmpty }.joined(separator: " · ")
+    return [Presentation.connection(session.connection), Presentation.status(session).title, project]
       .filter { !$0.isEmpty }.joined(separator: " · ")
   }
 }
@@ -268,6 +273,10 @@ struct SessionDiagnostics: View {
         line("会话ID", session.snapshot.identity.nativeSessionId)
         line("运行代际", session.snapshot.identity.runtimeEpoch)
         line("原始状态", session.snapshot.execution.rawValue + " / " + session.connection.rawValue)
+        line("执行状态依据", Presentation.executionCoverage(session))
+        if let proof = session.snapshot.executionObservation {
+          line("执行观测时间", Date(timeIntervalSince1970: proof.observedAt / 1000).formatted() + " · " + proof.source + " · idle=\(proof.idle)")
+        }
         line("子任务覆盖", session.snapshot.childCoverage)
         if let omitted = session.snapshot.omitted {
           line(
@@ -329,11 +338,11 @@ struct IslandView: View {
   }
   var compactSummary: String {
     if model.diagnostic.hasPrefix("连接不可用") { return "连接暂不可用" }
-    if model.activeCount > 0 { return "\(model.activeCount) 运行中" }
+    if model.activeCount > 0 { return "\(model.activeCount) 已确认执行" }
+    if model.unknownExecutionCount > 0 { return "\(model.unknownExecutionCount) 执行状态待核" }
     if model.sessions.isEmpty { return "等待接入" }
-    if model.sessions.allSatisfy({ $0.connection != .connected }) { return "连接待恢复" }
-    if model.sessions.contains(where: { $0.snapshot.execution == .unknown }) { return "状态待核" }
-    return "暂时空闲"
+    if model.connectedCount == 0 { return "已接入0 · 连接待恢复" }
+    return "已接入 \(model.connectedCount) · 暂时空闲"
   }
   var compact: some View {
     Button {
@@ -355,7 +364,7 @@ struct IslandView: View {
         }
         Text(
           model.inputCount > 0
-            ? "\(model.inputCount) 需输入" : model.isPreview ? "预览" : "\(model.sessions.count) 会话"
+            ? "\(model.inputCount) 需输入" : model.isPreview ? "预览" : "已接入 \(model.connectedCount)"
         ).font(.system(size: 11, weight: .medium)).foregroundStyle(
           model.inputCount > 0 ? StatusTone.amber.color : .secondary
         ).frame(width: island.geometry.cameraGap > 0 ? 117 : nil, alignment: .trailing)

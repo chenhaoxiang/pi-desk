@@ -90,7 +90,7 @@ struct MenuLabel: View {
   @EnvironmentObject var model: AppModel
   var body: some View {
     Label(
-      "Pi \(model.activeCount)",
+      "已确认执行 \(model.activeCount)",
       systemImage: model.inputCount > 0 ? "questionmark.circle" : "circle.hexagongrid")
   }
 }
@@ -104,8 +104,11 @@ struct MenuContents: View {
         Spacer()
         if model.isPreview { PreviewBadge() }
       }
-      Text("\(model.activeCount) 个运行中 · \(model.inputCount) 个需要输入").font(.subheadline)
+      Text("已接入 \(model.connectedCount) · 已确认执行 \(model.activeCount) · \(model.inputCount) 个需要输入").font(.subheadline)
         .foregroundStyle(.secondary)
+      if model.unknownExecutionCount > 0 {
+        Text("执行状态待核 \(model.unknownExecutionCount)（不代表本机全部Pi）").font(.caption).foregroundStyle(.orange)
+      }
       Button("展开顶部速览") { model.showIsland() }
       Button("打开管理窗口") { model.showManager() }
       Divider()
@@ -175,8 +178,11 @@ struct DeskWindow: View {
         Label("本机连接暂不可用", systemImage: "wifi.exclamationmark").font(.caption).foregroundStyle(
           .orange)
       }
-      Label("\(model.activeCount) 运行中", systemImage: "circle.fill").font(.system(size: 11))
+      Label("已确认执行 \(model.activeCount)", systemImage: "circle.fill").font(.system(size: 11))
         .foregroundStyle(StatusTone.green.ink(dark: scheme == .dark))
+      if model.unknownExecutionCount > 0 {
+        Label("\(model.unknownExecutionCount) 状态待核", systemImage: "questionmark.circle").font(.system(size: 11)).foregroundStyle(.orange)
+      }
       if model.inputCount > 0 {
         Label("\(model.inputCount) 需输入", systemImage: "questionmark.circle.fill").font(
           .system(size: 11)
@@ -202,7 +208,7 @@ struct SessionList: View {
       HStack {
         Text("我的会话").font(.subheadline.weight(.semibold))
         Spacer()
-        Text("显示 \(model.visibleSessions.count) / 共 \(model.sessions.count)").font(.caption2).foregroundStyle(.secondary)
+        Text("显示 \(model.visibleSessions.count) / 已接入 \(model.sessions.count)").font(.caption2).foregroundStyle(.secondary)
       }.padding(17)
       VStack(spacing: 10) {
         TextField("搜索会话、项目或模型", text: $model.search).textFieldStyle(.roundedBorder).focused($searchFocused).accessibilityLabel("搜索已接入会话")
@@ -263,8 +269,12 @@ struct SessionDetail: View {
             Text(Presentation.createdAbsolute(snap)).font(.caption).foregroundStyle(.secondary)
           }
           Spacer()
-          StatusPill(status: Presentation.status(session))
+          VStack(alignment: .trailing, spacing: 7) {
+            StatusPill(status: Presentation.connectionStatus(session))
+            StatusPill(status: Presentation.status(session))
+          }
         }
+        Text(Presentation.executionCoverage(session)).font(.caption).foregroundStyle(.secondary)
         SessionActions(session: session).id(snap.identity)
         DisclosureGroup("原会话定位诊断") {
           VStack(alignment: .leading, spacing: 7) {

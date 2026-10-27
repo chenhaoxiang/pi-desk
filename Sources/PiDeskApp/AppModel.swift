@@ -171,7 +171,7 @@ struct DeskSettings: Codable {
     let connected = sessions.filter { $0.connection == .connected }
     let input = connected.first(where: { !$0.snapshot.inputs.isEmpty })
     if let input { return input.snapshot.identity.sessionKey }
-    let active = connected.first(where: { [.running, .waitingChildren, .retrying, .compacting].contains($0.snapshot.execution) })
+    let active = connected.first(where: { Presentation.isExecutionActive($0) })
     return active?.snapshot.identity.sessionKey ?? connected.first?.snapshot.identity.sessionKey ?? sessions.first?.snapshot.identity.sessionKey
   }
   func selectPreferredSession() {
@@ -296,7 +296,7 @@ struct DeskSettings: Codable {
     sessions.filter { s in
       let snap = s.snapshot
       let matchesSearch = search.isEmpty || [snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
-      let matchesState = sessionFilter == "在线" ? s.connection == .connected : sessionFilter == "全部" || (sessionFilter == "运行中" && s.connection == .connected && [.running, .waitingChildren, .retrying, .compacting].contains(snap.execution)) || (sessionFilter == "需输入" && !snap.inputs.isEmpty) || (sessionFilter == "断连" && s.connection != .connected)
+      let matchesState = sessionFilter == "在线" ? s.connection == .connected : sessionFilter == "全部" || (sessionFilter == "运行中" && Presentation.isExecutionActive(s)) || (sessionFilter == "需输入" && Presentation.needsInput(s)) || (sessionFilter == "断连" && s.connection != .connected)
       return matchesSearch && matchesState && (!hiddenSessions.contains(snap.identity.sessionKey) || s.connection == .connected)
     }
   }
@@ -393,15 +393,10 @@ struct DeskSettings: Codable {
       }
     }
   }
-  var activeCount: Int {
-    sessions.filter {
-      $0.connection == .connected && $0.snapshot.inputs.isEmpty
-        && [.running, .retrying, .compacting, .waitingChildren].contains($0.snapshot.execution)
-    }.count
-  }
-  var inputCount: Int {
-    sessions.filter { $0.connection == .connected }.reduce(0) { $0 + $1.snapshot.inputs.count }
-  }
+  var connectedCount: Int { sessions.filter { $0.connection == .connected }.count }
+  var activeCount: Int { sessions.filter { Presentation.isExecutionActive($0) }.count }
+  var unknownExecutionCount: Int { sessions.filter { Presentation.needsExecutionReview($0) }.count }
+  var inputCount: Int { sessions.filter { Presentation.needsInput($0) }.count }
   init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil) {
     let home = FileManager.default.homeDirectoryForCurrentUser
     let args = CommandLine.arguments
@@ -597,26 +592,23 @@ struct DeskSettings: Codable {
             let info: PeerProcessInfo? = await withCheckedContinuation { continuation in server.peerProcessInfo(s.connectionId) { continuation.resume(returning: $0) } }
             guard let info, info == binding.process else { throw NavigationError.unavailable }
           }
+          // Read-only preflight and actual send now share this App actor and
+          // exact Terminal PID targets. It still is not a focus success proof.
           let permission = await TerminalRouteActivator.permissionStatus()
           guard permission == "终端Automation已授权" else {
             routeNotes[currentIdentity] = permission
-            actionNote = "请在定位诊断主动请求终端权限；是否允许由系统提示中的用户决定"
+            actionNote = "未发起终端定位：" + permission
             return
           }
+          guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
           let result = try await TerminalRouteActivator.focus(ttyPath: ttyPath)
-          guard store.sessions[currentIdentity.sessionKey]?.snapshot.identity == currentIdentity else { throw NavigationError.unavailable }
+          guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
+          routeNotes[currentIdentity] = "Pi Desk同进程AppleEvent已唯一匹配并回读：" + result
           actionNote = "已定位准确Terminal tab（\(result)）；未启动新的Pi writer"
         } catch {
-          let permission = await TerminalRouteActivator.permissionStatus()
-          if let routeError = error as? TerminalRouteActivator.Error {
-            switch routeError {
-            case .noMatch: routeNotes[currentIdentity] = "Terminal中没有精确TTY匹配（0匹配）；未改变其他窗口"
-            case .ambiguous: routeNotes[currentIdentity] = "Terminal中出现多个TTY匹配；未选择第一个窗口"
-            case .identityMismatch: routeNotes[currentIdentity] = "终端选中TTY回读不一致；未宣称定位成功"
-            case .unavailable: routeNotes[currentIdentity] = "TTY或当前连接不可核验；未启动替代Pi"
-            }
-          } else { routeNotes[currentIdentity] = permission }
-          actionNote = "无法定位准确Terminal tab；请检查定位诊断，不会自动执行pi --session"
+          let reason = error is NavigationError ? "当前连接/代际/peer已变化；未宣称旧路由定位成功" : TerminalRouteActivator.diagnostic(error)
+          routeNotes[currentIdentity] = reason
+          actionNote = "无法定位准确Terminal tab：" + reason + "；不会自动执行pi --session"
         }
       }
       return

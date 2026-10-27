@@ -8,46 +8,81 @@ public struct HumanStatus: Equatable, Sendable {
   public let tone: StatusTone
 }
 public enum Presentation {
-  public static func status(_ session: SessionView) -> HumanStatus {
-    if session.connection == .disconnected {
-      return HumanStatus(title: "已断开", symbol: "wifi.slash", tone: .muted)
-    }
-    if session.connection == .stale {
-      return HumanStatus(title: "状态较旧", symbol: "clock.badge.exclamationmark", tone: .amber)
-    }
-    if !session.snapshot.inputs.isEmpty {
-      return HumanStatus(title: "需要输入", symbol: "questionmark.circle.fill", tone: .amber)
-    }
-    if session.snapshot.pending == true && [.settled, .unknown].contains(session.snapshot.execution) {
-      return HumanStatus(title: "等待后续推进", symbol: "clock", tone: .blue)
-    }
-    switch session.snapshot.execution {
-    case .starting: return HumanStatus(title: "正在启动", symbol: "circle.dotted", tone: .blue)
-    case .running: return HumanStatus(title: "正在运行", symbol: "play.circle.fill", tone: .green)
-    case .retrying:
-      return HumanStatus(title: "自动重试中", symbol: "arrow.clockwise.circle", tone: .blue)
-    case .compacting:
-      return HumanStatus(title: "正在整理上下文", symbol: "rectangle.compress.vertical", tone: .blue)
-    case .waitingChildren:
-      return HumanStatus(
-        title: "等待子任务", symbol: "point.3.connected.trianglepath.dotted", tone: .blue)
-    case .settled: return HumanStatus(title: "本轮已结束", symbol: "checkmark.circle", tone: .muted)
-    case .failed:
-      return HumanStatus(title: "本轮出现异常", symbol: "exclamationmark.circle.fill", tone: .red)
-    case .aborted: return HumanStatus(title: "本轮已中止", symbol: "stop.circle", tone: .muted)
-    case .unknown: return HumanStatus(title: "状态未知", symbol: "questionmark.circle", tone: .muted)
+  public static func connectionStatus(_ session: SessionView) -> HumanStatus {
+    switch session.connection {
+    case .connected: return HumanStatus(title: "Pi已接入", symbol: "link", tone: .green)
+    case .stale: return HumanStatus(title: "状态较旧", symbol: "clock.badge.exclamationmark", tone: .amber)
+    case .disconnected: return HumanStatus(title: "已断开", symbol: "wifi.slash", tone: .muted)
     }
   }
-  public static func priority(_ s: SessionView) -> Int {
-    if s.connection == .connected && !s.snapshot.inputs.isEmpty { return 0 }
-    if s.snapshot.execution == .failed { return 1 }
-    if s.connection != .connected { return 3 }
-    if s.snapshot.pending == true { return 2 }
-    if [.running, .retrying, .compacting, .waitingChildren, .starting].contains(
-      s.snapshot.execution)
-    {
-      return 2
+  public static func hasExecutionEvidence(_ session: SessionView) -> Bool {
+    guard let proof = session.snapshot.executionObservation, proof.valid else { return false }
+    let age = session.snapshot.observedAt - proof.observedAt
+    return age >= 0 && age <= 15_000
+  }
+  public static func needsInput(_ session: SessionView) -> Bool {
+    session.connection == .connected && !session.snapshot.inputs.isEmpty
+  }
+  public static func executionState(_ session: SessionView) -> Execution {
+    guard session.connection == .connected else { return .unknown }
+    let s = session.snapshot
+    if hasExecutionEvidence(session), let proof = s.executionObservation {
+      if !proof.idle { return [.retrying, .compacting].contains(s.execution) ? s.execution : .running }
+      if [.failed, .aborted].contains(s.execution) { return s.execution }
+      if s.runs.contains(where: { $0.terminalProof != "observed" && ["running", "queued", "stopping"].contains($0.state) }) { return .waitingChildren }
+      return .settled
     }
+    // Preserve legacy outcome records, but neither an old running enum nor a
+    // new heartbeat proves that AI/tools are still executing now. SHA is not a gate.
+    return [.settled, .failed, .aborted].contains(s.execution) ? s.execution : .unknown
+  }
+  public static func isPotentiallyActive(_ session: SessionView) -> Bool {
+    session.connection == .connected && !needsInput(session)
+      && [.starting, .running, .retrying, .compacting, .waitingChildren].contains(session.snapshot.execution)
+  }
+  public static func needsExecutionReview(_ session: SessionView) -> Bool {
+    guard session.connection == .connected, !needsInput(session) else { return false }
+    return (!hasExecutionEvidence(session) && isPotentiallyActive(session))
+      || (hasExecutionEvidence(session) && executionState(session) == .unknown)
+  }
+  public static func isExecutionActive(_ session: SessionView) -> Bool {
+    session.connection == .connected && !needsInput(session) && hasExecutionEvidence(session)
+      && [.starting, .running, .retrying, .compacting, .waitingChildren].contains(executionState(session))
+  }
+  public static func executionStatus(_ session: SessionView) -> HumanStatus {
+    guard session.connection == .connected else {
+      return HumanStatus(title: "执行状态待核", symbol: "questionmark.circle", tone: .muted)
+    }
+    if needsInput(session) {
+      return HumanStatus(title: "等待输入", symbol: "questionmark.circle.fill", tone: .amber)
+    }
+    let state = executionState(session)
+    if session.snapshot.pending == true && [.settled, .unknown].contains(state) {
+      return HumanStatus(title: "等待后续推进", symbol: "clock", tone: .blue)
+    }
+    switch state {
+    case .starting: return HumanStatus(title: "正在启动", symbol: "circle.dotted", tone: .blue)
+    case .running: return HumanStatus(title: "本轮运行", symbol: "play.circle.fill", tone: .green)
+    case .retrying: return HumanStatus(title: "自动重试中", symbol: "arrow.clockwise.circle", tone: .blue)
+    case .compacting: return HumanStatus(title: "正在整理上下文", symbol: "rectangle.compress.vertical", tone: .blue)
+    case .waitingChildren: return HumanStatus(title: "等待子任务", symbol: "point.3.connected.trianglepath.dotted", tone: .blue)
+    case .settled: return HumanStatus(title: hasExecutionEvidence(session) ? "本轮已结束" : "上次已结束", symbol: "checkmark.circle", tone: .muted)
+    case .failed: return HumanStatus(title: hasExecutionEvidence(session) ? "本轮出现异常" : "上次出现异常", symbol: "exclamationmark.circle.fill", tone: .red)
+    case .aborted: return HumanStatus(title: hasExecutionEvidence(session) ? "本轮已中止" : "上次已中止", symbol: "stop.circle", tone: .muted)
+    case .unknown: return HumanStatus(title: "状态待核", symbol: "questionmark.circle", tone: .muted)
+    }
+  }
+  // Existing callers use status for the execution layer. Connection is shown separately.
+  public static func status(_ session: SessionView) -> HumanStatus { executionStatus(session) }
+  public static func executionCoverage(_ session: SessionView) -> String {
+    if hasExecutionEvidence(session) { return "原Pi标量状态已对账（独立于连接心跳）" }
+    return session.snapshot.executionObservation == nil ? "旧桥接未提供执行状态对账；在线不代表AI正在执行，等待自然加载新版" : "连接仍在线，但执行状态观测已较旧；未用心跳冒充新证据"
+  }
+  public static func priority(_ s: SessionView) -> Int {
+    if needsInput(s) { return 0 }
+    if executionState(s) == .failed { return 1 }
+    if s.connection != .connected { return 3 }
+    if s.snapshot.pending == true || isExecutionActive(s) { return 2 }
     return 4
   }
   public static func createdShort(_ s: Snapshot, now: Date = Date()) -> String {
@@ -101,7 +136,7 @@ public enum Presentation {
   }
   public static func connection(_ raw: ConnectionState) -> String {
     switch raw {
-    case .connected: return "已连接"
+    case .connected: return "Pi已接入"
     case .stale: return "状态较旧"
     case .disconnected: return "已断开"
     }
@@ -120,13 +155,16 @@ public enum Presentation {
   }
   public static func activity(_ s: SessionView) -> String {
     if s.connection != .connected { return "保留最后一次状态，不代表工作停止" }
-    if !s.snapshot.inputs.isEmpty { return "原会话正在等待输入，请回到原入口处理" }
-    if !s.snapshot.tools.isEmpty {
+    if needsInput(s) { return "原会话正在等待输入，请回到原入口处理" }
+    if executionState(s) == .unknown {
+      return hasExecutionEvidence(s) ? "暂未获得准确执行状态" : "执行状态待核（原始状态：\(s.snapshot.execution.rawValue)）；Pi仍已接入"
+    }
+    if hasExecutionEvidence(s), s.snapshot.executionObservation?.idle == false, !s.snapshot.tools.isEmpty {
       return s.snapshot.tools.prefix(3).map(tool).joined(separator: " · ")
     }
-    if s.snapshot.pending == true { return "原会话仍有待处理消息，自动化继续推进" }
-    switch s.snapshot.execution {
-    case .settled: return "本轮对话已结束，目标验收状态未核"
+    if s.snapshot.pending == true { return "原会话仍有待处理消息，尚不代表AI正在执行" }
+    switch executionState(s) {
+    case .settled: return hasExecutionEvidence(s) ? "本轮对话已结束，Pi仍已接入；目标验收状态未核" : "上次观测本轮已结束；Pi仍已接入，当前执行状态待核"
     case .waitingChildren: return "原系统正在等待子任务，自动化仍独立推进"
     case .failed: return "原系统报告本轮异常，请查看原会话"
     case .unknown: return "暂未获得准确执行状态"
@@ -143,6 +181,7 @@ public enum Presentation {
     case "stopped": return "已停止"
     case "stopping": return "正在停止"
     case "complete", "completed": return "运行已结束"
+    case "terminal": return "进程已结束（结果另核）"
     case "failed": return "运行失败"
     case "partial": return "结果不完整"
     case "rejected": return "已拒绝"

@@ -145,6 +145,16 @@ public struct InputNotice: Codable, Equatable, Identifiable, Sendable {
   public var kind: String
   public var startedAt: Double
 }
+public struct ExecutionObservation: Codable, Equatable, Sendable {
+  public var version: Int
+  public var observedAt: Double
+  public var source: String
+  public var idle: Bool
+  public var valid: Bool {
+    version == 1 && observedAt.isFinite && observedAt >= 0
+      && ["ctx.isIdle", "lifecycle"].contains(source)
+  }
+}
 public struct Evidence: Codable, Equatable, Identifiable, Sendable {
   public var id: String
   public var source: String
@@ -171,6 +181,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var display: Display
   public var execution: Execution
   public var pending: Bool?
+  public var executionObservation: ExecutionObservation?
   public var childCoverage: String
   public var tools: [String]
   public var runs: [Run]
@@ -186,6 +197,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
       && display.name.utf8.count <= 512 && (display.cwd?.utf8.count ?? 0) <= 512
       && (display.createdAt == nil || (display.createdAt!.isFinite && display.createdAt! >= 0 && display.createdAt! <= 7_258_118_400_000 && display.createdAt!.rounded(.towardZero) == display.createdAt!))
       && (display.createdAtSource == nil || ["session-header", "unknown"].contains(display.createdAtSource!))
+      && (executionObservation == nil || executionObservation!.valid)
       && (display.route == nil || display.route!.valid)
       && tools.count <= 32 && runs.count <= 64 && schedules.count <= 64 && inputs.count <= 32
       && usage.count <= 8 && evidence.count <= 32 && tools.allSatisfy { $0.utf8.count <= 128 }

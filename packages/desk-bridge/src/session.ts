@@ -13,6 +13,7 @@ import {
 	type Snapshot,
 	type RecordV1,
 	type Evidence,
+	type ExecutionObservation,
 	type InputNotice,
 	type Action,
 } from "./protocol.ts";
@@ -80,7 +81,6 @@ export class DeskSession {
 	private snapshot: Snapshot;
 	private now: () => number;
 	private finalError = false;
-	private settledObserved = false;
 	private observationDrops = 0;
 	private metadataLoaded = false;
 	private bridgeSource: string;
@@ -108,6 +108,15 @@ export class DeskSession {
 		this.usage = new AttachmentUsage(identity.runtimeEpoch, this.now());
 		const header = typeof ctx.sessionManager.getHeader === "function" ? ctx.sessionManager.getHeader() : null;
 		const created = sessionCreatedAt(header?.timestamp);
+		let initialIdle: boolean | undefined;
+		try { initialIdle = ctx.isIdle(); } catch { initialIdle = undefined; }
+		const initialExecution = initialIdle === undefined ? "unknown" : initialIdle ? "unknown" : "running";
+		const initialExecutionObservation: ExecutionObservation | undefined = initialIdle === undefined ? undefined : {
+			version: 1,
+			observedAt: this.now(),
+			source: "ctx.isIdle",
+			idle: initialIdle,
+		};
 		this.snapshot = {
 			identity,
 			seq: 0,
@@ -123,14 +132,16 @@ export class DeskSession {
 				owners: {
 					pi: "extension-api-1.4",
 					"pi-desk-bridge": this.bridgeSource,
+					"pi-desk-status": "ctx-idle-v1",
 				},
 			},
 			display: {
 				name: "Pi", mode: ctx.mode,
 				createdAt: created.createdAt, createdAtSource: created.source,
 			},
-			execution: ctx.isIdle() ? "unknown" : "running",
+			execution: initialExecution,
 			pending: null,
+			executionObservation: initialExecutionObservation,
 			childCoverage: "unknown",
 			tools: [],
 			runs: [],
@@ -172,17 +183,19 @@ export class DeskSession {
 		this.off.push(
 			pi.events.on("schedule:rpc:v1:ready", () => this.deferRefresh(false)),
 		);
-		this.off.push(
-			pi.events.on("subagent:async-complete", () => this.deferRefresh(false)),
-		);
-		this.off.push(
-			pi.events.on("subagent:foreground-complete", () =>
-				this.deferRefresh(false),
-			),
-		);
-		this.off.push(
-			pi.events.on("subagent:async-started", () => this.deferRefresh(false)),
-		);
+		this.off.push(pi.events.on("subagent:async-complete", raw => this.completedChild(raw)));
+		this.off.push(pi.events.on("subagent:foreground-complete", raw => this.completedChild(raw)));
+		this.off.push(pi.events.on("subagent:async-started", raw => {
+			if (!object(raw) || !safeId(raw.id) || raw.sessionId !== identity.nativeSessionId) return;
+			const existing = this.snapshot.runs.find(r => r.runId === raw.id);
+			this.snapshot.runs = [...this.snapshot.runs.filter(r => r.runId !== raw.id), {
+				key: existing?.key ?? "event-" + raw.id, runId: raw.id, owner: "subagents", state: "running",
+				parentRunId: safeId(raw.parentWorkflowRunId) ? raw.parentWorkflowRunId : undefined,
+				agent: text(raw.agent, 128), actions: [],
+			}].slice(-64);
+			this.snapshot.childCoverage = "partial";
+			this.changed();
+		}));
 		this.off.push(
 			pi.events.on("subagent:child-status", (raw) => {
 				if (object(raw) && raw.version === 1 && safeId(raw.childRunId) && safeId(raw.runId) && ["started", "stopping", "stopped"].includes(String(raw.status))) {
@@ -194,6 +207,7 @@ export class DeskSession {
 						owner: "subagents", state, agent: text(raw.agent, 128), actions: [],
 					}].slice(-64);
 					this.snapshot.childCoverage = "partial";
+					this.reconcileExecution();
 					this.changed();
 				}
 			}),
@@ -210,7 +224,7 @@ export class DeskSession {
 					if (r.state === "observed") {
 						this.snapshot.runs = this.snapshot.runs.map((run) =>
 							run.runId === r.runId
-								? { ...run, terminalProof: "observed" }
+								? { ...run, state: "terminal", terminalProof: "observed", actions: [] }
 								: run,
 						);
 						this.transport.reply({
@@ -224,6 +238,7 @@ export class DeskSession {
 								terminalProof: "observed",
 							},
 						});
+						this.reconcileExecution();
 						this.changed();
 					}
 					this.deferRefresh(false);
@@ -250,13 +265,70 @@ export class DeskSession {
 		});
 		try {
 			this.observe(ctx);
+			this.scheduleStartupReconcile();
 			this.transport.start();
 		} catch {
 			this.observationDrops++;
 		}
 		this.deferRefresh(false);
 	}
+	private completedChild(raw: unknown) {
+		if (!object(raw) || (raw.sessionId !== undefined && raw.sessionId !== this.snapshot.identity.nativeSessionId)) return;
+		const runId = safeId(raw.runId) ? raw.runId : safeId(raw.id) ? raw.id : undefined;
+		if (!runId) return;
+		const state = ["complete", "completed", "failed", "partial", "stopped", "aborted", "rejected"].includes(String(raw.state)) ? String(raw.state) : "unknown";
+		const indexed = Number.isSafeInteger(raw.taskIndex) && Number(raw.taskIndex) >= 0;
+		this.snapshot.runs = this.snapshot.runs.map(run => {
+			// A foreground child index must not settle its entire workflow root.
+			if (run.runId === runId && (!indexed || run.index === raw.taskIndex)) return { ...run, state, actions: [] };
+			// Fleet-only keys have no exact run identity. Invalidate, never claim
+			// their completion or let the old cache hold the session busy forever.
+			if ((!run.runId || (!indexed && run.parentRunId === runId)) && ["running", "queued", "stopping"].includes(run.state)) return { ...run, state: "unknown", actions: [] };
+			return run;
+		});
+		this.snapshot.childCoverage = "partial";
+		this.changed();
+	}
+	private scheduleStartupReconcile() {
+		// session_start may run inside a temporary busy boundary. One deferred
+		// scalar reconciliation is enough; no timer, owner RPC or artifact scan.
+		setImmediate(() => {
+			if (!this.stopped) { this.reconcileExecution(); this.changed(); }
+		}).unref();
+	}
+	private hasActiveChildren() {
+		return this.snapshot.runs.some(r => r.terminalProof !== "observed" && ["running", "queued", "stopping"].includes(r.state));
+	}
+	private idleExecution() {
+		if (this.snapshot.execution === "aborted") return "aborted";
+		if (this.finalError || this.snapshot.execution === "failed") return "failed";
+		return this.hasActiveChildren() ? "waiting-children" : "settled";
+	}
+	private reconcileExecution(observedAt = this.now()) {
+		if (!this.ctx || this.stopped) return;
+		try {
+			const idle = this.ctx.isIdle(), pending = this.ctx.hasPendingMessages();
+			if (typeof idle !== "boolean" || typeof pending !== "boolean") return;
+			const previousIdle = this.snapshot.executionObservation?.idle;
+			this.snapshot.pending = pending;
+			this.snapshot.executionObservation = { version: 1, observedAt, source: "ctx.isIdle", idle };
+			if (!idle) {
+				if (previousIdle === true) this.finalError = false;
+				this.snapshot.execution = "running";
+			} else {
+				// Idle is native evidence that no tool remains in this Pi run.
+				// A missed end event must not leave a permanent tool/busy badge.
+				this.tools.clear(); this.snapshot.tools = [];
+				this.snapshot.execution = this.idleExecution();
+			}
+		} catch {
+			// A new transport heartbeat cannot make a stale/replaced ctx fresh.
+			// Keep the last sampledAt separately so clients can show the gap.
+		}
+	}
 	private record(kind: string): RecordV1 {
+		const observedAt = this.now();
+		this.reconcileExecution(observedAt);
 		this.snapshot.capabilities.actions = [
 			...new Set<Action>([
 				"session.message",
@@ -266,7 +338,7 @@ export class DeskSession {
 			]),
 		];
 		this.snapshot.seq = ++this.sequence;
-		this.snapshot.observedAt = this.now();
+		this.snapshot.observedAt = observedAt;
 		this.snapshot.dropped =
 			(this.transport?.dropped ?? 0) + this.observationDrops;
 		return {
@@ -313,7 +385,7 @@ export class DeskSession {
 			mode: ctx.mode,
 		};
 		if (this.terminalRoute) this.snapshot.display.route = this.terminalRoute;
-		this.snapshot.pending = ctx.hasPendingMessages();
+		this.reconcileExecution();
 		this.changed();
 	}
 	observationFault() {
@@ -326,23 +398,14 @@ export class DeskSession {
 		this.observe(ctx);
 		if (kind === "agent_start") {
 			this.finalError = false;
-			this.settledObserved = false;
 			this.snapshot.execution = "running";
+			this.snapshot.executionObservation = { version: 1, observedAt: this.now(), source: "lifecycle", idle: false };
 		}
 		// agent_end is deliberately not a completion boundary.
 		if (kind === "agent_settled") {
-			this.settledObserved = true;
-			this.snapshot.execution = aborted
-				? "aborted"
-				: this.finalError
-					? "failed"
-					: this.snapshot.pending
-						? "running"
-						: this.snapshot.runs.some((r) =>
-									["running", "queued"].includes(r.state),
-								)
-							? "waiting-children"
-							: "settled";
+			this.snapshot.execution = aborted ? "aborted" : this.finalError ? "failed" : this.hasActiveChildren() ? "waiting-children" : "settled";
+			this.snapshot.executionObservation = { version: 1, observedAt: this.now(), source: "lifecycle", idle: true };
+			this.tools.clear(); this.snapshot.tools = [];
 			// No automatic owner cost/status/artifact read at a Pi turn boundary.
 		}
 		this.changed();
@@ -352,7 +415,12 @@ export class DeskSession {
 		if (start) {
 			if (this.tools.size < 32 && id.length <= 256 && safeId(name))
 				this.tools.set(id, name);
-		} else this.tools.delete(id);
+			this.snapshot.execution = "running";
+			this.snapshot.executionObservation = { version: 1, observedAt: this.now(), source: "lifecycle", idle: false };
+		} else {
+			this.tools.delete(id);
+			this.reconcileExecution();
+		}
 		this.snapshot.tools = [...new Set(this.tools.values())];
 		this.changed();
 	}
@@ -699,6 +767,7 @@ export class DeskSession {
 				owners: {
 					pi: "extension-api-1.4",
 					"pi-desk-bridge": this.bridgeSource,
+					"pi-desk-status": "ctx-idle-v1",
 					"pi-desk-usage": this.usageWriter ? "spool-v1" : "unavailable",
 					subagents: this.cap.version,
 					"schedule-prompt": this.scheduleActions.length
@@ -706,21 +775,7 @@ export class DeskSession {
 						: "unavailable",
 				},
 			};
-			if (
-				this.settledObserved &&
-				!this.finalError &&
-				this.snapshot.execution !== "aborted" &&
-				this.ctx?.isIdle()
-			) {
-				this.snapshot.pending = this.ctx.hasPendingMessages();
-				this.snapshot.execution = this.snapshot.pending
-					? "running"
-					: this.snapshot.runs.some((r) =>
-								["running", "queued"].includes(r.state),
-							)
-						? "waiting-children"
-						: "settled";
-			}
+			this.reconcileExecution();
 			this.changed();
 		} finally {
 			this.refreshing = false;

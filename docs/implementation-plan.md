@@ -210,6 +210,12 @@ App ledger现以utility queue持久连接、metadata generation/DB data_version�
 点击原会话按钮后，只读preflight实际返回“终端Automation尚未授权”，没有执行focus。随后按用户授权点击产品的显式“请求终端定位权限”入口，回读仍未授权；没有自动同意任何OS弹窗，没有向终端发送文字或按键。真实唯一TTY/tab聚焦仍未完成，本轮该动作的剩余必要条件是OS Automation许可，不再归因于旧bridge缺字段或Terminal祖先guard。截图原件：`tmp/playwright-mcp/build27-after-nav-coordinator.png`、`tmp/playwright-mcp/build27-route-permission-status.png`；manifest/codesign由协调主会话独立回读。
 
 验真后协调者结束Cua，仅向自有A/B synthetic进程发送TERM，不操作业务Pi。保持build27安装及source `361117e`不变，不再修改源码或安装。2.4、6.3、14.4、15.4保持未勾选：Terminal唯一focus未完成；完整键盘/VoiceOver、Herdr及系统通知许可后的真实投递仍按各自现场证据保留未验证。
+### 本轮执行状态修复与终端定位候选（2026-10-27）
+
+状态问题已取得修复前负例：constructor只读`ctx.isIdle`导致startup/重载状态冻结，heartbeat只更新`observedAt`却不更新执行事实，工具/子任务完成事件不失效缓存；4条定向回归在旧源码全部失败。当前候选新增独立`executionObservation` proof与`pi-desk-status=ctx-idle-v1`能力：生命周期/`ctx.isIdle()`/`hasPendingMessages()`只取公开标量，执行proof时间不复用传输心跳；startup一次deferred reconcile，ctx不可用不刷新proof，失败/中止不被heartbeat覆盖，异步/terminal事件按exact runId失效child cache，不做owner polling。App把连接badge与执行badge分开，active/filter/count共用proof判断；旧wire active只显示待核/下界，source SHA只作诊断，不决定busy/idle。`tmp/check-execution-native.mjs`以真实Pi SDK + faux provider暂停工具实际证明同一session/Pi在busy→idle→busy→idle切换、input优先和child terminal invalidation，模型调用4次且real provider 0；该fixture是原生SDK/bridge证据，不是GUI成功证明。
+
+Terminal定位候选已替换build27的`/usr/bin/osascript`子进程路径：Pi Desk进程在utility串行队列直接向每个运行Terminal PID发送固定`get/set/activate` AppleEvent；最多8实例/512 tabs、总12秒/单event最多2秒/单一在途，按launchDate/TTY/window ID复核，只有全局唯一匹配且前后TTY/window/frontmost回读一致才成功；没有脚本入口、终端文本/按键或shell。`NarrowUXChecks`用隔离fake client覆盖多Terminal唯一/0/多匹配、AppleEvent拒绝、TTY/window/frontmost mismatch及固定OSStatus诊断。真实GUI仍需本候选安装后复验，编译成功/按钮启用不等于focus成功。
+
 ### 保留的未完成项
 
-完整v0.1未验收、Change未归档。build27旧bridge peer-TTY fallback与四侧栏/详情分区已实现并真实读回；真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。
+完整v0.1未验收、Change未归档。build27旧bridge peer-TTY fallback与四侧栏/详情分区已实现并真实读回；其权限已授权后focus仍generic失败，旧路径主体/实例选择问题已由当前候选改为同主体AE但尚未真实复验，故不能假称Terminal focus完成。真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

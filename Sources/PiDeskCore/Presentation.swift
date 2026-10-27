@@ -42,7 +42,7 @@ public enum Presentation {
   }
   public static func needsExecutionReview(_ session: SessionView) -> Bool {
     guard session.connection == .connected, !needsInput(session) else { return false }
-    return (!hasExecutionEvidence(session) && isPotentiallyActive(session))
+    return (!hasExecutionEvidence(session))
       || (hasExecutionEvidence(session) && executionState(session) == .unknown)
   }
   public static func isExecutionActive(_ session: SessionView) -> Bool {
@@ -55,6 +55,9 @@ public enum Presentation {
     }
     if needsInput(session) {
       return HumanStatus(title: "等待输入", symbol: "questionmark.circle.fill", tone: .amber)
+    }
+    if !hasExecutionEvidence(session) {
+      return HumanStatus(title: "状态待核", symbol: "questionmark.circle", tone: .amber)
     }
     let state = executionState(session)
     if session.snapshot.pending == true && [.settled, .unknown].contains(state) {
@@ -76,7 +79,7 @@ public enum Presentation {
   public static func status(_ session: SessionView) -> HumanStatus { executionStatus(session) }
   public static func executionCoverage(_ session: SessionView) -> String {
     if hasExecutionEvidence(session) { return "原Pi标量状态已对账（独立于连接心跳）" }
-    return session.snapshot.executionObservation == nil ? "旧桥接未提供执行状态对账；在线不代表AI正在执行，等待自然加载新版" : "连接仍在线，但执行状态观测已较旧；未用心跳冒充新证据"
+    return session.snapshot.executionObservation == nil ? "旧桥接未提供执行状态对账；在线不代表AI正在执行。需Pi重开或自然切换到新版桥接后才有准确状态" : "连接仍在线，但执行状态观测已较旧；未用心跳冒充新证据"
   }
   public static func priority(_ s: SessionView) -> Int {
     if needsInput(s) { return 0 }
@@ -157,7 +160,10 @@ public enum Presentation {
     if s.connection != .connected { return "保留最后一次状态，不代表工作停止" }
     if needsInput(s) { return "原会话正在等待输入，请回到原入口处理" }
     if executionState(s) == .unknown {
-      return hasExecutionEvidence(s) ? "暂未获得准确执行状态" : "执行状态待核（原始状态：\(s.snapshot.execution.rawValue)）；Pi仍已接入"
+      return hasExecutionEvidence(s) ? "暂未获得准确执行状态" : "旧桥接·执行状态待核（原始状态：\(s.snapshot.execution.rawValue)）；需Pi重开或自然切换新版桥接"
+    }
+    if !hasExecutionEvidence(s) {
+      return "旧桥接·执行状态待核（原始状态：\(s.snapshot.execution.rawValue)）；需Pi重开或自然切换新版桥接"
     }
     if hasExecutionEvidence(s), s.snapshot.executionObservation?.idle == false, !s.snapshot.tools.isEmpty {
       return s.snapshot.tools.prefix(3).map(tool).joined(separator: " · ")

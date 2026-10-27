@@ -81,6 +81,7 @@ export class DeskSession {
 	private snapshot: Snapshot;
 	private now: () => number;
 	private finalError = false;
+	private awaitingSettled = false;
 	private observationDrops = 0;
 	private metadataLoaded = false;
 	private bridgeSource: string;
@@ -311,6 +312,14 @@ export class DeskSession {
 			if (typeof idle !== "boolean" || typeof pending !== "boolean") return;
 			const previousIdle = this.snapshot.executionObservation?.idle;
 			this.snapshot.pending = pending;
+			if (this.awaitingSettled && idle) {
+				// agent_start is authoritative until agent_settled. Some Pi
+				// versions expose a stale idle scalar during that event turn;
+				// retain lifecycle evidence instead of publishing a false settled.
+				this.snapshot.execution = "running";
+				this.snapshot.executionObservation = { version: 1, observedAt, source: "lifecycle", idle: false };
+				return;
+			}
 			this.snapshot.executionObservation = { version: 1, observedAt, source: "ctx.isIdle", idle };
 			if (!idle) {
 				if (previousIdle === true) this.finalError = false;
@@ -398,11 +407,13 @@ export class DeskSession {
 		this.observe(ctx);
 		if (kind === "agent_start") {
 			this.finalError = false;
+			this.awaitingSettled = true;
 			this.snapshot.execution = "running";
 			this.snapshot.executionObservation = { version: 1, observedAt: this.now(), source: "lifecycle", idle: false };
 		}
 		// agent_end is deliberately not a completion boundary.
 		if (kind === "agent_settled") {
+			this.awaitingSettled = false;
 			this.snapshot.execution = aborted ? "aborted" : this.finalError ? "failed" : this.hasActiveChildren() ? "waiting-children" : "settled";
 			this.snapshot.executionObservation = { version: 1, observedAt: this.now(), source: "lifecycle", idle: true };
 			this.tools.clear(); this.snapshot.tools = [];

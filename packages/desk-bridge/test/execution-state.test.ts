@@ -42,6 +42,22 @@ test("startup and late attachment reconcile real native idle without waiting for
   } finally { f.session.close(); }
 });
 
+test("agent_start lifecycle evidence wins over a stale idle scalar until agent_settled", async () => {
+  const f = fixture();
+  try {
+    f.state({ idle: true });
+    f.session.lifecycle("agent_start", f.ctx);
+    assert.equal(f.snapshot().execution, "running", "agent_start must not be settled by the first stale idle sample");
+    assert.equal(f.snapshot().executionObservation?.source, "lifecycle");
+    assert.equal(f.snapshot().executionObservation?.idle, false);
+    f.session.lifecycle("agent_end", f.ctx);
+    assert.equal(f.snapshot().execution, "running", "agent_end is not a completion boundary");
+    f.session.lifecycle("agent_settled", f.ctx);
+    assert.equal(f.snapshot().execution, "settled");
+    assert.equal(f.snapshot().executionObservation?.idle, true);
+  } finally { f.session.close(); }
+});
+
 test("execution freshness is separate from transport heartbeat and unavailable context does not invent new proof", () => {
   const f = fixture();
   try {
@@ -70,9 +86,11 @@ test("tools, queued followup, failure and abort remain consistent through cheap 
     assert.equal(f.snapshot().execution, "running", "agent_end during native recovery is not completion");
     f.state({ idle: true, pending: true });
     assert.equal(f.snapshot().pending, true);
-    assert.deepEqual(f.snapshot().tools, [], "native idle invalidates orphaned tool labels");
+    assert.equal(f.snapshot().execution, "running", "agent_end plus a stale idle scalar is still inside the lifecycle boundary");
+    assert.deepEqual(f.snapshot().tools, ["bash"]);
     f.state({ pending: false });
     f.session.lifecycle("agent_settled", f.ctx, true);
+    assert.deepEqual(f.snapshot().tools, [], "agent_settled clears orphaned tool labels");
     assert.equal(f.snapshot().execution, "aborted");
     assert.equal(f.snapshot().execution, "aborted", "heartbeats preserve the observed abort outcome");
     f.state({ idle: false }); f.session.lifecycle("agent_start", f.ctx);

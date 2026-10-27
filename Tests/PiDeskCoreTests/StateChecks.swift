@@ -94,6 +94,9 @@ enum StateChecks {
     precondition(!EvidencePolicy.isCurrentFact(evidence, head: "abcdef1234", now: 400000))
     var inputView = store.sessions[other.identity.sessionKey]!
     precondition(Presentation.status(inputView).title == "状态待核", "legacy heartbeat cannot prove current AI busy")
+    precondition(Presentation.executionCoverage(inputView).contains("需Pi重开或自然切换"), "legacy bridge must explain how accurate status becomes available")
+    var legacySettled = inputView; legacySettled.snapshot.execution = .settled
+    precondition(Presentation.status(legacySettled).title == "状态待核", "legacy settled enum is not current execution proof")
     precondition(Presentation.connectionStatus(inputView).title == "Pi已接入")
     inputView.snapshot.executionObservation = try JSONDecoder().decode(ExecutionObservation.self, from: Data("{\"version\":1,\"observedAt\":\(inputView.snapshot.observedAt),\"source\":\"ctx.isIdle\",\"idle\":false}".utf8))
     precondition(Presentation.status(inputView).title == "本轮运行" && Presentation.isExecutionActive(inputView))

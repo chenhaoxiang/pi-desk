@@ -7,7 +7,7 @@ release_scope: 首版本地源码与旁路候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-26
+verified: 2026-10-27
 verification_scope: 本地Swift/Node、隔离真实SDK/owner/GUI与已授权本机安装验真；未发布，不含完整真实TUI/Herdr验收
 ---
 
@@ -203,6 +203,13 @@ App ledger现以utility queue持久连接、metadata generation/DB data_version�
 
 大库metadata-only ledger probe显示：冷本月聚合约2.95–3.88秒在utility队列；同range重复刷新约1–2ms，source/model projection约1.3–1.7ms，warm refresh新增aggregateRows为0、aggregateScans不增、cache hits增加；健康检查和schema初始化各仅1次，新增final只增量。窗口兴趣为真实manager visible/occlusion/minimized/closed：可见Token 5秒、其他可见页30秒、后台60秒；关闭窗口不停止Pi异步final采集。profile与ledger原件仅在本机ignored tmp，不公开真实token/路径。
 
-### build27真实旧bridge定位边界\n\n源码 `361117ebf20cb2a10e5794f0dcefc6d436a1bd0e` 已用于 build27 安装，稳定 App 实际运行 PID/window 与 manifest 仅保存在本机tmp。真实 synthetic Terminal B 使用旧bridge source `8bd2e80` 且不reload；Pi Desk通过当前UDS peer PID/birth核验TTY后按钮显示“回到原终端”，证明旧bridge不再因缺route直接禁用。点击只读preflight实际返回“终端Automation尚未授权”，随后用户主动点击产品权限入口，系统仍未授权；未自动点击OS允许、未发送文字/按键、未启动第二Pi。截图：`tmp/playwright-mcp/build27-route-permission-status.png`；build27会话页旧bridge/createdAt边界：`tmp/playwright-mcp/build27-created-time-coordinator.png`。Terminal唯一tab focus、VoiceOver、Herdr与OS通知真实投递仍未通过，原因已从代码祖先guard收敛为真实Automation/现场条件。\n\n### 保留的未完成项
+### build27真实旧bridge定位边界
+
+2026-10-27，协调主会话完成已安装build27（source `361117ebf20cb2a10e5794f0dcefc6d436a1bd0e`）的真实Terminal验真。自有synthetic Terminal B保持同一PID和旧bridge `8bd2e80`，未reload或启动第二writer；App通过当前UDS peer PID/birth核验严格TTY后，“回到原终端”按钮启用，证明Terminal祖先guard误拒已经修复。四侧栏及会话内子任务/计划分区亦已实际读回。
+
+点击原会话按钮后，只读preflight实际返回“终端Automation尚未授权”，没有执行focus。随后按用户授权点击产品的显式“请求终端定位权限”入口，回读仍未授权；没有自动同意任何OS弹窗，没有向终端发送文字或按键。真实唯一TTY/tab聚焦仍未完成，本轮该动作的剩余必要条件是OS Automation许可，不再归因于旧bridge缺字段或Terminal祖先guard。截图原件：`tmp/playwright-mcp/build27-after-nav-coordinator.png`、`tmp/playwright-mcp/build27-route-permission-status.png`；manifest/codesign由协调主会话独立回读。
+
+验真后协调者结束Cua，仅向自有A/B synthetic进程发送TERM，不操作业务Pi。保持build27安装及source `361117e`不变，不再修改源码或安装。2.4、6.3、14.4、15.4保持未勾选：Terminal唯一focus未完成；完整键盘/VoiceOver、Herdr及系统通知许可后的真实投递仍按各自现场证据保留未验证。
+### 保留的未完成项
 
 完整v0.1未验收、Change未归档。build27旧bridge peer-TTY fallback与四侧栏/详情分区已实现并真实读回；真实Herdr可执行文件在此机不可用，故精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，codesign ad-hoc验证通过；实际GUI杀App后两原生faux会话继续执行（原A/B 2/1次变3/2次），App重启重新登记且调用数不变，没有重放。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

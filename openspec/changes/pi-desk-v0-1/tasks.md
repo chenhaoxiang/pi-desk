@@ -110,14 +110,14 @@
 - [x] 14.1 route协议补Terminal.app精确TTY/TERM_SESSION_ID及createdAt/header来源；一次性TTY helper、tmux client_tty不冒称、双端route/createdAt安全范围校验；旧bridge字段缺失保持unknown。
 - [x] 14.2 原会话按钮优先Herdr exact pane，Terminal.app仅唯一tty匹配后focus且先收集再解目标窗口；Automation拒绝/无route明确不可定位；不按cwd猜测、不对活跃session自动`pi --session`启动第二writer。
 - [x] 14.3 PiSettingsStore只读/白名单卡片与canonical user settings.json安全写 fixture：Pi兼容`.lock`、unknown字段保留、project overlay只读、revision/坏JSON/类型/权限/锁冲突拒写、owner-only backup/atomic readback；view-state退出flush bounded回读。
-- [ ] 14.4 真实Terminal.app唯一tab/Automation授权与完整键盘/VoiceOver/Herdr/OS通知仍需现场条件；未验不勾2.4/6.3，不把隔离PTY或合成fixture冒称现场通过。
+- [ ] 14.4 build27已真实验证同一旧B进程无需reload/第二writer即可获得启用的精确TTY按钮；实际点击preflight及产品权限请求入口后，Automation仍未授权，唯一tab focus未执行/未完成。完整键盘/VoiceOver/Herdr/OS通知仍按现场证据保留未验证，2.4/6.3不勾。
 
 ## 15. 会话合并与旧bridge定位
 
 - [x] 15.1 侧栏仅会话/Token/重要事项/设置，子任务/计划在准确会话详情保留count、owner/覆盖、空态与刷新/未来触发语义；旧page迁移不丢其他偏好。
 - [x] 15.2 ⌘1/⌘2/⌘3/⌘F与下一需关注会话，只用本地缓存；native pending/input长工具状态不误报idle。
 - [x] 15.3 App UDS peer PID/birth+connection/identity/epoch绑定，utility一次性TTY/有界Terminal祖先fallback；旧bridge不reload，新bridge startup异步route直接发布，失效不复用旧PID。
-- [ ] 15.4 真实A/B Terminal、OS Automation/通知与键盘/VoiceOver尝试后逐项记录pass/失败/必要条件，不把fixture冒称现场通过。
+- [ ] 15.4 2026-10-27真实旧B保持PID与8bd2e80 bridge，build27按钮启用、四侧栏/详情分区读回通过；实际preflight和显式权限请求入口均回读Automation未授权，真实唯一focus仍待OS许可。截图及停止边界已记实施方案；保留build27/source361117e，不再修改源码/安装，不自动同意OS弹窗或把fixture冒称完整验收。
 
 ## Workflow follow-up
 

@@ -384,7 +384,7 @@ struct DeskSettings: Codable {
           self.saveSettings()
           self.checkNotificationStatus()
         case .success(false): self.notificationStatus = "系统通知未获授权；如需启用，请在系统设置中修改Pi Desk通知权限。原Pi通知与自动化不受影响"
-        case .failure: self.notificationStatus = "开启系统通知失败；请稍后重试。Pi原通知和自动化不受影响"
+        case .failure(let error): self.notificationStatus = "开启系统通知失败" + AppNotificationDiagnostic.detail(error) + "；Pi原通知和自动化不受影响"
         }
       }
     }

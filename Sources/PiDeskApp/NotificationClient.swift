@@ -15,6 +15,16 @@ public enum AppNotificationError: Error, Equatable {
   case deliveryFailed
 }
 
+enum AppNotificationDiagnostic {
+  static func detail(_ error: Error) -> String {
+    let value = error as NSError
+    guard [UNErrorDomain, NSCocoaErrorDomain, NSOSStatusErrorDomain].contains(value.domain) else { return "" }
+    // Error descriptions/userInfo may contain private paths or text. Only a
+    // fixed system domain and numeric code are safe enough for UI diagnosis.
+    return "（\(value.domain):\(value.code)）"
+  }
+}
+
 protocol NotificationClient: AnyObject {
   func settings(_ completion: @escaping (AppNotificationAuthorization) -> Void)
   func requestAuthorization(_ completion: @escaping (Result<Bool, Error>) -> Void)

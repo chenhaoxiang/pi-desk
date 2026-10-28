@@ -53,6 +53,9 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     precondition(condition(), "bounded completion missing")
   }
   @MainActor static func main() async throws {
+    let notificationError = NSError(domain: "UNErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "PRIVATE_NOTIFICATION_DETAIL"])
+    precondition(AppNotificationDiagnostic.detail(notificationError) == "（UNErrorDomain:1）")
+    precondition(AppNotificationDiagnostic.detail(NSError(domain: "PRIVATE_DOMAIN", code: 1)).isEmpty)
     let terminal = FakeTerminal(), first = FakeTerminal.Process(pid: 10, launchedAt: 1), second = FakeTerminal.Process(pid: 11, launchedAt: 2)
     terminal.targets = [first, second]
     terminal.rows = [.init(process: first, windowID: 8, index: 1, tty: "/dev/ttys001"), .init(process: second, windowID: 9, index: 2, tty: "/dev/ttys035")]

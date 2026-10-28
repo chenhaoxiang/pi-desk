@@ -231,4 +231,6 @@ Terminal定位候选已替换build27的`/usr/bin/osascript`子进程路径：Pi 
 
 ### 保留的未完成项
 
+2026-10-28，主会话经系统设置旁白的正常UI将开关从0改为1，欢迎页后确认真实VoiceOver/scrod进程已启动。“使用旁白”的AXPress返回-25204，但后读进程已启动，不能据此判断确定未执行；Pi Desk精确前台后的VO导航chord仍为unverifiable，未取得可核验朗读、caption或完整焦点遍历，因此不标完整读屏通过。试验后已由正常UI恢复checkbox value0/selectedfalse；原件在`tmp/closeout-20261028/gui/voiceover-*.json`及`vo-pidesk-*.png`。disabled只是恢复后的状态，不是技术阻断；系统通知denied及授权后真实投递未验的边界继续保留。
+
 完整v0.1未验收、Change未归档。build30已真实复验状态live fixture与Terminal focus：busy/idle切换在同一真实GUI卡片上分别读回“本轮运行/本轮已结束”；旧bridge Terminal定位准确回读`/dev/ttys035`、Terminal PID1310、window53694。真实Herdr可执行文件在此机不可用，故Herdr精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，当前build38安装/verify/codesign通过，上一版回滚保留；实际GUI杀App后原生faux会话继续执行，业务Pi未reload/输入/模型。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开main已有已审文档bootstrap、实现PR #1及初轮CI；最终head的独立审计/CI/普通合并仍分别按真实结果更新，不把本机安装当作发行。

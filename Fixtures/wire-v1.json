@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "kind": "hello",
+  "identity": {
+    "localHostId": "fixture-host",
+    "nativeSessionId": "session-a",
+    "runtimeEpoch": "epoch-a"
+  },
+  "snapshot": {
+    "identity": {
+      "localHostId": "fixture-host",
+      "nativeSessionId": "session-a",
+      "runtimeEpoch": "epoch-a"
+    },
+    "seq": 4,
+    "observedAt": 1792845000000,
+    "capabilities": {
+      "actions": [
+        "session.message",
+        "session.abort-current"
+      ],
+      "queries": [
+        "refresh"
+      ],
+      "owners": {
+        "pi": "1.4.0-fork.1"
+      }
+    },
+    "display": {
+      "name": "合成会话 A",
+      "cwd": "/fixture/project",
+      "model": "fixture/faux",
+      "effort": "high",
+      "mode": "tui"
+    },
+    "execution": "running",
+    "pending": false,
+    "childCoverage": "unknown",
+    "tools": [
+      "read"
+    ],
+    "runs": [],
+    "schedules": [],
+    "usage": [
+      {
+        "source": "pi.turn_end",
+        "scope": "attachment-window",
+        "windowId": "epoch-a",
+        "startedAt": 1792844900000,
+        "coverage": "partial",
+        "tokens": {
+          "input": 100,
+          "output": 20,
+          "cacheRead": 30,
+          "cacheWrite": 5
+        },
+        "cost": null,
+        "unresolvedChildren": null,
+        "includedRunIds": [],
+        "reasons": [
+          "attachment-only"
+        ]
+      }
+    ],
+    "inputs": [],
+    "evidence": [],
+    "dropped": 0,
+    "contextTokens": null
+  },
+  "unknownFutureField": true
+}

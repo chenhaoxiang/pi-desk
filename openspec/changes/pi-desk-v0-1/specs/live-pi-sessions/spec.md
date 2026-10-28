@@ -77,3 +77,24 @@ Pi Desk SHALL 默认仅收集必要安全显示元数据，并只通过核实的
 #### Scenario: Exact terminal route is unavailable
 - **WHEN** 对应终端或Herdr路由无效
 - **THEN** 显示跳转失败，不激活另一个会话冒充成功
+
+
+### Requirement: Human centered native island
+
+Pi Desk SHALL provide a compact/expanded native top-edge panel as a daily visual entry, without activating the app on observations or adding screen/accessibility setup permissions. Cards SHALL prioritize actual input and readable Chinese state while keeping unknown, partial and disconnected facts visible; technical identifiers MAY be deferred to diagnostics.
+
+#### Scenario: User expands and leaves the island
+- **WHEN** the user hovers or clicks the compact panel and later leaves it
+- **THEN** it expands and may collapse after a bounded delay, but pinning or keyboard editing prevents unintended collapse and Escape does not discard an active draft
+
+#### Scenario: Screen geometry or motion preference differs
+- **WHEN** the app runs on a notched, ordinary or external screen, or Reduce Motion is enabled
+- **THEN** its own panel avoids camera geometry, uses an appropriate capsule fallback and respects the motion preference without inspecting other apps
+
+#### Scenario: Common action from a visual card
+- **WHEN** the user opens an append or steer composer on one session card
+- **THEN** the draft and request bind to that exact runtime even if the main-window selection changes, and unavailable navigation is explained rather than falsely activating another target
+
+#### Scenario: Synthetic visual preview
+- **WHEN** explicit synthetic preview records are supplied for native screenshot checks
+- **THEN** preview state is clearly labelled and cannot dispatch real management actions or read real session content

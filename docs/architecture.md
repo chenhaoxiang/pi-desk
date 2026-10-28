@@ -3,12 +3,12 @@ doc_type: plan
 project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
-release_scope: 首版架构候选；尚无运行实现
-status: draft
+release_scope: 本地实现候选；完整首版验收仍未完成
+status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-24
-verification_scope: 源码接口对照和本地设计；未验证IPC/原生UI/运行性能
+verified: 2026-10-28
+verification_scope: Swift/TS源码、UDS/隔离真实SDK与owner组合；不含业务会话/Herdr实机和长时可靠性
 ---
 
 # 系统架构
@@ -34,10 +34,10 @@ verification_scope: 源码接口对照和本地设计；未验证IPC/原生UI/�
 
 - **macOS 14+，SwiftUI + AppKit**：SwiftUI管理窗口/列表，AppKit顶栏/浮层/窗口焦点；SPM管理，先arm64验证，再依据发行需求补Intel构建。菜单栏入口始终可用，无刘海/外接屏不损功能。
 - **TypeScript薄扩展，Node标准库**：宿主SDK作为type/peer，不打包另一套Pi；起点对照Pi 1.4.0-fork.1，兼容资格按隔离测试而非版本字符串猜测。
-- **UDS + 有界LF-JSON协议**：无HTTP端口、WebSocket服务、跨网发现和数据库。Native socket读取在后台串行队列，UI只接收合并后的不可变快照。
+- **UDS + 有界LF-JSON协议**：无HTTP端口、WebSocket服务和跨网发现；本机usage专用SQLite索引只存白名单元数据，不是业务任务数据库。Native socket读取在后台串行队列，UI只接收合并后的不可变快照。
 - 不引入通用plugin框架、事件代理平台或OTel Collector。增加一个具体owner适配器不代表支持所有工具。
 
-拟建目录（目前未实现）：
+已建目录（实现为本地候选，非安装声明）：
 
 ```text
 Sources/PiDeskApp/           # SwiftUI窗口、顶栏及导航
@@ -49,6 +49,8 @@ packages/desk-bridge/test/   # Node/真实SDK faux-provider测试
 docs/                       # 本页、产品、交互、接口与实施说明
 openspec/changes/pi-desk-v0-1/
 ```
+
+`Sources/PiDeskPeerCheck/` 是有限 syscall 助手，不是第三个运行宿主：在桥接的异步连接验证阶段经公开 stdio 传递 fd，仅执行 `getpeereid` 并退出。它随 App 打包，缺失/失败只使该观察连接不可用，绝不替换为不验证 peer 的连接。
 
 不提前建立第三个协议SDK包；跨语言共享wire fixtures和封闭schema，编译实现只放两端必要结构。
 
@@ -72,7 +74,9 @@ App断线重连同一epoch，要求全量当前快照并保留monotonic seq；�
 | management | ready / unsupported / unavailable + request状态 | 按钮可用不是授权或成功 |
 | verification | not-checked / pending / verified / stale / failed / unknown | 显示的成功不生成merge/部署许可 |
 
-`agent_end`只更新低层回合事件；最终闲置依`agent_settled`、原生pending与owner子任务/回传事实。没有子任务覆盖则保留unknown，不宣称全部结束。普通工具出错不自动把会话变成失败。
+`agent_end`不是完成边界；执行状态由`agent_settled`和公开`ctx.isIdle()`/`hasPendingMessages()`标量对账，启动后一次deferred reconcile消除startup暂时busy。observe及现有5秒heartbeat只重采这两个内存标量，不加owner RPC、模型或同步I/O。可选`executionObservation={version:1,observedAt,source,idle}`与连接`observedAt`分离：ctx不可用不刷新执行证明；失败/中止的已观测结果在idle时保留，native重新busy则回到运行。真实input优先，native idle清除遗留工具名；pending消息不冒称AI已开始执行。
+
+异步start/complete与process-terminal事件只按当前session/exact runId（必要child index）更新有界child cache；terminal proof清除running但不伪造业务成功，无法精确归属的Fleet cache置unknown。缺子任务覆盖不宣称全部工作结束。App的连接badge、执行badge独立，计数/运行中筛选/默认重点共用同一执行判断；仅统计已主动接入，旧wire缺执行proof时active标待核并给待核数量，不用source SHA差异决定busy/idle。旧terminal结果保留为“上次”观测，不能以新heartbeat当本轮事实。普通工具出错不自动把会话变成失败。
 
 ## 4. 连接、观察与背压
 
@@ -86,7 +90,7 @@ App断线重连同一epoch，要求全量当前快照并保留monotonic seq；�
 
 观察使用notification型事件，拿必要标量后同步入队并立即返回undefined。禁止在`tool_call`、`tool_result`、`context`或`agent_before_settle`建立阻塞审批/变换/continuation；不订阅原始provider stream或逐token转发。
 
-建议初始传输预算（实现前用负例校准，非已验证性能）：每连接最多128待发记录或1MiB、单帧最多64KiB、display文本最多512字符；管理文本最多16KiB。状态与usage快照按键合并，慢端按最新值替换。过载丢显示事件后累计drop计数并要求当前快照，不能重跑业务来补事件。
+建议初始传输预算（实现前用负例校准，非已验证性能）：每连接最多128待发记录或1MiB、单帧最多64KiB、display文本最多512字节；管理文本最多16KiB。状态与usage快照按键合并，慢端按最新值替换。过载丢显示事件后累计drop计数并要求当前快照，不能重跑业务来补事件。
 
 socket写、序列化、可选branch查询和owner统计放到有界后台调度，不在原事件handler await。扩展不逐工具同步跑ps/git，不逐事件读取会话或owner artifacts。长统计切片让出事件循环；不承诺Promise timeout能隔离同步CPU。无同等真实用例性能证据不得称零影响。
 
@@ -109,7 +113,9 @@ socket写、序列化、可选branch查询和owner统计放到有界后台调度
 | action-result | 扩展→App | requestId、rejected/accepted/queued/requested/unknown，owner handle/原因 |
 | operation-update | 扩展→App | 同一owner引用的实际执行/终态，不能由socket送达推导 |
 
-断线后的App不重放action。一次点击只生成一个请求；重复同ID在同epoch的有效缓存内只返回相同受理结果，不能再次执行；同ID不同参数必须拒绝。已知缓存过期/新epoch/潜在副作用不明时返回unknown并按owner引用对账；不承诺在记忆窗口外识别任意重复提交，不承诺持久exactly-once，不建立新操作账本。控制请求数量与回复队列独立限流，不用普通状态覆盖回复。
+断线后的App不重放action。一次点击只生成一个请求；重复同ID在同epoch的有效缓存内只返回相同受理结果，不能再次执行；同ID不同参数必须拒绝。已知缓存过期/新epoch/潜在副作用不明时返回unknown并按owner引用对账；不承诺在记忆窗口外识别任意重复提交，不承诺持久exactly-once，不建立新操作账本。owner回报已进入执行但失败、超时或无分类错误时保持unknown并保留已知owner引用；只有原owner明确证明尚未入副作用阶段才显示rejected。Schedule seam分别使用request-rejected与operation-outcome-unknown，不把旧management-unavailable视作未执行证明。
+
+控制请求数量与回复队列独立限流，不用普通状态覆盖回复。当前生产端采用1条合并快照＋32条回复，App每连接/每批也有上限；组合DTO按字节预算投影并保留omitted/partial，不让合法大快照超过64KiB后永久断联。
 
 App请求由连接owner在原宿主事件循环的应用层回调处理，不从新模型工具或tool_call内递归调用工具。确需模型执行的新要求明确进入原生sendUserMessage队列；普通查看/管理不以LLM代替确定性API。
 
@@ -117,8 +123,8 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 
 - `session.message`：原生`pi.sendUserMessage`，明确steer/followUp，不通过terminal send-key；不把任意slash文本当通用管理端点。该API返回void，因此bridge只能报告`requested`（已调用提交路径）；只有具有关联的owner收据才可标accepted/queued，缺少该证据不能从调用返回猜测已入队，实际处理另观测。
 - `session.abort-current`：当前ctx.abort，请求后观察终态。明确它不是暂停schedule、清空queue或停止所有子任务；只中止当前回合，可能仍有后续原生工作。
-- `run.steer/stop/resume`：复用Subagents进程内RPC并查询capabilities；resume在原owner验证租约/状态，失败不新建替代运行。
-- `schedule.*`：保留owner命名空间。Subagents只用其managementActions allowlist；Schedule Prompt尚缺通用在线管理seam，按实施方案在该owner补薄入口或跳回其原UI，不在本仓偷用私有字段。
+- `run.steer/stop/resume`：复用Subagents进程内RPC并查询capabilities。Workflow 根只用于根级动作；后台孩子从公开定向 `status.details.workflowChildren` 取得真实 runId，不用 workflow key/Fleet key。resume在原owner验证租约/状态，失败不新建替代运行。
+- `schedule.*`：保留owner命名空间。Subagents只用其managementActions allowlist；Schedule Prompt 管理 seam 已在该 owner 的独立本地候选补齐并隔离验证，未全局安装。旧 owner 缺 seam 时只显示不可用，不直接读写其 JSON。
 - Intercom v1 outbox没有wake/mode，不能据此承诺精确唤醒/纠偏；自己的已接入会话优先走直接原生接口。跨peer操作只在owner接线明确后开放。
 - 原问题回答继续在原TUI；首版准确通知与跳转，不拦截ask工具或要求先在App回答。已有自动决策/审批路径不变。
 - 治理/Gate/CI和SAW都是可选集成。实际记录有来源/head/freshness才展示相应事实；缺少reader不读私有审计全文。首版SAW以打开选定现有页面为主，不新增凭据库或操作权限。
@@ -132,11 +138,39 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 1. 普通扩展没有ctx.getSessionStats。以`attachment-window`为诚实默认：只累计接入后的final usage，流式累计值不逐帧相加。标明windowId、startedAt、coverage。
 2. 以稳定entry/owner receipt identity去重；没有稳定ID时不猜测重放是否新消费，标partial。扩展重载新窗口不拼成全历史总数。
 3. 现有native宿主可给`native-session-total`时保留原语义；TUI不为取数改成裸SDK/RPC，不导入内部AgentSession。
-4. Subagents `cost`由原owner定向读取当前分支和关联运行产物，在settled、async完成或用户刷新时有界请求，不定时扫描。它可提供parent/children/childTotal/total和unresolvedAsyncChildren，直接保留来源与下界，不在App重算一份相冲突的总账。
+4. Subagents `cost`由原owner读取当前分支和关联产物，底层RPC可能同步占Pi事件循环；因此只有用户显式查看/刷新准确会话的usage时才有界调用，settled/async完成、App缺席或收起不自动扫owner cost。普通状态查询也按用户当前对象合并/限频，workflow detail仅定向所选runId。它可提供parent/children/childTotal/total和unresolvedAsyncChildren，直接保留来源与下界，不在App重算一份相冲突的总账。
 5. `usage`、compaction、branch summary及nested tool usage必须与宿主归一规则对照。首阶段先建立合成合同，未覆盖的附加消耗明确标partial，不把只看assistant消息称完整账单。
 6. same child既作为独立Pi注册又在父报告出现，显示可以两处关联，汇总只取一个owner归属；无可证明不重叠关系则不展示精确全局合计。
 7. Context usage是上下文占用，不是花费；缺失/未结算值为null。无权威价格/费用结果不推算金额。
-8. App只保留当前接入显示缓存；不做每日/历史账单数据库。重启后从已接入owner快照恢复当前scope，无法恢复的窗口明确重置。
+8. 时间总览新增最小本机持久元数据链：bridge在final handler只投递标量到有界队列，异步写0700/0600原子spool；App后台导入SQLite，以不含epoch的稳定receipt hash唯一去重。App离线仍写入；不新增Agent/daemon、同步handler I/O或常驻历史扫描。writer关闭后允许最后刷盘，永久故障最多三次关闭态失败尝试后释放timer并保留pending/writeFailures；正常关闭继续排空全部有界批次，不把未落盘报成功。
+9. 实时链只收Pi assistant final自身usage，不收流式中间值、父owner累计或不可证明不重叠的工具聚合；子会话自己的final可独立计入，未接入孩子/工具/压缩等附加量明确缺口。日期使用原始request UTC时间，绝不把累计到达日当消费日；无时间的记录只标缺口。
+10. 按用户本地Gregorian日历及显式IANA时区算今日/近7天/本月/自定义日期；结束日转下一天零点，查询[start,end)。跨DST用Calendar加天，不按24小时推算。自定义最多400天（含首尾日期），UI与ledger共同拒绝超界，主数/趋势/表不使用不同范围；无效输入保留上次有效结果。未来与采集起点之前的桶分别显示尚未发生/尚未采集，缺字段聚合已知量并标下界，不以0伪装未知。
+11. SQLite索引仅服务用量查询/去重，事务提交后才清理已导入spool，崩溃重导幂等；utility queue持有连接，schema/quick_check只初始化，metadata dirty代际/DB data_version未变时复用范围结果，新rowid只增量归桶，刷新仅单一在途/最新合并。utility内最多保留3个日期范围的bucket/model/source投影，暖范围/来源/模型不在主线程遍历原库；空spool不启写事务。schema/health check只初始化，诊断计数与定向检查核对重复refresh不增aggregateRows，新final仅增量。预算/失败保留coverage，不把失败扩为Pi门禁。旧bridge不支持持久记录时明确提示未纳入，不将显示快照补记为今天。
+12. hard-link publish后进程崩溃留下双链接时，只在本工具私有spool证明最终ID文件和准确`.usage-UUID`临时项同inode/device/owner/mode、结构及SHA256内容相同且nlink恰2后移除临时链接，再沿原严格reader导入；未知第二链接不放行、不删除。
+
+### 一次性历史usage补采（2026-10-26授权）
+
+独立低优先级worker只在显式preview/apply/rollback命令下运行；不挂入App启动/refresh或Pi事件链。preview/apply先对source及允许的canonical/tmp根解析真实路径再作准确包含判断，不允许../或祖先symlink把读取扩到源范围外；rollback不要求历史源仍存在。canonical Pi JSONL以只读fd、冻结dev/inode/size和prefix SHA256读取，单worker分块流式投影，单行16MiB、缓存有界并节流。仅stage标量与哈希，不保留原路径、会话ID、正文、工具参数/结果或模型配置。包含所有已付费分支的assistant/usage/compaction/branch_summary，不只读当前leaf；非Pi sidecar镜像不再计入。
+
+消费键与实时完全一致：host hash → session header ID hash → entry ID hash，不另设history命名空间绕开去重。fork/clone的新header不能让复制消费再次计费：沿parentSession链比较entry ID和usage fingerprint；不把8hex ID当全局ID；缺链、循环和内容冲突保守ambiguous。summary无provider/model保持unknown，缺桶保持null；reasoning/cacheWrite1h不再相加。
+
+apply绑定preview/source-set hash并校验冻结前缀，正常退出本App维护时Pi仍spool；SQLite backup API获得包含WAL的一致快照，原DB/WAL/SHM和install manifest只作补充备份，目录0700/文件0600。单事务插入、quick_check、import receipt；重复apply幂等。八列usage_entries保持兼容，provenance/import/alias/conflict为附加表；来源标签不改变消费identity。rollback只移除该import新增且未实时确认的行，后续实时数据和既有冲突审计不清除；App回退与数据回退分开。
+
+UI从索引展示实时/一次性历史/去重合计，以及各来源最早记录、冻结覆盖日期和不完整原因。utility queue缓存按rowid增量归桶/来源，模型筛选保持同口径；不会为展示重新打开JSONL。
+
+### 本App窗口兴趣与统计首屏
+
+manager自身NSWindowDelegate传递可见/occlusion/miniaturize/close及App hide状态，不轮询其他App。Token页真实可见时5秒刷新，其他可见页30秒，遮挡/最小化/关闭但App存活时60秒；页面保留Token不会维持前台频率，重新可见按需更新。Pi final采集仍在原Pi异步继续，关闭UI不停止采集。所有查询留在单utility queue/合并请求路径，不添加owner自动cost/status、daemon或后台模型。Chart只在bucket/range/metric变化时重算，不因更新时间或无变化heartbeat重画。
+
+性能原件使用只读proc_pid_rusage累计CPU时间/物理磁盘IO/RSS，30–60秒按统计可见/其他页/最小化/关窗分开；记录同range/origin/model与期间实际新增行，磁盘页缓存0读不解释为无工作或零开销。真实usage与进程原件只在本机tmp，公开文档不保存用户具体消费。
+
+### 原会话定位、创建时间与Pi设置边界
+
+App的UDS server在accept后读取LOCAL_PEERPID及peer birth；utility queue按connection+identity/epoch一次性核验同uid进程controlling TTY和最多12层Terminal祖先，PID复用/断开/epoch变化作废。fallback只补旧bridge缺route，不扫全进程/正文、不启动第二writer，新bridge route优先。Terminal权限分只读preflight与用户主动请求（OS决定）；preflight与实际AppleEvent都在Pi Desk进程内对相同Terminal PID发出，不再经osascript子进程。固定AE路径在utility串行队列运行，单次总12秒/单event最多2秒、单一在途，最多8个Terminal实例/512 tabs；不读终端内容或提供任意脚本入口。失败保留安全OSStatus与固定阶段，不用“已授权”覆盖真正send错误。
+
+bridge在session_start一次性从公开SessionManager header读取ISO timestamp，投影为有界`display.createdAt`毫秒和`createdAtSource`（`session-header`/`unknown`）；不读历史正文、不把observedAt/首次接入当创建时间，超界或非法时间拒绝。route只在当前主动接入context中捕获：Herdr route保存精确pane/sessionFile；Terminal.app route一次性读取本进程TTY（macOS `/dev/fd`不可靠时用固定`/usr/bin/tty`继承fd，最多500ms），保存严格ttyPath、TERM_SESSION_ID和可选tmux/WezTerm/cmux标量；携带tmux/WezTerm/cmux时不把内层pty冒称Terminal tab，当前保持不可用，待对应客户端精确focus合同另行接入。UI只对唯一精确route聚焦，同进程AE先收集所有已运行Terminal实例的窗口ID/tab TTY，count非1或枚举不完整不解最小化/不激活；以PID+launchDate守护实例，按稳定window ID与tab索引在变更前复核TTY，再只选准确tab/前置准确窗口/激活准确实例，回读front window ID、selected TTY和前台实例后才标成功。Automation拒绝/route缺失显示unknown。绝不按cwd/名称挑第一个窗口，不对活跃会话自动`pi --session`启动第二writer；仅用户后续明确选择且源已确认不活跃时才可另行设计恢复。
+
+Pi设置首批只投影canonical user `<agentDir>/settings.json`的白名单字段：theme、defaultThinkingLevel、steeringMode、followUpMode、compaction.enabled/reserveTokens/keepRecentTokens、retry.enabled/maxRetries/baseDelayMs/maxAgentDelayMs、quietStartup、tuiMode、terminal.showImages/showTerminalProgress。SettingsManager公开schema作为字段依据；项目overlay只读显示来源，不把两层合并回写；auth/models/mcp/packages/resources/proxy/trust/permissions/defaultModel/defaultTools等排除。原文件读取/写入在utility queue，兼容Pi的atomic mkdir `settings.json.lock`（不清理未知锁，短事务）、owner-only revision backup、mtime/hash CAS、atomic temp+rename+fsync和readback；坏JSON、权限、锁、冲突、未知类型只读保全，未创建文件明确显示尚未创建。
 
 ## 8. 隐私、展示与诊断
 
@@ -152,10 +186,14 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 
 真实复用时再增加归属与上游MIT许可，不现在预建空第三方体系。纯原创外壳与适配不假称继承上游签名、公证、自动更新或Buddy支持。
 
+时间总览还参考[ccusage日期报告](https://ccusage.com/guide/daily-reports)的跨会话时间视角与四桶口径、[CodexIsland usage-only持久记录说明](https://github.com/ericjypark/codex-island/blob/main/docs/USAGE-HISTORY.md)的稳定ID/SQLite/陈旧值边界，以及[CodexBar](https://github.com/steipete/CodexBar)的原生状态反馈。只借鉴展示和统计边界，未复制代码/素材，不接它们的历史扫描、登录凭据、额度/定价或多provider层。常驻记录仍只来自当前Pi final；本次显式一次性补采是自有metadata-only worker，并未接入这些参考项目的历史/认证组件。
+
 ## 10. 验证与退出策略
 
 先fixture协议/reducer/统计与原生faux SDK，再两个隔离会话+子任务，最后按实际授权本机验收。断App、满队列、旧epoch、重复点击、回复丢失、父子重复统计和未知owner都必须有负例。
 
 初始性能目标为实现候选：观察handler不含I/O等待；合成负载下新增同步工作p95≤1ms、p99≤5ms；在至少1000事件及既定会话规模下与关闭桥接比较耗时/内存。阈值不是已测事实，超出先优化观察接线，不能换低能力模型、减工具或加审批过线。
 
-本轮没有安装/卸载/更新计划被执行。后续回退只退出App、按原扩展加载方式移除本扩展；不能结束Pi、清理他人状态或倒退原owner版本。发行更新需单独验证App身份/签名、独立更新源和卸载影响。
+源码候选阶段只做旁路 ad-hoc 构建；后续用户明确授权的本机安装沿同一源合同进行，安装不等于对外发布或业务会话热更新。后续回退只退出App、按原扩展加载方式移除本扩展；不能结束Pi、清理他人状态或倒退原owner版本。发行更新需单独验证App身份/签名、独立更新源和卸载影响。
+
+本机稳定安装采用用户Applications下的固定App，以及用户Application Support中以source commit命名的只读bridge版本。bundle内BuildInfo固定source tree/commit、version/build和bridge逐文件hash；自动发现入口只选择该固定版本，不改Pi settings或既有工具/模型配置。安装manifest和定向备份是安装/回退资料，不承担会话/任务/调度状态。旧runtime继续持有旧桥接，更新/回退不强reload或结束Pi。

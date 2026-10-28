@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "description": "Synthetic final usage only. Expected time buckets are defined independently of arrival order.",
+  "records": [
+    {"session":"a","receipt":"a-1","timestamp":1710053940000,"model":"fixture/alpha","tokens":{"input":100,"output":20,"cacheRead":30,"cacheWrite":5}},
+    {"session":"b","receipt":"b-1","timestamp":1710054060000,"model":"fixture/beta","tokens":{"input":40,"output":10,"cacheRead":5,"cacheWrite":0}},
+    {"session":"a","receipt":"a-2","timestamp":1710133200000,"model":"fixture/alpha","tokens":{"input":7,"output":3,"cacheRead":0,"cacheWrite":0}},
+    {"session":"a","receipt":"a-1","timestamp":1710053940000,"model":"fixture/alpha","tokens":{"input":100,"output":20,"cacheRead":30,"cacheWrite":5}}
+  ],
+  "expected": {"uniqueRecords":3,"input":147,"output":33,"cacheRead":35,"cacheWrite":5,"total":220},
+  "unattributedToolAggregate": {"input":999,"output":999,"cacheRead":999,"cacheWrite":999},
+  "ownerLifetimeSnapshot": {"input":10000,"output":2000,"cacheRead":3000,"cacheWrite":500},
+  "dateCases": [
+    {"zone":"America/New_York","date":"2024-03-10","start":"2024-03-10T05:00:00Z","end":"2024-03-11T04:00:00Z","hours":23},
+    {"zone":"America/New_York","date":"2024-11-03","start":"2024-11-03T04:00:00Z","end":"2024-11-04T05:00:00Z","hours":25},
+    {"zone":"Asia/Shanghai","date":"2024-03-10","start":"2024-03-09T16:00:00Z","end":"2024-03-10T16:00:00Z","hours":24}
+  ]
+}

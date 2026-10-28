@@ -216,6 +216,10 @@ App ledger现以utility queue持久连接、metadata generation/DB data_version�
 
 Terminal定位候选已替换build27的`/usr/bin/osascript`子进程路径：Pi Desk进程在utility串行队列直接向每个运行Terminal PID发送固定`get/set/activate` AppleEvent；最多8实例/512 tabs、总12秒/单event最多2秒/单一在途，按launchDate/TTY/window ID复核，只有全局唯一匹配且前后TTY/window/frontmost回读一致才成功；没有脚本入口、终端文本/按键或shell。`NarrowUXChecks`用隔离fake client覆盖多Terminal唯一/0/多匹配、AppleEvent拒绝、TTY/window/frontmost mismatch及固定OSStatus诊断。build30真实GUI已复验成功：旧bridge Terminal fixture在PID31457/window53552点击后读回`TTY:/dev/ttys035 · Terminal PID:1310 · window:53694`，截图`tmp/playwright-mcp/build30-focus-after-authorized.png`；未启动新的Pi writer。
 
+### 2026-10-28 正常加载与实时GPT统计验真
+
+`scripts/check-natural-upgrade.mjs` 使用已安装build34的canonical入口原字节、真实Swift UDS接收器和生产UsageLedger：隔离旧bridge进程保持旧代码且未发模型请求，入口更新不热载旧runtime；正常关闭该自有进程后，同profile新进程经常规自动发现加载新版，startup新增模型调用0，busy/idle与原生`session.isIdle`一致。GPT-named faux运行的两条final进入私有spool，再由生产SQLite聚合，input/output/cacheRead/cacheWrite均与原生final独立求和一致，real provider调用0、历史读取0。当前canonical索引只读增量证据另确认已有GPT模型及四桶非NULL，不重新补采历史。`scripts/run-pty-check.py`补actual InteractiveMode/独立PTY的两轮正常续行；原件位于ignored `tmp/closeout-20261028/`。本阶段仅补验真脚本与记录，运行安装仍复用已核验e8eb78f/build34；不把隔离faux或PTY当真实收费provider验收。
+
 ### 保留的未完成项
 
 完整v0.1未验收、Change未归档。build30已真实复验状态live fixture与Terminal focus：busy/idle切换在同一真实GUI卡片上分别读回“本轮运行/本轮已结束”；旧bridge Terminal定位准确回读`/dev/ttys035`、Terminal PID1310、window53694。真实Herdr可执行文件在此机不可用，故Herdr精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，build30安装/verify/codesign通过，build27回滚保留；实际GUI杀App后原生faux会话继续执行，业务Pi未reload/输入/模型。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。

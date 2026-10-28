@@ -8,7 +8,7 @@ Pi Desk 是 Pi-only 的轻量 macOS 原生可视化与管理客户端。它连�
 
 2026-10-28：已有 **SwiftUI/AppKit + TypeScript 实现和已验真的本机安装**。原生顶部速览、中文管理窗口、私有 UDS、执行/输入状态、精确 Terminal 跳转、原生消息/中止、owner 子任务与计划、实时 Token 持久统计均有实现。当前本机候选为源码 `528e0d9` / **0.1.0 build38**，install/verify、ad-hoc codesign 和定向 GUI 检查已完成，上一版回滚保留。完整证据与边界见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
 
-这**不是已发行的完整 v0.1**：系统通知当前被 OS 拒绝（调用失败 `UNErrorDomain:1`），授权后的真实投递、完整 Tab/VoiceOver 和 Herdr 实机仍未完成；不以 AX 树或读屏 disabled 状态代替真实验收。原6.1–6.2按固定版本/代表性旧缺失混合cap验证，已补旧进程正常关闭后 canonical 新桥接自然加载、GPT-named faux final→真实 UDS→生产 SQLite 和多会话 GUI；不强制 reload 业务 Pi、不再次补采历史、不调用真实 provider。公开 `main` 已有独立审查后的文档 bootstrap，源码沿[PR #1](https://github.com/chenhaoxiang/pi-desk/pull/1)、精确 head CI 和普通 merge 流程交付；当前 PR 仍待 merge，首轮 CI 的通过不自动转记给后续 head。本机安装与公开源码都不等于正式发行、公证或自动更新。
+这**不是已发行的完整 v0.1**：系统通知当前被 OS 拒绝（调用失败 `UNErrorDomain:1`），授权后的真实投递、完整 Tab/VoiceOver 和 Herdr 实机仍未完成；不以 AX 树或读屏 disabled 状态代替真实验收。原6.1–6.2按固定版本/代表性旧缺失混合cap验证，已补旧进程正常关闭后 canonical 新桥接自然加载、GPT-named faux final→真实 UDS→生产 SQLite 和多会话 GUI；不强制 reload 业务 Pi、不再次补采历史、不调用真实 provider。公开 `main` 已有独立审查后的文档 bootstrap，源码已沿[PR #1](https://github.com/chenhaoxiang/pi-desk/pull/1)完成精确 head CI、独立增量审计和普通 merge，合并提交为 `c940bdf`；完整 v0.1 现场资格与正式发行仍未完成，首轮 CI 的通过不自动转记给后续 head。本机安装与公开源码都不等于正式发行、公证或自动更新。
 
 ## 构建和合成检查
 

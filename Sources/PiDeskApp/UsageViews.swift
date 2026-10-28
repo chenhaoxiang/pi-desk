@@ -19,7 +19,7 @@ struct AggregateTokenPage: View {
             Spacer(minLength: 0)
           }.datePickerStyle(.field)
           if !model.customRangeIsValid {
-            Label("结束日期不能早于开始日期；仍显示上次有效结果。", systemImage: "exclamationmark.triangle")
+            Label((model.customRangeIssue ?? "日期范围无效") + "；仍显示上次有效结果。", systemImage: "exclamationmark.triangle")
               .font(.caption).foregroundStyle(.orange)
           }
         }

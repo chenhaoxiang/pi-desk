@@ -184,6 +184,10 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     model.usageCustomStart = today.addingTimeInterval(12 * 3600); model.usageCustomEnd = today
     ledger.hold = false; model.refreshUsage()
     precondition(model.customRangeIsValid && ledger.calls == heldCalls + 1)
+    let validCalls = ledger.calls, validAggregate = model.aggregate
+    model.usageCustomEnd = calendar.date(byAdding: .day, value: 400, to: today)!
+    model.refreshUsage()
+    precondition(!model.customRangeIsValid && model.customRangeIssue?.contains("400") == true && ledger.calls == validCalls && model.aggregate == validAggregate, "UI and ledger share the inclusive 400-day limit")
     print("Narrow UX checks passed: visible/background usage interest, explicit authorization only, authorized/denied/error/send-failure, duplicate request, invalid custom range and stale in-flight preservation.")
   }
 }

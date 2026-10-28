@@ -425,12 +425,26 @@ def rollback(import_id,db_path,backup_root=BACKUPS):
     finally:db.close()
 
 
+def authorized_session_root(value):
+    sessions = Path(value).resolve(strict=True)
+    canonical = CANONICAL.resolve()
+    fixtures = (ROOT / "tmp").resolve()
+    if sessions == canonical:
+        return sessions
+    try:
+        relative = sessions.relative_to(fixtures)
+        if relative.parts:
+            return sessions
+    except ValueError:
+        pass
+    raise ValueError("source-scope-not-authorized")
+
+
 def main():
     os.umask(0o077)
     ap=argparse.ArgumentParser();ap.add_argument("mode",choices=["preview","apply","rollback"]);ap.add_argument("--sessions",type=Path,default=CANONICAL);ap.add_argument("--run",type=Path);ap.add_argument("--db",type=Path,default=SUPPORT/"usage-v1/usage.sqlite3");ap.add_argument("--install-manifest",type=Path,default=SUPPORT/"install-current.json");ap.add_argument("--import-id");args=ap.parse_args()
     os.nice(10)
-    sessions=args.sessions.absolute()
-    if sessions!=CANONICAL.absolute() and not str(sessions).startswith(str(ROOT/"tmp")+os.sep):raise ValueError("source-scope-not-authorized")
+    sessions=authorized_session_root(args.sessions) if args.mode!="rollback" else None
     if args.mode=="rollback":result=rollback(args.import_id,args.db)
     elif args.mode=="preview":
         run=args.run or ROOT/"tmp/history-backfill"/("run-"+uuid.uuid4().hex)

@@ -85,6 +85,17 @@ import SQLite3
     }
     assert(sample.models.reduce(0) { $0 + $1.tokens.totalLowerBound } == sample.totals.totalLowerBound, "synthetic model/total consistency")
     assert(sample.buckets.reduce(0) { $0 + $1.tokens.totalLowerBound } == sample.totals.totalLowerBound, "synthetic chart/total consistency")
+    let longRoot = try folder("long-custom-range")
+    try entry(longRoot, id: "1", at: date("2025-02-03T12:00:00Z"))
+    try entry(longRoot, id: "2", at: date("2025-02-15T12:00:00Z"))
+    let utc = TimeZone(secondsFromGMT: 0)!
+    let tooLong = UsageDateRange.make(preset: .custom, timeZone: utc, customStart: date("2024-01-01T00:00:00Z"), customEnd: date("2025-03-01T00:00:00Z"))
+    let rejectedRange = UsageLedger.inspect(root: longRoot, range: tooLong)
+    assert(rejectedRange.error?.contains("400") == true && !rejectedRange.totals.seen && rejectedRange.buckets.isEmpty, "long ranges must explicitly reject, not silently truncate trend/table")
+    let boundary = UsageDateRange.make(preset: .custom, timeZone: utc, customStart: date("2024-01-01T00:00:00Z"), customEnd: date("2025-02-03T00:00:00Z"))
+    let completeRange = UsageLedger.inspect(root: longRoot, range: boundary)
+    assert(boundary.validationIssue == nil && boundary.days.count == 400 && completeRange.error == nil && completeRange.recordCount == 1, "400 inclusive days remain valid")
+    assert(completeRange.buckets.reduce(0) { $0 + $1.tokens.totalLowerBound } == completeRange.totals.totalLowerBound, "last admitted day is included in both main number and trend/table")
     let future = UsageDateRange.make(preset: .today, now: date("2099-01-01T00:00:00Z"), timeZone: sh)
     let blank = UsageLedger.inspect(root: root, range: future)
     assert(!blank.totals.seen && blank.buckets.allSatisfy { $0.state == .future }, "future not fake zero")

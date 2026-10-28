@@ -62,6 +62,40 @@ test("bounded enqueue never awaits failed storage; pending/failure/drop is expli
   fails = false; await writer.flush(); assert.equal(writer.status().pending, 0);
   writer.close(); await writer.flush();
 });
+test("closed writers bound permanent failure retries while a live host continues", async () => {
+  const dir = await root(); let writes = 0;
+  const writer = new UsageWriter(identity, { root: dir, write: async () => { writes++; throw Error("ENOSPC"); } });
+  writer.enqueue(usageEntry(identity, "close-failure", message(), now)!);
+  await writer.flush();
+  const beforeClose = writer.status().writeFailures;
+  writer.close();
+  for (let i = 0; i < 8; i++) await writer.flush();
+  assert.ok(writer.status().writeFailures <= beforeClose + 3);
+  assert.ok(writer.status().reasons.includes("close-flush-unconfirmed"));
+  assert.equal(writer.status().pending, 1, "unconfirmed data must not be reported as persisted");
+  const stopped = writes;
+  await new Promise(resolve => setTimeout(resolve, 1150));
+  assert.equal(writes, stopped, "a closed runtime must release its retry timer");
+});
+
+test("normal close drains every bounded batch and persists closed recorder state", async () => {
+  const dir = await root(); let accepted = 0;
+  const writer = new UsageWriter(identity, { root: dir, write: async () => { accepted++; } });
+  for (let i = 0; i < 100; i++) writer.enqueue(usageEntry(identity, "close-batch-" + i, message(), now)!);
+  writer.close();
+  let state: { closed: boolean; pending: number; accepted: number } | undefined;
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const names = await readdir(join(dir, "recorders")).catch(() => []);
+    if (names[0]) state = JSON.parse(await readFile(join(dir, "recorders", names[0]), "utf8"));
+    if (state?.closed && state.pending === 0 && state.accepted === 100) break;
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  assert.equal(accepted, 100); assert.equal(writer.status().pending, 0);
+  assert.equal(state?.closed, true); assert.equal(state?.pending, 0); assert.equal(state?.accepted, 100);
+  assert.ok(!writer.status().reasons.includes("close-flush-unconfirmed"));
+});
+
 test("new persistent recorder does not stop after the old 4096 attachment receipt cap", async () => {
   const dir = await root(); let count = 0;
   const writer = new UsageWriter(identity, { root: dir, maximumQueue: 64, write: async () => { count++; } });

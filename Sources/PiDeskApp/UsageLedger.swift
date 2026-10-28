@@ -54,10 +54,17 @@ public struct UsageDateRange: Equatable, Hashable {
     return calendar.date(byAdding: .day, value: -1, to: end) ?? start
   }
 
+  public static let maximumDays = 400
+  public var validationIssue: String? {
+    guard start.timeIntervalSince1970.isFinite, end.timeIntervalSince1970.isFinite, end > start else { return "日期范围无效" }
+    guard let limit = timeZoneCalendar.date(byAdding: .day, value: Self.maximumDays, to: start), end <= limit else { return "自定义日期范围最多400天（含首尾日期）" }
+    return nil
+  }
   public var hourly: Bool { timeZoneCalendar.date(byAdding: .day, value: 1, to: start) == end }
   public var days: [Date] {
+    guard validationIssue == nil else { return [] }
     var output: [Date] = [], cursor = start
-    while cursor < end, output.count < 400 {
+    while cursor < end, output.count < Self.maximumDays {
       output.append(cursor)
       cursor = timeZoneCalendar.date(byAdding: hourly ? .hour : .day, value: 1, to: cursor) ?? end
     }
@@ -290,6 +297,7 @@ public struct UsageAggregate: Equatable {
 
   public static func empty(_ range: UsageDateRange, preview: Bool = false) -> UsageAggregate {
     var result = UsageAggregate(range: range, timeZoneID: range.timeZone.identifier)
+    if let issue = range.validationIssue { result.error = issue; return result }
     if preview {
       let calendar = range.timeZoneCalendar, now = Date()
       let today = calendar.startOfDay(for: now)
@@ -478,6 +486,7 @@ public final class UsageLedger: UsageLedgerClient {
     return database!
   }
   private func readIncremental(range: UsageDateRange) -> UsageAggregate {
+    if range.validationIssue != nil { return UsageAggregate.empty(range) }
     do {
       try Self.secureDirectory(root)
       let db = try openDatabase()
@@ -819,6 +828,7 @@ public final class UsageLedger: UsageLedgerClient {
       case "invalid-time": return "部分记录缺少有效消费时间"
       case "queue-full", "storage-capacity": return "记录存储达到上限，覆盖不完整"
       case "write-failed": return "Pi用量记录曾写盘失败"
+      case "close-flush-unconfirmed": return "退出时最后用量状态未能确认落盘"
       default: return "部分来源覆盖不完整"
       }
     }

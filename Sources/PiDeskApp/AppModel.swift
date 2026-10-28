@@ -326,15 +326,16 @@ struct DeskSettings: Codable {
     hiddenSessions.removeAll(); pendingHiddenHashes.removeAll()
     persistViewState()
   }
-  var customRangeIsValid: Bool {
-    guard usagePreset == .custom else { return true }
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = .current
-    return calendar.startOfDay(for: usageCustomEnd) >= calendar.startOfDay(for: usageCustomStart)
+  var customRangeIssue: String? {
+    guard usagePreset == .custom else { return nil }
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = .current
+    guard calendar.startOfDay(for: usageCustomEnd) >= calendar.startOfDay(for: usageCustomStart) else { return "结束日期不能早于开始日期" }
+    return UsageDateRange.make(preset: .custom, customStart: usageCustomStart, customEnd: usageCustomEnd).validationIssue
   }
+  var customRangeIsValid: Bool { customRangeIssue == nil }
   func refreshUsage() {
     guard customRangeIsValid else {
-      actionNote = "结束日期早于开始日期，未查询新范围；请先调整日期"
+      actionNote = (customRangeIssue ?? "日期范围无效") + "，未查询新范围；请先调整日期"
       return
     }
     let range = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)

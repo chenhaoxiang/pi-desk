@@ -11,7 +11,7 @@ const fields = ["input", "output", "cacheRead", "cacheWrite"] as const;
 const reasons = new Set([
   "missing-usage", "missing-receipt", "invalid-time", "tool-usage-unattributed",
   "boundary-usage-not-covered", "queue-full", "write-failed", "receipt-conflict",
-  "observation-fault", "storage-capacity", "auxiliary-usage-not-covered",
+  "observation-fault", "storage-capacity", "auxiliary-usage-not-covered", "close-flush-unconfirmed",
 ]);
 export type UsageEntry = {
   version: 1; kind: "usage"; id: string; session: string; occurredAt: number;
@@ -105,6 +105,8 @@ export class UsageWriter {
   private revision = 0;
   private timer?: NodeJS.Timeout;
   private stopped = false;
+  private finalized = false;
+  private closeFailures = 0;
   private readonly now: () => number;
   private readonly root: string;
   private readonly maximum: number;
@@ -131,9 +133,14 @@ export class UsageWriter {
   status() { return { version: 1, pending: this.queue.length, dropped: this.state.dropped,
     writeFailures: this.state.writeFailures, lastSuccessAt: this.state.lastSuccessAt,
     reasons: [...this.state.reasons] }; }
-  close() { this.stopped = true; this.state.closed = true; this.dirty = true; this.revision++; this.schedule(); }
+  close() {
+    if (this.stopped) return;
+    this.stopped = true; this.state.closed = true; this.dirty = true; this.revision++;
+    if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
+    this.schedule();
+  }
   private schedule() {
-    if (this.running || this.scheduled || this.timer) return;
+    if (this.finalized || this.running || this.scheduled || this.timer) return;
     this.scheduled = true;
     setImmediate(() => { this.scheduled = false; void this.flush(); }).unref();
   }
@@ -151,7 +158,8 @@ export class UsageWriter {
     await atomic(path, bytes, false);
   }
   async flush(): Promise<void> {
-    if (this.running) return;
+    if (this.finalized || this.running) return;
+    const failuresBefore = this.state.writeFailures;
     this.running = true;
     if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
     try {
@@ -177,7 +185,16 @@ export class UsageWriter {
     } catch { this.state.writeFailures++; if (!this.state.reasons.includes("write-failed")) this.state.reasons.push("write-failed"); this.dirty = true; }
     finally {
       this.running = false; this.options.onChange?.();
+      if (this.stopped && this.state.writeFailures > failuresBefore && ++this.closeFailures >= 3) {
+        // Preserve pending/failure facts, but do not retain a closed runtime
+        // forever through a timer when storage cannot recover.
+        this.finalized = true;
+        if (!this.state.reasons.includes("close-flush-unconfirmed")) this.state.reasons.push("close-flush-unconfirmed");
+        return;
+      }
+      if (this.stopped && this.queue.length === 0 && !this.dirty) { this.finalized = true; return; }
       if (this.queue.length || this.dirty) {
+        if (this.stopped && this.state.writeFailures === failuresBefore) { this.schedule(); return; }
         this.timer = setTimeout(() => { this.timer = undefined; void this.flush(); }, 1000);
         this.timer.unref();
       }

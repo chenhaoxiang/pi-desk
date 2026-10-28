@@ -19,9 +19,25 @@ def write(path,rows):
 def row_count(path):
  c=sqlite3.connect(path);n=c.execute('select count(*) from usage_entries').fetchone()[0];c.close();return n
 
+def source_scope_checks(base):
+ policy=base/"scope-policy"; inside=policy/"tmp/inside"; outside=policy/"outside"; canonical=policy/"canonical"
+ for p in [inside,outside,canonical,policy/"tmp-evil"]:p.mkdir(parents=True,exist_ok=True)
+ oldroot,oldcanonical=m.ROOT,m.CANONICAL
+ try:
+  m.ROOT=policy;m.CANONICAL=canonical
+  assert m.authorized_session_root(inside)==inside.resolve()
+  assert m.authorized_session_root(inside/"../inside")==inside.resolve()
+  assert m.authorized_session_root(canonical)==canonical.resolve()
+  (policy/"tmp/alias").symlink_to(outside,target_is_directory=True)
+  for p in [policy/"tmp/../outside",policy/"tmp/alias",policy/"tmp-evil"]:
+   try:m.authorized_session_root(p);raise AssertionError("path escape admitted")
+   except ValueError as e:assert str(e)=="source-scope-not-authorized"
+ finally:m.ROOT=oldroot;m.CANONICAL=oldcanonical
+
 def main():
  assert m.clean_tokens({'input':float('nan'),'output':float('inf'),'cacheRead':10**400,'cacheWrite':True})[0]==[None,None,None,None]
  base=pathlib.Path(tempfile.mkdtemp(prefix='history-fixture-',dir=ROOT/'tmp'));sessions=base/'sessions';sessions.mkdir();db=base/'usage.sqlite3';init_db(db);manifest=base/'install.json';manifest.write_text('{"synthetic":true}');os.chmod(manifest,0o600)
+ source_scope_checks(base)
  parent=sessions/'parent.jsonl';child=sessions/'child.jsonl';clone=sessions/'clone.jsonl'
  old=assistant('entry-old');new=assistant('entry-new',1767315600000,20)
  write(parent,[header('parent'),old,{'type':'usage','id':'entry-extra','timestamp':'2026-01-01T02:00:00Z','provider':'fixture','model':'gpt-6.1-sol','kind':'new-unknown-kind','usage':{'input':5,'output':1,'cacheRead':0,'cacheWrite':0}}, {'type':'compaction','id':'compact','timestamp':'2026-01-01T03:00:00Z','summary':'SYNTHETIC_BODY_NEVER_STORE','usage':{'input':7,'output':1,'cacheRead':0,'cacheWrite':0}}, {'type':'branch_summary','id':'summary','timestamp':'2026-01-01T04:00:00Z','summary':'SYNTHETIC_BODY_NEVER_STORE','usage':{'input':2,'output':1}}])
@@ -83,5 +99,5 @@ def main():
  with edgefile.open('a') as f:f.write(json.dumps({'type':'message','id':'big','message':{'role':'user','content':'SYNTHETIC_BODY_NEVER_STORE'*1024}})+'\n');f.write('{"type":')
  ep=m.preview(edge,base/'edge-preview',db,0);m.MAX_LINE=oldlimit
  assert ep['counters']['oversized-lines']==1 and ep['counters']['incomplete-tail']==1
- print(json.dumps({'ok':True,'synthetic':True,'cases':['realtime-key-overlap','fork-clone-alias','unrelated-id-collision','all-branches','missing-parent-ambiguous','missing-grandparent-ambiguous','rollback-retains-live-alias','usage-kind','unknown-summary-model','missing-fields','no-body-or-path-stored','append-frozen-prefix','failure-rollback','duplicate-apply','new-realtime-preserved','backup-api-consistency','committed-wal-backup','same-id-conflict']}))
+ print(json.dumps({'ok':True,'synthetic':True,'cases':['realpath-source-scope','ancestor-symlink-escape','realtime-key-overlap','fork-clone-alias','unrelated-id-collision','all-branches','missing-parent-ambiguous','missing-grandparent-ambiguous','rollback-retains-live-alias','usage-kind','unknown-summary-model','missing-fields','no-body-or-path-stored','append-frozen-prefix','failure-rollback','duplicate-apply','new-realtime-preserved','backup-api-consistency','committed-wal-backup','same-id-conflict']}))
 if __name__=='__main__':main()

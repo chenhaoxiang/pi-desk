@@ -6,9 +6,9 @@ Pi Desk 是 Pi-only 的轻量 macOS 原生可视化与管理客户端。它连�
 
 ## 当前状态
 
-2026-10-24：已有 **SwiftUI/AppKit + TypeScript 本地源码候选**，不再只是静态稿。原生compact/expanded顶部灵动岛、中文分层管理窗口、双向私有 UDS、在线投影、原生消息/中止、Subagents 管理与统计、现有计划及注意事项均有实现；隔离真实 SDK、真实 Subagents owner 和 Schedule 管理 seam 候选的 faux-provider 验证见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
+2026-10-28：已有 **SwiftUI/AppKit + TypeScript 实现和已验真的本机安装**。原生顶部速览、中文管理窗口、私有 UDS、执行/输入状态、精确 Terminal 跳转、原生消息/中止、owner 子任务与计划、实时 Token 持久统计均有实现。当前本机候选为源码 `528e0d9` / **0.1.0 build38**，install/verify、ad-hoc codesign 和定向 GUI 检查已完成，上一版回滚保留。完整证据与边界见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
 
-这**不是已发行的完整 v0.1**：Herdr 实机跳转、系统通知交付与完整键盘/VoiceOver尚未完成；Gate/CI 无真实 producer。原6.1–6.2已按A1–A11/固定版本/代表性旧缺失混合cap补齐；刘海内屏与真实无刘海外屏的基本几何/展开已核对，不推导全显示器资格。已按显式授权完成本机稳定安装（统计首屏/来源展示/窗口兴趣与缓存源码 `8bd2e80` / build `20`）及真实大库/来源/metric界面验真，保留build18准确回退；不强制重载业务会话，不对外发布或部署。远端仍为空，本机安装不代表共享 main 或 GitHub CI 已通过。
+这**不是已发行的完整 v0.1**：系统通知当前被 OS 拒绝（调用失败 `UNErrorDomain:1`），授权后的真实投递、完整 Tab/VoiceOver 和 Herdr 实机仍未完成；不以 AX 树或读屏 disabled 状态代替真实验收。原6.1–6.2按固定版本/代表性旧缺失混合cap验证，已补旧进程正常关闭后 canonical 新桥接自然加载、GPT-named faux final→真实 UDS→生产 SQLite 和多会话 GUI；不强制 reload 业务 Pi、不再次补采历史、不调用真实 provider。公开 `main` 已有独立审查后的文档 bootstrap，源码通过[PR #1](https://github.com/chenhaoxiang/pi-desk/pull/1)与精确 head 的 CI/普通 merge 收口；首轮 CI 的通过不自动转记给后续 head。本机安装与公开源码都不等于正式发行、公证或自动更新。
 
 ## 构建和合成检查
 
@@ -80,10 +80,10 @@ PI_DESK_PEER_CHECK="$PWD/tmp/candidate/Pi Desk.app/Contents/Helpers/PiDeskPeerCh
 - Subagents Fleet key 只展示；后台孩子控制从 owner 的公开定向状态取得真实 runId。resume 由 owner 验证资格，拒绝后不偷开替代任务。
 - 计划按 owner 分开。Schedule seam 只复用现有 list/pause/resume/delete 和 event-job trigger，不新增计划库、CRUD 或常驻服务。暂停未来触发不撤销正在执行的工作。
 - 侧栏仅会话、Token、重要事项、设置；子任务与计划并入准确会话详情，保留数量、空态、owner/覆盖和未来触发语义。⌘1/⌘2/⌘3、⌘F与下一需关注会话只用本地状态，不发owner轮询。
-- Token主页面为跨已记录会话的“Pi总用量”：今日/近7天/本月/自定义时间、趋势和模型分布。从启用记录起异步持久化final标量，App关闭仍记录，重开恢复；另按2026-10-26授权执行一次Pi历史usage元数据补采。实时/历史/去重合计分开显示，不将owner累计补记为今天，不重复父子/工具聚合。缺失保留已知下界与覆盖缺口，不等于套餐额度/账单。
+- Token主页面为跨已记录会话的“Pi总用量”：今日/近7天/本月/自定义时间、趋势和模型分布；自定义最多400天（含首尾日期），超界明确提示并保留上次有效结果，不静默截断趋势。从启用记录起异步持久化final标量，App关闭仍记录，重开恢复；另按2026-10-26授权执行一次Pi历史usage元数据补采。实时/历史/去重合计分开显示，不将owner累计补记为今天，不重复父子/工具聚合。缺失保留已知下界与覆盖缺口，不等于套餐额度/账单。
 - owner执行后失败/超时为 unknown，不解释成确定未执行、不自动重试。本地请求未能提交时保留草稿。
 - 提醒已读/静音只改表现，不回答问题、不阻断执行。原 producer 通知从不被本客户端静默抑制。
-- 原会话定位只接受主动接入快照里的精确 Herdr pane 或 Terminal.app TTY route（唯一匹配后才聚焦；tmux/WezTerm/cmux未接入或Automation拒绝即不可定位）；不按cwd/名称猜窗口，不对活跃会话自动执行`pi --session`开启第二writer。旧bridge没有route时等待自然加载，显示unknown。管理页仅允许用户配置的无凭据、无 query/fragment 的精确 HTTPS 地址。
+- 原会话定位只接受主动接入快照里的精确 Herdr pane 或 Terminal.app TTY route（唯一匹配后才聚焦；tmux/WezTerm/cmux未接入或Automation拒绝即不可定位）；不按cwd/名称猜窗口，不对活跃会话自动执行`pi --session`开启第二writer。旧bridge缺route时可从当前UDS peer的PID/出生时间/TTY作有界精确定位；缺执行proof仍明确状态待核，不把连接在线当作AI忙闲。管理页仅允许用户配置的无凭据、无 query/fragment 的精确 HTTPS 地址。
 - 会话卡片的创建时间只来自session header timestamp，缺失/超界显示unknown，不把observedAt或首次接入时间当创建时间。
 - 设置页仅投影Pi原生用户settings.json白名单：theme、thinking、steering/followUp、compaction、retry、quietStartup、tuiMode和终端图片/进度；项目`.pi/settings.json`只显示覆盖来源，不写；auth/models/MCP/资源/代理/信任/权限和工具模型默认值不纳入。写入带Pi兼容的`.lock`目录、revision冲突、owner-only备份、原子替换和readback，失败只读保全。
 - 关闭、断联或结束 Pi Desk 不结束 Pi；不常驻扫描历史，不发现旧会话卡片，不读终端文本或凭据。仅显式授权的一次性补采worker只读Pi JSONL并立即投影usage标量，不保存/输出原正文或路径。

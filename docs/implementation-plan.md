@@ -7,7 +7,7 @@ release_scope: 首版本地源码与旁路候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-27
+verified: 2026-10-28
 verification_scope: 本地Swift/Node、隔离真实SDK/owner/GUI与已授权本机安装验真；未发布，不含完整真实TUI/Herdr验收
 ---
 
@@ -15,7 +15,7 @@ verification_scope: 本地Swift/Node、隔离真实SDK/owner/GUI与已授权本�
 
 ## 1. 当前交付与下一次实施起点
 
-架构基线为 `e561305`，在原专属树有序接管后连续实施。当前已建立原生App、TS薄扩展、真实owner管理和隔离验证，具体证据见第6节；这不是完整v0.1/业务会话/上线声明。当前新增本机安装授权，按用户Applications固定App与只读bridge版本实施，不以远端空仓或可选现场验收不足新增装机门槛。远端仍空，不能据此直推或bootstrap main；源码、安装和发行分开。
+架构基线为 `e561305`，在原专属树连续实施。当前已建立原生App、TS薄扩展、owner管理、实时统计与本机稳定安装，具体证据见第6节；这不是完整v0.1或上线声明。2026-10-28用户授权五项连续收口后，独立只读审查允许以原文档root初始化公开main，源码由topic PR #1、精确head CI和普通merge交付，不把整个实现直推main。安装、源码合并与正式发行仍分开。
 
 实施与剩余验收沿[本Change任务](../openspec/changes/pi-desk-v0-1/tasks.md)推进。阶段任务是依赖与验收划分，不是逐项人工审批流程；用户后续授权的实际范围决定可连续实施到哪一步。新增运行/生产/账号/预算边界按真实授权判断，不靠文档猜测。
 
@@ -220,6 +220,15 @@ Terminal定位候选已替换build27的`/usr/bin/osascript`子进程路径：Pi 
 
 `scripts/check-natural-upgrade.mjs` 使用已安装build34的canonical入口原字节、真实Swift UDS接收器和生产UsageLedger：隔离旧bridge进程保持旧代码且未发模型请求，入口更新不热载旧runtime；正常关闭该自有进程后，同profile新进程经常规自动发现加载新版，startup新增模型调用0，busy/idle与原生`session.isIdle`一致。GPT-named faux运行的两条final进入私有spool，再由生产SQLite聚合，input/output/cacheRead/cacheWrite均与原生final独立求和一致，real provider调用0、历史读取0。当前canonical索引只读增量证据另确认已有GPT模型及四桶非NULL，不重新补采历史。`scripts/run-pty-check.py`补actual InteractiveMode/独立PTY的两轮正常续行；原件位于ignored `tmp/closeout-20261028/`。本阶段仅补验真脚本与记录，运行安装仍复用已核验e8eb78f/build34；不把隔离faux或PTY当真实收费provider验收。
 
+### 2026-10-28 组合现场与独审增量
+
+- 实际build37 GUI同时读回三个owned真实SDK/faux会话的“本轮运行／等待输入／本轮已结束”。输入来自原生ui_prompt事件，原始交互binding是隔离RPC promise，不冒称业务TUI问题或真实provider；结束输入仅由原fixture owner解析，App没有代答。真实前台键盘输入搜索后列表只显示该三会话；AXSetValue值变化本身没有过滤成功，未当作用户输入证据。截图 `tmp/closeout-20261028/gui/combo-three-states-real-input.png`。准确Terminal跳转已在build37再次完成唯一TTY/window回读，原件 `gui/terminal-focus-after.json`；无终端文字/按键或第二writer。
+- 系统通知真实查询为denied；产品请求入口回读 `UNErrorDomain:1`。`992bcf0`仅增加安全系统错误域/数字码，不输出description/userInfo；fake授权/拒绝/请求失败/发送失败保留软件回归。真实允许后的投递没有通过，不自动同意OS consent。
+- 键盘⌘1/⌘2/⌘F通过真实前台输入与页面/搜索结果回读；主窗在内屏/外屏移动并核验，尝试960×620实际受内容约束为1031×620，已记录该实际最小尺寸而非宣称960通过。完整Tab顺序/VoiceOver尚未完成，disabled只是当时观测，不是技术阻断；Herdr没有可执行目标，未为验收另装宿主。
+- 独审P1 `check-draft.sh`缺生产类型依赖已由 `14dd500` 修复。`528e0d9`同一窄修处理三个P2：关闭usage writer永久失败最多三次关闭态失败刷盘并释放timer、正常关闭可排空全部有界批次；UI/ledger统一限制custom最多400天且不静默丢桶；history source与允许根解析真实路径后作包含判断，拒绝../及祖先symlink逃逸，rollback不依赖源存在。TS56/56/typecheck、标准check-native全部通过，新增负例见同提交；没有再次读取或补采真实历史。
+- `528e0d9`已稳定安装为build38，install/verify/codesign通过、上一版备份保留；当前GUI/metadata-only性能原件在ignored tmp。build38 30秒空闲样本累计CPU约0.087秒（单核约0.29%）、物理IO0、期间索引输入无新增；不与输入增长不同的样本强行比较或宣称零开销。既有大库暖范围/cache/rowid增量证据继续复用，未重扫JSONL。
+- 远端main已初始化为独立审查通过的文档root；PR #1首轮bridge/native/GitGuardian在head14dd500通过，后续head只认其自身CI/增量复审。初审不是第二自然人批准或完整现场验收；Change2.4/6.3及正式发行状态仍如实保留。
+
 ### 保留的未完成项
 
-完整v0.1未验收、Change未归档。build30已真实复验状态live fixture与Terminal focus：busy/idle切换在同一真实GUI卡片上分别读回“本轮运行/本轮已结束”；旧bridge Terminal定位准确回读`/dev/ttys035`、Terminal PID1310、window53694。真实Herdr可执行文件在此机不可用，故Herdr精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，build30安装/verify/codesign通过，build27回滚保留；实际GUI杀App后原生faux会话继续执行，业务Pi未reload/输入/模型。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开远端空main仍未初始化，独立审计/PR/CI/合并分别保留真实状态。
+完整v0.1未验收、Change未归档。build30已真实复验状态live fixture与Terminal focus：busy/idle切换在同一真实GUI卡片上分别读回“本轮运行/本轮已结束”；旧bridge Terminal定位准确回读`/dev/ttys035`、Terminal PID1310、window53694。真实Herdr可执行文件在此机不可用，故Herdr精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，当前build38安装/verify/codesign通过，上一版回滚保留；实际GUI杀App后原生faux会话继续执行，业务Pi未reload/输入/模型。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开main已有已审文档bootstrap、实现PR #1及初轮CI；最终head的独立审计/CI/普通合并仍分别按真实结果更新，不把本机安装当作发行。

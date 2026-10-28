@@ -50,7 +50,7 @@
 
 ### 当前仍未满足的组合验收
 
-2.4 已有原生窗口/顶栏和AX/双会话GUI，Herdr实机、完整键盘/VoiceOver及6.3实际OS通知仍未验；build18以显式合成预览核对真实刘海内屏和无刘海外屏compact/expanded及跨屏跟随，不冒称所有系统组合。6.1–6.2已按原A1–A11、固定支持版本及代表性旧/缺失/混合cap补齐；不以所有历史owner、长期provider或24x7另造前置，亦不把软件通过冒称现场系统通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
+2.4 已有原生窗口/顶栏、代表性键盘快捷键/小窗/跨屏与真实SDK三会话GUI，Herdr实机、完整Tab/VoiceOver及6.3系统允许后的实际通知投递仍未验；2026-10-28真实通知查询denied/请求失败UNErrorDomain:1，不自动修改OS许可；build18以显式合成预览核对真实刘海内屏和无刘海外屏compact/expanded及跨屏跟随，不冒称所有系统组合。6.1–6.2已按原A1–A11、固定支持版本及代表性旧/缺失/混合cap补齐；不以所有历史owner、长期provider或24x7另造前置，亦不把软件通过冒称现场系统通过。6.4 已有release ad-hoc候选和实际kill/重启隔离检查；新增获授权的本机稳定App/固定bridge安装、自动发现和回退验证，hash与安装事实保存在本机manifest及本树tmp验真产物；6.5 已如实更新源码/验收/安装状态，不归档Change或宣称完整v0.1。详见实施方案第6节。
 
 ## 7. Native visual and interaction refinement
 

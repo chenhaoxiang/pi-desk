@@ -46,6 +46,13 @@ export type Capabilities = {
 	queries: string[];
 	owners: Record<string, string>;
 };
+export type RecoveryProjection = {
+	state: "waiting" | "unknown" | "ready" | "blocked";
+	action: "status" | "reconcile" | "resume" | "inspect";
+	reason: string;
+	runId: string;
+	index?: number;
+};
 export type Run = {
 	key: string;
 	runId?: string;
@@ -57,6 +64,7 @@ export type Run = {
 	model?: string;
 	effort?: string;
 	terminalProof?: string;
+	recovery?: RecoveryProjection;
 	actions: Action[];
 };
 export type Schedule = {
@@ -245,6 +253,18 @@ export function validate(v: unknown): asserts v is RecordV1 {
 		] as const)
 			if (!Array.isArray(s[key]) || s[key].length > max)
 				throw new Error("invalid-snapshot");
+		const runs = s.runs as unknown[];
+		if (runs.some((run) => {
+			if (!object(run)) return true;
+			if (run.recovery === undefined) return false;
+			const recovery = run.recovery;
+			return !object(recovery)
+				|| !["waiting", "unknown", "ready", "blocked"].includes(String(recovery.state))
+				|| !["status", "reconcile", "resume", "inspect"].includes(String(recovery.action))
+				|| !safeId(recovery.reason)
+				|| !safeId(recovery.runId)
+				|| (recovery.index !== undefined && recovery.index !== null && (!Number.isSafeInteger(recovery.index) || Number(recovery.index) < 0));
+		})) throw new Error("invalid-snapshot");
 	} else if (v.kind === "action") {
 		if (
 			!safeId(v.requestId) ||

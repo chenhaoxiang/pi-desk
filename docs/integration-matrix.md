@@ -42,6 +42,7 @@ verification_scope: 指定公开源码基线、隔离Pi1.4与Subagents0.80及Sch
 | 子任务能力发现 | ping.capabilities：managementActions、resume、fleetStatus、nonRecoveringSteer等 | 每runtime查验；未知/旧版仅禁相关UI动作，不升级/重启原会话 |
 | 子任务标识 | Fleet是展示投影；asyncSnapshot另有真实run id | 不把display key解析成runId，不跨owner/epoch发动作 |
 | 子任务统计 | cost返回parent/children/childTotal/total、unresolvedAsyncChildren，读取当前分支/关联产物 | 在settled/完成或显式刷新调用，非周期目录扫描；partial保留为下界 |
+| UNKNOWN恢复投影 | asyncSnapshot/fleet status可携带bounded recovery `{state,action,reason,runId,index?}` | 仅只读展示 `reconcile`/`resume` 下一步，不新增 Desk 控制动作；UNKNOWN 不转成成功/失败，不盲目重发 |
 | Subagents计划 | manage allowlist含schedule.list/show/history/pause/resume/run/delete | 带owner命名空间；history是原计划执行元数据，不新增会话历史扫描器 |
 | Intercom presence | extension注册channel的listSessions与presence事件 | 可以复用现有presence，不依赖它给所有Pi自动授权；不将未知peer自动纳管 |
 | Intercom出站v1 | outbox字段为requestId/extensionId/name/to/message，无wake或mode | 不把它当精确steer/follow-up接口；自身会话走直接Pi API，跨peer能力后续按owner实现 |

@@ -231,6 +231,13 @@ test("Fleet key is not a runId and does not unlock control", () => {
 	assert.ok(runs[0].actions.includes("run.stop"));
 	assert.ok(!JSON.stringify(runs).includes("PRIVATE"));
 });
+test("projects UNKNOWN recovery as read-only guidance without adding controls", () => {
+	const cap = subagentCapabilities({ capabilities: { fleetStatus: { version: 1 }, resume: true, nonRecoveringSteer: true, stop: true } });
+	const runs = subagentRuns({ asyncSnapshot: { runs: [{ id: "run-unknown", state: "running", recovery: { state: "unknown", action: "reconcile", reason: "runner_liveness_unknown", runId: "run-unknown" } }] } }, cap);
+	assert.deepEqual(runs[0]?.recovery, { state: "unknown", action: "reconcile", reason: "runner_liveness_unknown", runId: "run-unknown" });
+	assert.ok(runs[0]?.actions.includes("run.stop"));
+	assert.ok(runs[0]?.actions.includes("run.steer"));
+});
 
 const delay = () => new Promise(r => setTimeout(r, 20));
 function owner(h: ReturnType<typeof harness>, ping: unknown) {

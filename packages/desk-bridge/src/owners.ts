@@ -147,6 +147,19 @@ export function subagentCapabilities(raw: unknown): OwnerCapabilities {
 		version: text(raw.packageVersion ?? raw.version, 64) ?? "rpc-v1",
 	};
 }
+function recoveryProjection(raw: unknown, fallbackRunId: unknown): Run["recovery"] {
+	if (!object(raw) || !["waiting", "unknown", "ready", "blocked"].includes(String(raw.state)) || !["status", "reconcile", "resume", "inspect"].includes(String(raw.action))) return undefined;
+	const reason = safeId(raw.reason) ? raw.reason : undefined;
+	const runId = safeId(raw.runId) ? raw.runId : safeId(fallbackRunId) ? fallbackRunId : undefined;
+	if (!reason || !safeId(runId)) return undefined;
+	return {
+		state: raw.state as NonNullable<Run["recovery"]>["state"],
+		action: raw.action as NonNullable<Run["recovery"]>["action"],
+		reason,
+		runId,
+		...(Number.isSafeInteger(raw.index) && Number(raw.index) >= 0 ? { index: Number(raw.index) } : {}),
+	};
+}
 export function subagentRuns(raw: unknown, cap: OwnerCapabilities): Run[] {
 	if (!object(raw)) return [];
 	const runs: Run[] = [];
@@ -154,6 +167,7 @@ export function subagentRuns(raw: unknown, cap: OwnerCapabilities): Run[] {
 		for (const r of raw.asyncSnapshot.runs.slice(0, 64)) {
 			if (!object(r) || !safeId(r.id)) continue;
 			const state = text(r.state, 64) ?? "unknown";
+			const recovery = recoveryProjection(r.recovery, r.id);
 			const actions: Action[] = [];
 			if (["running", "queued"].includes(state)) {
 				if (cap.stop) actions.push("run.stop");
@@ -173,6 +187,7 @@ export function subagentRuns(raw: unknown, cap: OwnerCapabilities): Run[] {
 				agent: text(r.agent, 128),
 				model: text(r.model, 128),
 				effort: text(r.thinking, 64),
+				...(recovery ? { recovery } : {}),
 				actions,
 			});
 		}
@@ -208,6 +223,7 @@ export function subagentChildRuns(
 	return raw.details.workflowChildren.children.slice(0, 32).flatMap((c) => {
 		if (!object(c) || !safeId(c.runId)) return [];
 		const state = text(c.state, 64) ?? "unknown";
+		const recovery = recoveryProjection(c.recovery, c.runId);
 		const actions: Action[] = [];
 		if (["running", "queued"].includes(state)) {
 			if (cap.stop) actions.push("run.stop");
@@ -226,6 +242,7 @@ export function subagentChildRuns(
 				owner: "subagents",
 				state,
 				agent: text(c.agent, 128),
+				...(recovery ? { recovery } : {}),
 				actions,
 			},
 		];

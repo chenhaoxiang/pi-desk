@@ -117,6 +117,13 @@ public struct UsageReport: Codable, Equatable, Sendable {
   public var accountingGroup: String?
   public var reasons: [String]
 }
+public struct RecoveryProjection: Codable, Equatable, Sendable {
+  public var state: String
+  public var action: String
+  public var reason: String
+  public var runId: String
+  public var index: Int?
+}
 public struct Run: Codable, Equatable, Identifiable, Sendable {
   public var key: String
   public var id: String { key }
@@ -129,6 +136,7 @@ public struct Run: Codable, Equatable, Identifiable, Sendable {
   public var model: String?
   public var effort: String?
   public var terminalProof: String?
+  public var recovery: RecoveryProjection?
   public var actions: [Action]
 }
 public struct Schedule: Codable, Equatable, Identifiable, Sendable {

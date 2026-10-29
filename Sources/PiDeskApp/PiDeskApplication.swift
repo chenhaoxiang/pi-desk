@@ -376,6 +376,11 @@ struct RunsSection: View {
               Spacer()
               Text(Presentation.runState(r.state)).font(.caption).foregroundStyle(.secondary)
             }
+            if let recovery = r.recovery {
+              Text("恢复：" + recovery.action + " · " + recovery.reason)
+                .font(.caption2)
+                .foregroundStyle(recovery.state == "unknown" ? .orange : .secondary)
+            }
             if let runId = r.runId {
               let target = Target(owner: r.owner, runId: runId)
               Button("刷新此运行状态") { model.refresh(identity: session.snapshot.identity, runId: r.parentRunId ?? runId) }.font(.caption).disabled(session.connection != .connected)

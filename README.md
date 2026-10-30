@@ -6,9 +6,11 @@ Pi Desk 是 Pi-only 的轻量 macOS 原生可视化与管理客户端。它连�
 
 ## 当前状态
 
-2026-10-28：已有 **SwiftUI/AppKit + TypeScript 实现和已验真的本机安装**。原生顶部速览、中文管理窗口、私有 UDS、执行/输入状态、精确 Terminal 跳转、原生消息/中止、owner 子任务与计划、实时 Token 持久统计均有实现。当前本机候选为源码 `528e0d9` / **0.1.0 build38**，install/verify、ad-hoc codesign 和定向 GUI 检查已完成，上一版回滚保留。完整证据与边界见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
+2026-10-30：**v0.1 本机交付已收口，非正式发行。** SwiftUI/AppKit + TypeScript 已实现顶部速览、中文管理窗口、私有 UDS、准确执行/输入状态、Terminal 跳转、原生消息/中止、owner 子任务与计划和持久 Token 总统计。本机保留唯一稳定应用 **0.1.0 build46 / runtime source `506174c`**，安装字节、bridge 与 ad-hoc 签名已验证。源码 PR #1、#2、#3 均已合并，`506174c` 的真实 CI 已通过；本轮仅整理文档和本机副本，不为文档重建 runtime。
 
-这**不是已发行的完整 v0.1**：系统通知当前被 OS 拒绝（调用失败 `UNErrorDomain:1`），授权后的真实投递、完整 Tab/VoiceOver 和 Herdr 实机仍未完成；不以 AX 树或读屏 disabled 状态代替真实验收。原6.1–6.2按固定版本/代表性旧缺失混合cap验证，已补旧进程正常关闭后 canonical 新桥接自然加载、GPT-named faux final→真实 UDS→生产 SQLite 和多会话 GUI；不强制 reload 业务 Pi、不再次补采历史、不调用真实 provider。公开 `main` 已有独立审查后的文档 bootstrap，源码已沿[PR #1](https://github.com/chenhaoxiang/pi-desk/pull/1)完成精确 head CI、独立增量审计和普通 merge，合并提交为 `c940bdf`；完整 v0.1 现场资格与正式发行仍未完成，首轮 CI 的通过不自动转记给后续 head。本机安装与公开源码都不等于正式发行、公证或自动更新。
+2026-10-29，用户在系统授权回读与测试通知受理后，现场明确确认通知可见、VoiceOver 能朗读并遍历会话列表及关键设置控件；这纠正了 10 月 28 日的 denied/未验结论，保留早期失败作为历史，不把当时 build38 的现场确认改标成 build46 的全面重验。多会话、Terminal 精确定位、代表性键盘、小窗及内外屏证据见[实施记录](docs/implementation-plan.md#6-本地实施与证据层级)。
+
+**Herdr 正向实机跳转仍未验证**：本机没有已配置宿主。既有规格要求无效/缺失路由明确失败、不跳错对象；解析与缺失/多匹配负例有检查，不能据此声称 Herdr 实机成功，也不为清单安装未知宿主。当前本机支持路径据此收口，保留该兼容边界。签名公证、自动更新和对外发行尚未执行；源码合并、本机安装与正式发行分别记录。旧业务 Pi 不强制 reload，历史 usage 不重复补采。
 
 ## 构建和合成检查
 
@@ -43,6 +45,8 @@ node --import tsx scripts/install-local.mjs verify
 - `install-current.json` 只记录 App/bridge 安装字节与上一版回退位置，不保存任务、对话或凭据。安装器只替换可核验的本工具已管理版本，未知/被改写的目标保全并报错；更新前退出本 App，Pi 无需退出。
 - 首次安装的回退是退出 App 后运行 `node --import tsx scripts/install-local.mjs rollback`，只移除受管理的 App/入口与当前安装记录；有上一版则恢复其准确字节。已有 Pi 不被停止，旧的固定 bridge 版本保留以免破坏已加载会话。未知目标和其他 Pi 设置/组件不清理。
 - Schedule seam 仍只是独立候选，不随 App 偷装/升级全局 Schedule，也不启动常驻监督。未配置/旧 owner 的可选能力按实际 unavailable 展示。
+
+2026-10-30 本机按用户要求只保留上述稳定 App，已清理受管理旧版、构建候选和视觉预览副本，并解除旧 App 回退引用；**该本机安装不再提供旧版 App 一键回退**。这不删除用量库、会话、历史导入备份或旧固定 bridge；已加载 Pi 仍可继续使用旧 bridge。安装器未来更新的默认备份行为未在本轮修改。
 
 安装状态以 `verify` 的 byte/hash 回读和实际 App/新会话证据为准；写文件、源码检查、安装、进程运行与新会话已加载分别记录。
 
@@ -95,9 +99,10 @@ PI_DESK_PEER_CHECK="$PWD/tmp/candidate/Pi Desk.app/Contents/Helpers/PiDeskPeerCh
 - [接口与实际接线](docs/integration-matrix.md)
 - [交互及原生检查范围](docs/interaction-design.md)，[原始静态设计稿](docs/design/pi-desk-v0.1.html)
 - [实施记录、验证与未完成项](docs/implementation-plan.md)
-- [单一 Change 与任务](openspec/changes/pi-desk-v0-1/tasks.md)
+- [现行行为规格](openspec/specs/)
+- [首版归档与任务](openspec/changes/archive/2026-10-30-pi-desk-v0-1/tasks.md)
 
-规划合同可用官方全局 CLI 检查：`openspec validate pi-desk-v0-1 --strict --no-interactive`。文档/spec 通过不是业务验收。
+现行合同可用官方全局 CLI 检查：`openspec validate --all --strict --no-interactive`。首版由官方 CLI 归档并提升三项行为规格，没有跳过校验；文档/spec 通过不是额外业务或发行验收。
 
 ## 与 CodeIsland 的关系
 

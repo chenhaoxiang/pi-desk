@@ -7,8 +7,8 @@ release_scope: 首版合同与本地源码候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-26
-verification_scope: 用户范围、源码候选与隔离faux-native证据；不含业务会话和完整实机兼容验收
+verified: 2026-10-30
+verification_scope: 用户范围、隔离faux-native、本机已配置路径及用户确认的通知与VoiceOver；非Herdr正向实机或正式发行
 ssot: true
 ---
 
@@ -18,7 +18,7 @@ ssot: true
 
 用户可以在一个原生入口看清已接入 Pi 会话、子任务、消耗和例外，并对原工作发出准确的管理请求；不用持续切换窗口，也不用守着界面让自动化继续。界面缺失、关闭或故障不改变原任务、通知兜底及权限。
 
-需求依据是本次用户确认：只考虑 Pi；不需要各工具历史会话扫描；Pi Token 统计可以有；首版绝对不能降低 AI 自动化程度。2026-10-24 先完成架构候选，后获授权沿单一 Change 实施和隔离验证。当前已有本地源码与已授权本机稳定安装；2026-10-26用户另授权一次Pi历史usage元数据补采与未完成原验收补齐；不扩大为周期扫描或历史对话UI，不对外部署、发行或初始化空远端 main，真实证据见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
+需求依据是本次用户确认：只考虑 Pi；不需要各工具历史会话扫描；Pi Token 统计可以有；首版绝对不能降低 AI 自动化程度。2026-10-24 先完成架构候选，后获授权沿单一 Change 实施和隔离验证。当前已有本地源码与已授权本机稳定安装；2026-10-26用户另授权一次Pi历史usage元数据补采与未完成原验收补齐；不扩大为周期扫描或历史对话UI，当时未包含远端共享；后续已沿授权的 PR/CI/普通 merge 完成源码交付，仍不代表对外部署或正式发行，真实证据见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
 
 ## 2. 范围与完成标准
 
@@ -74,4 +74,4 @@ ssot: true
 - 产生真实待输入生命周期与合成治理/CI变化，关闭提醒不影响原问题和任务。
 - 比较关闭/接入两组相同fixture的执行轨迹、模型调用数、人工确认数、原参数及额外开销。
 
-当前已验证其中的源码/隔离真实 SDK、Subagents/计划 owner 和原生 GUI 路径；尚未覆盖的Herdr、真实系统通知/完整键盘与VoiceOver保持未完成；真实刘海内屏与无刘海外屏基本几何/展开已核对，不推导全显示器资格；长期provider/所有历史owner不是6.1–6.2新增前置，不把下层通过冒充整项首版验收。规范要求见单一 Change 的 [live-pi-sessions](../openspec/changes/pi-desk-v0-1/specs/live-pi-sessions/spec.md)、[owned-management](../openspec/changes/pi-desk-v0-1/specs/owned-management/spec.md)、[usage-and-attention](../openspec/changes/pi-desk-v0-1/specs/usage-and-attention/spec.md)。
+本机已配置路径已完成源码/隔离 SDK、Subagents/计划 owner、多会话 GUI、Terminal 精确定位和代表性键盘/内外屏验收；2026-10-29 用户另明确确认通知可见、VoiceOver 能朗读并遍历会话列表及关键设置控件。各项保留原版本证据，不改标成 build46 全面重验。Herdr 未配置，正向实机未验证；按既有路由不可用场景明确失败、不跳错对象，不宣称兼容已获实机认证。长期 provider、所有历史 owner 和任意显示器组合不是本轮新增前置；本机交付不等于正式发行。现行规范见 [live-pi-sessions](../openspec/specs/live-pi-sessions/spec.md)、[owned-management](../openspec/specs/owned-management/spec.md)、[usage-and-attention](../openspec/specs/usage-and-attention/spec.md)；实施历史保留在[首版归档](../openspec/changes/archive/2026-10-30-pi-desk-v0-1/tasks.md)。

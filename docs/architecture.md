@@ -3,7 +3,7 @@ doc_type: plan
 project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
-release_scope: 本地实现候选；完整首版验收仍未完成
+release_scope: 本机实现与首版已配置路径收口；非正式发行或全宿主认证
 status: active
 truth_mode: maintained
 created: 2026-10-24
@@ -13,7 +13,7 @@ verification_scope: Swift/TS源码、UDS/隔离真实SDK与owner组合；不含�
 
 # 系统架构
 
-产品边界见[产品范围](product-v0.1.md)，具体接口及版本见[矩阵](integration-matrix.md)，行为要求统一在[单一 Change](../openspec/changes/pi-desk-v0-1/proposal.md)。本页是实现结构与取舍，不是新增治理权威。
+产品边界见[产品范围](product-v0.1.md)，具体接口及版本见[矩阵](integration-matrix.md)，行为要求统一在[现行规格](../openspec/specs/)，初始设计保留在[首版归档](../openspec/changes/archive/2026-10-30-pi-desk-v0-1/proposal.md)。本页是实现结构与取舍，不是新增治理权威。
 
 ## 1. 进程拓扑
 
@@ -47,7 +47,8 @@ packages/desk-bridge/src/    # Pi生命周期、owner adapters、非阻塞投影
 Tests/                      # Swift纯逻辑/协议/本机隔离集成
 packages/desk-bridge/test/   # Node/真实SDK faux-provider测试
 docs/                       # 本页、产品、交互、接口与实施说明
-openspec/changes/pi-desk-v0-1/
+openspec/specs/              # 现行行为合同
+openspec/changes/archive/2026-10-30-pi-desk-v0-1/  # 首版实施历史
 ```
 
 `Sources/PiDeskPeerCheck/` 是有限 syscall 助手，不是第三个运行宿主：在桥接的异步连接验证阶段经公开 stdio 传递 fd，仅执行 `getpeereid` 并退出。它随 App 打包，缺失/失败只使该观察连接不可用，绝不替换为不验证 peer 的连接。

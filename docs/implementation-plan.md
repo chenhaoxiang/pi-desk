@@ -7,17 +7,17 @@ release_scope: 首版本地源码与旁路候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-28
-verification_scope: 本地Swift/Node、隔离真实SDK/owner/GUI与已授权本机安装验真；未发布，不含完整真实TUI/Herdr验收
+verified: 2026-10-30
+verification_scope: 本地Swift/Node、隔离SDK/owner/GUI、用户确认的通知与VoiceOver现场结果及本机安装；非Herdr正向实机或正式发行
 ---
 
 # 分阶段实施方案
 
 ## 1. 当前交付与下一次实施起点
 
-架构基线为 `e561305`，在原专属树连续实施。当前已建立原生App、TS薄扩展、owner管理、实时统计与本机稳定安装，具体证据见第6节；这不是完整v0.1或上线声明。2026-10-28用户授权五项连续收口后，独立只读审查允许以原文档root初始化公开main，源码由topic PR #1、精确head CI和普通merge交付，不把整个实现直推main。安装、源码合并与正式发行仍分开。
+架构基线为 `e561305`，原专属树已完成实现和交付。2026-10-30 本机收口基线为 `506174c` / 0.1.0 build46；源码 PR #1、#2、#3 均已合并，准确 main CI 已通过。通知和 VoiceOver 采用 2026-10-29 用户明确确认的现场结果，保留各自原版本边界，不将历史结果改标为新 build 全面重验。当前本机已配置路径收口，Herdr 正向实机仍未验证；源码、本机安装与正式发行分开。
 
-实施与剩余验收沿[本Change任务](../openspec/changes/pi-desk-v0-1/tasks.md)推进。阶段任务是依赖与验收划分，不是逐项人工审批流程；用户后续授权的实际范围决定可连续实施到哪一步。新增运行/生产/账号/预算边界按真实授权判断，不靠文档猜测。
+首版实施与验收保存在[归档任务](../openspec/changes/archive/2026-10-30-pi-desk-v0-1/tasks.md)，现行行为合同在[规格目录](../openspec/specs/)。阶段任务是依赖与验收划分，不是逐项人工审批流程；新增运行/生产/账号/预算边界按真实授权判断，不靠文档猜测。
 
 ## 2. 阶段与依赖
 
@@ -229,8 +229,16 @@ Terminal定位候选已替换build27的`/usr/bin/osascript`子进程路径：Pi 
 - `528e0d9`已稳定安装为build38，install/verify/codesign通过、上一版备份保留；当前GUI/metadata-only性能原件在ignored tmp。build38 30秒空闲样本累计CPU约0.087秒（单核约0.29%）、物理IO0、期间索引输入无新增；不与输入增长不同的样本强行比较或宣称零开销。既有大库暖范围/cache/rowid增量证据继续复用，未重扫JSONL。
 - 远端main已初始化为独立审查通过的文档root；PR #1最终head `fc04268` 已完成bridge/native exact-head CI、独立增量审计并以普通merge合入，merge commit为`c940bdf`。其后main push的native job两次因macos-15 runner未分配而取消（runner_id=0、steps=[]），未执行测试；PR exact-head CI已成功，不将该基础设施取消改写成代码失败或main合后全绿。初审不是第二自然人批准或完整现场验收；Change2.4/6.3及正式发行状态仍如实保留。
 
-### 保留的未完成项
+### 2026-10-28 有界现场尝试（历史）
 
 2026-10-28，主会话经系统设置旁白的正常UI将开关从0改为1，欢迎页后确认真实VoiceOver/scrod进程已启动。“使用旁白”的AXPress返回-25204，但后读进程已启动，不能据此判断确定未执行；Pi Desk精确前台后的VO导航chord仍为unverifiable，未取得可核验朗读、caption或完整焦点遍历，因此不标完整读屏通过。试验后已由正常UI恢复checkbox value0/selectedfalse；原件在`tmp/closeout-20261028/gui/voiceover-*.json`及`vo-pidesk-*.png`。disabled只是恢复后的状态，不是技术阻断；系统通知denied及授权后真实投递未验的边界继续保留。
 
-完整v0.1未验收、Change未归档。build30已真实复验状态live fixture与Terminal focus：busy/idle切换在同一真实GUI卡片上分别读回“本轮运行/本轮已结束”；旧bridge Terminal定位准确回读`/dev/ttys035`、Terminal PID1310、window53694。真实Herdr可执行文件在此机不可用，故Herdr精确跳转只有源合同/解析负例，不能假称实机成功；完整键盘/VoiceOver、系统通知许可/交付仍在2.4/6.3待验证；本机刘海内屏与外屏基本几何/展开已有真实验证，不推导任意热插拔/全显示器资格；不把长期provider/全历史owner新增为6.1/6.2阻断。新question producer缺失时generic custom不猜测来源；真实Gate/CI/服务后台未配置，不读取raw记录凑数。本地release App为arm64，当前build38安装/verify/codesign通过，上一版回滚保留；实际GUI杀App后原生faux会话继续执行，业务Pi未reload/输入/模型。已授权本机安装不等于发行签名、公证、自动更新或对外上线。公开main已有已审文档bootstrap，PR #1最终head `fc04268` 已完成独立审计、exact-head CI并普通merge为`c940bdf`；main合后native CI仍因macos-15 runner容量取消，未执行步骤。完整现场资格仍不等于源码已合入，Change2.4/6.3继续不勾。
+上述是 10 月 28 日当时的未验边界，不代表后续仍然 denied 或用户尚未现场确认。build30 的真实 Terminal 唯一 TTY/window 定位、后续多会话 GUI 和内外屏证据继续按原版本有效；早期 macOS runner 未分配的取消记录不改写成测试成功，后续准确 head CI 另行记录。
+
+### 2026-10-29 用户现场确认与 10 月 30 日本机收口
+
+- 用户明确授权只开启 Pi Desk 系统通知并测试、由用户现场验收 VoiceOver。系统设置回读 `allow-notifications=true`，App 回读已授权，主动测试返回系统受理；随后用户对“通知横幅/通知中心可见、VoiceOver 朗读和会话列表/关键设置控件焦点遍历”的结构化问题选择“两项都通过”。受理与可见性证据分开，真实结果来自用户确认，不是 AX 树或 disabled 状态推断。该确认属于当时 build38，不冒称 build46 全面重验。
+- 2.4 的代表性键盘、VoiceOver 关键焦点、内外屏、小窗和 Terminal 准确跳转，以及 6.3 的隔离多会话/输入/通知路径已有对应证据。Herdr 无已配置宿主，正向实机仍未验证；既有 `Local metadata and accurate navigation` 的 `Exact terminal route is unavailable` 场景要求明确失败、不跳错对象，现有解析/缺失/多匹配负例支持该降级行为，不要求安装所有终端宿主。按本机已配置路径完成这两项，不把 Herdr 未验伪装为通过、不修改该行为合同。
+- PR #1 普通合并为 `c940bdf`，PR #2 为 `55a0ce4`，PR #3 治理状态只读投影为 `506174c`；最后者的 Synthetic checks run `40906239013` 成功。当前稳定安装为 0.1.0/build46/runtime source `506174c`，安装字节、bridge 及 ad-hoc 签名已核对；文档收口不改变 runtime，不为此重建安装。
+- 用户要求本机只保留一个最新 App。本轮仅清理经 bundle 身份核实的旧版/候选/视觉预览 App，并原子解除当前安装的旧 App 回退引用；唯一稳定入口保持不变，不再保留旧 App 一键回退。用量数据库、历史补采备份、会话记录与旧固定 bridge 均保留，未强制 reload 业务 Pi、未重复历史补采或调用真实 provider。
+- 本 Change 按上述适用验收收口归档；Herdr 正向实机、任意显示器/长期 provider 全组合、正式发行签名/公证/自动更新均不宣称完成。以后配置 Herdr 时仍须准确 pane 的真实回读，不能用当前归档替代。

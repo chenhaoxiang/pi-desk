@@ -17,7 +17,7 @@ Pi Desk 是 Pi-only 的可视化与管理客户端。先读 `README.md` 与下�
 - 物理主目录只读；tracked 变更在本机约定的专属 worktree，基于已核实默认分支。空仓首次规划没有远端提交基线，须如实说明。
 - 默认主分支不直推；只 stage 精确本任务路径。共享交付按适用 PR、审查和验证规则；自审不冒充独审。
 - 临时 fixture、日志、截图及生成预览放 `tmp/`，不入业务目录或提交；真实本机路径、会话、管理地址与凭据不写进公开文档。
-- 当前唯一 Change 为 `pi-desk-v0-1`；后续实施沿其任务推进，不因分阶段复制规格。最新用户授权决定动作范围，旧规划快照不能新增审批。
+- `pi-desk-v0-1` 已按本机适用验收归档；现行行为合同在 `openspec/specs/`，历史任务保留于下方归档入口。增量按实际变更决定是否新建 Change，不复制已完成规格；旧快照不能新增审批或冒称 Herdr 正向实机通过。
 - 借用 CodeIsland 代码前核对许可、来源与依赖；未复用不得声称已集成。不复制其多工具安装、历史扫描或权限审批层。
 
 ## 文档地图
@@ -29,7 +29,7 @@ Pi Desk 是 Pi-only 的可视化与管理客户端。先读 `README.md` 与下�
 | 公开来源、真实 API、兼容性及接线缺口 | `docs/integration-matrix.md` |
 | 顶栏/管理窗口、按钮和异常交互 | `docs/interaction-design.md` |
 | 阶段顺序、验证、风险和交付边界 | `docs/implementation-plan.md` |
-| 行为合同 | `openspec/changes/pi-desk-v0-1/specs/` |
-| 可跟踪实施任务 | `openspec/changes/pi-desk-v0-1/tasks.md` |
+| 现行行为合同 | `openspec/specs/` |
+| 首版归档任务与验收边界 | `openspec/changes/archive/2026-10-30-pi-desk-v0-1/tasks.md` |
 
 正文保留 frontmatter。新增 docs 先查本地图，更新现有 owner 文件；只有入口/职责改变才改地图。四件套只路由，不重复正文。

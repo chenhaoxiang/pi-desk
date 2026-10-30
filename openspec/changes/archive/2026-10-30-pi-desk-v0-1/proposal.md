@@ -31,4 +31,4 @@
 
 Pi Desk后续新增SwiftUI/AppKit客户端、TS桥接与双端协议fixture。Pi宿主/SDK与各owner均沿既有能力接入；缺少owner seam时分别实施和验证，不在本仓调用私有实现或直接编辑状态文件。
 
-当前影响包含本仓App/bridge源码、隔离fixtures、已授权本机安装和一次canonical Pi usage索引补采；不触及真实凭据、全局Pi设置、模型、业务工作目录或服务部署，不强reload已有会话。完整范围见[产品](../../../docs/product-v0.1.md)，结构见[架构](../../../docs/architecture.md)，阶段见[实施方案](../../../docs/implementation-plan.md)。
+当前影响包含本仓App/bridge源码、隔离fixtures、已授权本机安装和一次canonical Pi usage索引补采；不触及真实凭据、全局Pi设置、模型、业务工作目录或服务部署，不强reload已有会话。完整范围见[产品](../../../../docs/product-v0.1.md)，结构见[架构](../../../../docs/architecture.md)，阶段见[实施方案](../../../../docs/implementation-plan.md)。

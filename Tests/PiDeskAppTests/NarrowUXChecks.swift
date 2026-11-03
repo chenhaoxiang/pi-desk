@@ -126,6 +126,12 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     let spotlight = SessionExperience.spotlight(largeList, pinned: [largeList[20].snapshot.identity.sessionKey])
     precondition(spotlight.count == 4 && spotlight[0].snapshot.identity == largeList[63].snapshot.identity, "late input is not hidden behind first four sessions")
     precondition(spotlight[1].snapshot.identity == largeList[20].snapshot.identity, "pin wins over ordinary running but not input")
+    let frozen = spotlight.map { $0.snapshot.identity }
+    var slotStore = Dictionary(uniqueKeysWithValues: spotlight.map { ($0.snapshot.identity.sessionKey, $0) })
+    var replacement = spotlight[0]; replacement.snapshot.identity.runtimeEpoch = "replacement-epoch"
+    slotStore[frozen[0].sessionKey] = replacement
+    let slots = SessionExperience.slots(frozen, sessions: slotStore)
+    precondition(slots.count == frozen.count && slots.map(\.id) == frozen && slots[0].session == nil && slots[1].session?.snapshot.identity == frozen[1], "epoch replacement keeps an inert slot instead of shifting later click targets")
     largeList[63].connection = .disconnected
     precondition(!SessionExperience.spotlight(largeList, pinned: []).contains { $0.snapshot.identity == largeList[63].snapshot.identity }, "old disconnected input is not a live spotlight")
     let oldState = UsageViewState()
@@ -149,6 +155,20 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     precondition(!model.hasUnreadResult(offlineResult), "disconnected records cannot create a fresh result reminder")
     model.markResultViewed(snapshot.identity)
     precondition(!model.hasUnreadResult(result) && model.store.requests.count == requestsBefore, "viewing is display-only")
+    model.reviewedResultSequences = [:]; model.selected = nil; model.sessionFilter = "需关注"; model.page = "会话"
+    model.setManagerVisibility(true)
+    model.select(snapshot.identity)
+    precondition(model.sessionFilter == "全部" && model.current?.snapshot.identity == snapshot.identity && !model.hasUnreadResult(result), "opening an attention-only result retains its detail after marking viewed")
+    model.reviewedResultSequences = [:]; model.search = "synthetic-no-match"
+    model.markVisibleResultViewed(snapshot.identity)
+    precondition(model.current == nil && model.hasUnreadResult(result), "a stale selection hidden by search is not a viewed detail")
+    model.search = ""; model.sessionFilter = "运行中"
+    model.markVisibleResultViewed(snapshot.identity)
+    precondition(model.current == nil && model.hasUnreadResult(result), "settlement leaving the running filter cannot silently dismiss the new result")
+    model.sessionFilter = "需关注"
+    model.markVisibleResultViewed(snapshot.identity)
+    precondition(model.current?.snapshot.identity == snapshot.identity && model.hasUnreadResult(result), "automatic viewing must not remove its own attention-filter detail")
+    model.sessionFilter = "在线"; model.setManagerVisibility(false); model.markResultViewed(snapshot.identity)
     var newEpoch = resultSnapshot; newEpoch.identity.runtimeEpoch = "new-experience-epoch"
     precondition(model.store.apply(WireRecord(kind: "hello", identity: newEpoch.identity, snapshot: newEpoch), connection: UUID(), now: snapshot.observedAt))
     precondition(model.hasUnreadResult(model.store.sessions[newEpoch.identity.sessionKey]!), "read marker cannot cross runtimes")

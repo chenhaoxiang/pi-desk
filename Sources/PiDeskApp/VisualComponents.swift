@@ -336,6 +336,17 @@ struct SessionDiagnostics: View {
     }
   }
 }
+private struct ExpiredSpotlightCard: View {
+  var body: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      Label("会话已更新", systemImage: "clock.arrow.circlepath").font(.subheadline.weight(.semibold))
+      Text("重新展开速览可查看当前对象").font(.caption).foregroundStyle(.secondary)
+      Text("此位置已停用，其他会话不会前移").font(.caption2).foregroundStyle(.secondary)
+    }.frame(maxWidth: .infinity, alignment: .leading).padding(11).frame(height: 132)
+      .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 11))
+      .accessibilityElement(children: .combine)
+  }
+}
 struct IslandView: View {
   @EnvironmentObject var model: AppModel
   @EnvironmentObject var island: IslandController
@@ -426,7 +437,7 @@ struct IslandView: View {
       ScrollViewReader { proxy in
         ScrollView {
           VStack(spacing: 9) {
-            if island.spotlightSessions.isEmpty {
+            if island.spotlightSlots.isEmpty {
               VStack(spacing: 10) {
                 Image(systemName: "rectangle.stack").font(.title2)
                 Text("暂无在线会话").font(.headline)
@@ -434,10 +445,11 @@ struct IslandView: View {
                   .multilineTextAlignment(.center)
               }.frame(maxWidth: .infinity).padding(.vertical, 28)
             }
-            ForEach(island.spotlightSessions, id: \.snapshot.identity) { s in
-              SessionCard(
-                session: s, island: true, onSelect: { island.openManager(s.snapshot.identity) },
-                append: { id, mode in island.compose(id, mode: mode) })
+            ForEach(island.spotlightSlots) { slot in
+              if let s = slot.session {
+                SessionCard(session: s, island: true, onSelect: { island.openManager(s.snapshot.identity) },
+                  append: { id, mode in island.compose(id, mode: mode) })
+              } else { ExpiredSpotlightCard() }
             }
             if let identity = island.composing {
               MessageComposer(

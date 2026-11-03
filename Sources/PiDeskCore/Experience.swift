@@ -21,6 +21,12 @@ public struct SessionActivity: Codable, Equatable, Sendable {
   }
 }
 
+public struct SpotlightSlot: Identifiable, Sendable {
+  public let identity: Identity
+  public let session: SessionView?
+  public var id: Identity { identity }
+}
+
 /// Display-only choices never replace runtime identity or execution evidence.
 public enum SessionExperience {
   public static func elapsed(since milliseconds: Double, now: Date = Date()) -> String? {
@@ -44,6 +50,12 @@ public enum SessionExperience {
     return Presentation.project(snapshot) + " · " + snapshot.identity.nativeSessionId.suffix(6)
   }
 
+  public static func slots(_ identities: [Identity], sessions: [String: SessionView]) -> [SpotlightSlot] {
+    identities.map { identity in
+      let session = sessions[identity.sessionKey]
+      return SpotlightSlot(identity: identity, session: session?.snapshot.identity == identity ? session : nil)
+    }
+  }
   public static func spotlight(_ sessions: [SessionView], pinned: Set<String>, unread: Set<String> = [], limit: Int = 4) -> [SessionView] {
     func rank(_ session: SessionView) -> Int {
       if Presentation.needsInput(session) { return 0 }

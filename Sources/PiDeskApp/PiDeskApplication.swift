@@ -355,7 +355,8 @@ struct SessionDetail: View {
           }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
         }.font(.caption)
         SessionDiagnostics(session: session)
-      }
+      }.onAppear { model.markVisibleResultViewed(snap.identity) }
+        .onChange(of: snap.activity?.turnEndSequence) { _, _ in model.markVisibleResultViewed(snap.identity) }
     } else {
       ContentUnavailableView(
         "选择一个会话", systemImage: "rectangle.stack", description: Text("查看状态、定位现场，或向原 Pi 追加要求。"))
@@ -554,57 +555,90 @@ struct TokenPage: View {
 }
 struct AttentionPage: View {
   @EnvironmentObject var model: AppModel
+  private var inputSessions: [SessionView] { model.attentionSessions.filter { Presentation.needsInput($0) } }
+  private var failedSessions: [SessionView] { model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) == .failed } }
+  private var resultSessions: [SessionView] { model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) != .failed && model.hasUnreadResult($0) } }
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         Toggle("本次静音提醒", isOn: $model.muted).font(.caption)
           .help("只改变提醒表现，不回答或取消原问题")
-        section("等待你输入", sessions: model.attentionSessions.filter { Presentation.needsInput($0) })
-        section("本轮出现异常", sessions: model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) == .failed })
-        section("本轮结束，有新变化", sessions: model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) != .failed && model.hasUnreadResult($0) })
+        AttentionSection(title: "等待你输入", sessions: inputSessions)
+        AttentionSection(title: "本轮出现异常", sessions: failedSessions)
+        AttentionSection(title: "本轮结束，有新变化", sessions: resultSessions)
         if model.attentionCount == 0 {
           ContentUnavailableView("当前没有需关注事项", systemImage: "checkmark.circle", description: Text("会话会继续独立运行。"))
         }
         Text("已读不回答问题；本轮结束不代表业务验收通过。").font(.caption).foregroundStyle(.secondary)
-        DisclosureGroup("治理与验证来源") {
-          ForEach(model.sessions.filter { !$0.snapshot.evidence.isEmpty }, id: \.snapshot.identity) { s in
-            VStack(alignment: .leading, spacing: 6) {
-              Text(model.sessionTitle(s)).font(.caption.weight(.medium))
-              ForEach(s.snapshot.evidence) { e in
-                Text(e.category + " · 原系统报告 " + Presentation.runState(e.status) + " · " + (e.nature == "advice" ? "建议" : "当前版本绑定未核验")).font(.caption)
-                Text(e.source + " · " + (e.head ?? "版本未知")).font(.caption2.monospaced()).foregroundStyle(.secondary)
-              }
-            }
-          }
-          if model.sessions.allSatisfy({ $0.snapshot.evidence.isEmpty }) { Text("尚未配置治理/CI来源").font(.caption).foregroundStyle(.secondary) }
-        }.font(.caption)
+        AttentionEvidenceSection(sessions: model.sessions.filter { !$0.snapshot.evidence.isEmpty })
       }
     }
   }
-  @ViewBuilder private func section(_ title: String, sessions: [SessionView]) -> some View {
+}
+private struct AttentionSection: View {
+  let title: String
+  let sessions: [SessionView]
+  var body: some View {
     if !sessions.isEmpty {
-      Text(title + " · \(sessions.count)").font(.subheadline.weight(.semibold))
-      ForEach(sessions, id: \.snapshot.identity) { s in
-        DeskCard {
-          VStack(alignment: .leading, spacing: 10) {
-            HStack { Text(model.sessionTitle(s)).font(.headline).lineLimit(2); Spacer(); StatusPill(status: Presentation.status(s)) }
-            Text(Presentation.activity(s)).font(.subheadline)
-            Text(SessionExperience.timing(s)).font(.caption).foregroundStyle(.secondary)
-            HStack {
-              Button("查看详情") { model.select(s.snapshot.identity); model.navigate(to: "会话") }
-              Button(model.originalRouteLabel(identity: s.snapshot.identity)) { model.openOriginal(identity: s.snapshot.identity) }
-                .disabled(!model.canOpenOriginal(identity: s.snapshot.identity))
-              if Presentation.needsInput(s) {
-                let read = s.snapshot.inputs.allSatisfy { model.isRead($0, session: s.snapshot.identity) }
-                Button(read ? "已读 · 仍待输入" : "标为已读") {
-                  for input in s.snapshot.inputs { model.markRead(input, session: s.snapshot.identity) }
-                }.disabled(read)
-              } else if model.hasUnreadResult(s) {
-                Button("标为已查看") { model.markResultViewed(s.snapshot.identity) }
-              }
-            }.buttonStyle(.bordered).font(.caption)
-          }
-        }
+      VStack(alignment: .leading, spacing: 12) {
+        Text(title + " · \(sessions.count)").font(.subheadline.weight(.semibold))
+        ForEach(sessions, id: \.snapshot.identity) { session in AttentionSessionCard(session: session) }
+      }
+    }
+  }
+}
+private struct AttentionSessionCard: View {
+  let session: SessionView
+  @EnvironmentObject var model: AppModel
+  private var inputRead: Bool { session.snapshot.inputs.allSatisfy { model.isRead($0, session: session.snapshot.identity) } }
+  var body: some View {
+    DeskCard {
+      VStack(alignment: .leading, spacing: 10) {
+        HStack { Text(model.sessionTitle(session)).font(.headline).lineLimit(2); Spacer(); StatusPill(status: Presentation.status(session)) }
+        Text(Presentation.activity(session)).font(.subheadline)
+        Text(SessionExperience.timing(session)).font(.caption).foregroundStyle(.secondary)
+        actions
+      }
+    }
+  }
+  private var actions: some View {
+    HStack {
+      Button("查看详情") { model.select(session.snapshot.identity); model.navigate(to: "会话") }
+      Button(model.originalRouteLabel(identity: session.snapshot.identity)) { model.openOriginal(identity: session.snapshot.identity) }
+        .disabled(!model.canOpenOriginal(identity: session.snapshot.identity))
+      if Presentation.needsInput(session) {
+        Button(inputRead ? "已读 · 仍待输入" : "标为已读") {
+          for input in session.snapshot.inputs { model.markRead(input, session: session.snapshot.identity) }
+        }.disabled(inputRead)
+      } else if model.hasUnreadResult(session) {
+        Button("标为已查看") { model.markResultViewed(session.snapshot.identity) }
+      }
+    }.buttonStyle(.bordered).font(.caption)
+  }
+}
+private struct AttentionEvidenceSection: View {
+  let sessions: [SessionView]
+  var body: some View {
+    DisclosureGroup("治理与验证来源") {
+      ForEach(sessions, id: \.snapshot.identity) { session in AttentionEvidenceRow(session: session) }
+      if sessions.isEmpty { Text("尚未配置治理/CI来源").font(.caption).foregroundStyle(.secondary) }
+    }.font(.caption)
+  }
+}
+private struct AttentionEvidenceRow: View {
+  let session: SessionView
+  @EnvironmentObject var model: AppModel
+  private func title(_ evidence: Evidence) -> String {
+    let status = Presentation.runState(evidence.status)
+    let binding = evidence.nature == "advice" ? "建议" : "当前版本绑定未核验"
+    return "\(evidence.category) · 原系统报告 \(status) · \(binding)"
+  }
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(model.sessionTitle(session)).font(.caption.weight(.medium))
+      ForEach(session.snapshot.evidence) { evidence in
+        Text(verbatim: title(evidence)).font(.caption)
+        Text(evidence.source + " · " + (evidence.head ?? "版本未知")).font(.caption2.monospaced()).foregroundStyle(.secondary)
       }
     }
   }

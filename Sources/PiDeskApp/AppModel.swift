@@ -130,6 +130,7 @@ struct DeskSettings: Codable {
     guard visible != managerIsVisible else { return }
     managerIsVisible = visible
     if visible && page == "Token" && Date().timeIntervalSince(lastUsageRefresh) >= 1 { refreshUsage() }
+    if visible, let identity = current?.snapshot.identity { markVisibleResultViewed(identity) }
   }
   func refreshUsageIfDue(now: Date = Date()) {
     if now.timeIntervalSince(lastUsageRefresh) >= usageRefreshInterval { refreshUsage() }
@@ -186,6 +187,11 @@ struct DeskSettings: Codable {
     reviewedResultSequences[key] = sequence
     persistViewState()
   }
+  func markVisibleResultViewed(_ identity: Identity) {
+    guard managerIsVisible, page == "会话", current?.snapshot.identity == identity,
+      sessionFilter != "需关注" else { return }
+    markResultViewed(identity)
+  }
   func note(_ message: String, for identity: Identity) {
     guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
     sessionNotes = sessionNotes.filter { store.sessions[$0.key.sessionKey]?.snapshot.identity == $0.key }
@@ -214,14 +220,18 @@ struct DeskSettings: Codable {
     page = "会话"; select(candidates[index].snapshot.identity, refreshOwner: false); showManager()
   }
   func select(_ identity: Identity, refreshOwner: Bool = false) {
-    guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
+    guard let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity else { return }
+    // Viewing a result must not remove its own detail from the attention filter.
+    if sessionFilter == "需关注", hasUnreadResult(session), Presentation.executionState(session) != .failed {
+      sessionFilter = "全部"
+    }
     if !visibleSessions.contains(where: { $0.snapshot.identity == identity }) {
       search = ""
       sessionFilter = "全部"
       hiddenSessions.remove(identity.sessionKey)
     }
     selected = identity.sessionKey
-    markResultViewed(identity)
+    markVisibleResultViewed(identity)
     selectionPinned = true
     pendingSelectionHash = UsageViewStateKey.hash(identity.sessionKey)
     persistViewState()
@@ -427,7 +437,7 @@ struct DeskSettings: Codable {
         self.aggregate.selectedOrigin == result.selectedOrigin, self.aggregate.selectedModel == result.selectedModel {
         self.aggregate.error = result.error
         self.aggregate.coverageReasons = result.coverageReasons
-      } else { self.aggregate = result }
+      } else { self.aggregate = self.applyingLiveCoverage(result) }
       guard self.usageComparisonEnabled, result.error == nil else {
         self.comparisonAggregate = nil; self.usageLoading = false; return
       }
@@ -437,9 +447,16 @@ struct DeskSettings: Codable {
         self.usageLoading = false
         guard self.customRangeIsValid else { return }
         guard self.matchesUsageSelection(result) else { self.refreshUsage(); return }
-        self.comparisonAggregate = self.usageComparisonEnabled ? prior : nil
+        self.comparisonAggregate = self.usageComparisonEnabled ? self.applyingLiveCoverage(prior) : nil
       }
     }
+  }
+  private func applyingLiveCoverage(_ value: UsageAggregate) -> UsageAggregate {
+    var result = value
+    if sessions.contains(where: { $0.connection == .connected && $0.snapshot.usageRecorder == nil }) {
+      result.originComparisonGaps[UsageOrigin.realtime.rawValue, default: []].insert("live-recorder-unavailable")
+    }
+    return result
   }
   private func matchesUsageSelection(_ result: UsageAggregate) -> Bool {
     let expected = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)
@@ -614,7 +631,7 @@ struct DeskSettings: Codable {
       peerRoutes = peerRoutes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
       routeNotes = routeNotes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
       if let session = store.sessions[record.identity.sessionKey] { resolveOriginalRoute(session) }
-      if selected == record.identity.sessionKey && managerIsVisible && page == "会话" { markResultViewed(record.identity) }
+      markVisibleResultViewed(record.identity)
       restoreHidden(record.identity, connection: store.sessions[record.identity.sessionKey]?.connection ?? .connected)
       selectPreferredSession()
       notify()

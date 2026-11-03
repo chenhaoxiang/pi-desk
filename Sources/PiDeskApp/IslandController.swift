@@ -120,11 +120,12 @@ private final class IslandHostingView: NSHostingView<AnyView> {
       }.store(in: &subscriptions)
     model.$store.receive(on: RunLoop.main).sink { [weak self] store in
       guard let self = self else { return }
-      let count = min(store.sessions.values.filter { $0.connection == .connected }.count, 4)
+      let count = self.state.expanded ? self.spotlightIdentities.count : min(store.sessions.values.filter { $0.connection == .connected }.count, 4)
       if self.state.expanded && self.spotlightIdentities.isEmpty {
         DispatchQueue.main.async { [weak self] in
           guard let self, self.state.expanded, self.spotlightIdentities.isEmpty else { return }
           self.spotlightIdentities = model.spotlightSessions.map { $0.snapshot.identity }
+          self.rows = self.spotlightIdentities.count
           self.updateGeometry(animated: false)
         }
       }
@@ -224,6 +225,7 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     leave?.cancel()
     guard !state.expanded else { return }
     spotlightIdentities = model?.spotlightSessions.map { $0.snapshot.identity } ?? []
+    rows = spotlightIdentities.count
     state.expand()
     updateGeometry(animated: true)
   }
@@ -264,13 +266,9 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     state.editing = value
     reportPreview()
   }
-  var spotlightSessions: [SessionView] {
-    guard let model else { return [] }
-    // Freeze row membership for this expansion; events cannot move a click target.
-    return spotlightIdentities.compactMap { identity in
-      guard let session = model.store.sessions[identity.sessionKey], session.snapshot.identity == identity else { return nil }
-      return session
-    }
+  var spotlightSlots: [SpotlightSlot] {
+    // Keep an inert slot when an epoch disappears; later cards must not move up.
+    SessionExperience.slots(spotlightIdentities, sessions: model?.store.sessions ?? [:])
   }
   func openManager(_ identity: Identity? = nil) {
     if let identity = identity {

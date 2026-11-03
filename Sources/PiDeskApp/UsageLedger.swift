@@ -48,6 +48,11 @@ public struct UsageDateRange: Equatable, Hashable {
     }
   }
 
+  public var previousPeriod: UsageDateRange {
+    let days = max(1, timeZoneCalendar.dateComponents([.day], from: start, to: end).day ?? 1)
+    return UsageDateRange(start: timeZoneCalendar.date(byAdding: .day, value: -days, to: start) ?? start,
+      end: start, preset: .custom, timeZone: timeZone)
+  }
   public var endDate: Date {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timeZone
@@ -83,6 +88,7 @@ public enum UsageOrigin: String, CaseIterable, Identifiable {
 }
 public struct UsageViewState: Codable, Equatable {
   public static let currentVersion = 1
+  public static let maximumBytes = 96 * 1024
   public var version: Int = currentVersion
   public var page: String = "会话"
   public var sessionFilter: String = "在线"
@@ -95,6 +101,11 @@ public struct UsageViewState: Codable, Equatable {
   public var selectedKeyHash: String?
   public var hiddenKeyHashes: [String] = []
   public var dismissedKeyHashes: [String] = []
+  // Optional additions keep existing version-1 preferences readable.
+  public var pinnedKeyHashes: [String]?
+  public var sessionAliases: [String: String]?
+  public var reviewedResultSequences: [String: Int]?
+  public var comparisonEnabled: Bool?
 
   public init() {}
   public var migratedNavigation: UsageViewState {
@@ -106,12 +117,18 @@ public struct UsageViewState: Codable, Equatable {
     func hash(_ value: String) -> Bool { value.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil }
     let validDates = [customStartMS, customEndMS].allSatisfy { $0 == nil || (946684800000...7258118400000).contains($0!) }
     return version == Self.currentVersion && !page.isEmpty && page.utf8.count <= 64 && !page.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
-      && ["在线", "全部", "运行中", "需输入", "断连"].contains(sessionFilter)
+      && ["在线", "全部", "运行中", "需输入", "需关注", "已置顶", "断连"].contains(sessionFilter)
       && UsagePreset(rawValue: usagePreset) != nil && UsageMetric(rawValue: usageMetric) != nil && UsageOrigin(rawValue: usageOrigin) != nil
       && (usageModel.isEmpty || usageModel.range(of: "^[A-Za-z0-9._:/+@ -]{1,128}$", options: .regularExpression) != nil)
       && validDates && (selectedKeyHash == nil || hash(selectedKeyHash!))
       && hiddenKeyHashes.count <= 64 && hiddenKeyHashes.allSatisfy(hash)
       && dismissedKeyHashes.count <= 1024 && dismissedKeyHashes.allSatisfy(hash)
+      && (reviewedResultSequences ?? [:]).count <= 64 && (reviewedResultSequences ?? [:]).allSatisfy { key, value in hash(key) && value > 0 && value <= 9_007_199_254_740_991 }
+      && (pinnedKeyHashes ?? []).count <= 64 && (pinnedKeyHashes ?? []).allSatisfy(hash)
+      && (sessionAliases ?? [:]).count <= 32 && (sessionAliases ?? [:]).allSatisfy { key, value in
+        hash(key) && !value.isEmpty && value.utf8.count <= 128
+          && !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
+      }
   }
 }
 public enum UsageViewStateKey {
@@ -340,6 +357,43 @@ public struct UsageAggregate: Equatable {
       result.refreshedAt = Date()
     } else {
       result.buckets = range.days.map { UsageBucket(day: $0, state: .uncollected, tokens: UsageTokenTotals()) }
+    }
+    return result
+  }
+}
+
+public struct UsagePeriodComparison {
+  public var issue: String?
+  public var current: Int64 = 0
+  public var previous: Int64 = 0
+  public var bucketCount = 0
+  public var unit = "天"
+  public var percent: Double? { previous > 0 ? (Double(current) / Double(previous) - 1) * 100 : nil }
+
+  public static func make(current: UsageAggregate, previous: UsageAggregate, metric: UsageMetric, now: Date = Date()) -> UsagePeriodComparison {
+    func unavailable(_ reason: String) -> UsagePeriodComparison { UsagePeriodComparison(issue: reason) }
+    guard current.range.validationIssue == nil, previous.range == current.range.previousPeriod,
+      current.selectedModel == previous.selectedModel, current.selectedOrigin == previous.selectedOrigin,
+      current.timeZoneID == previous.timeZoneID else { return unavailable("比较范围或筛选已变化，请等待更新。") }
+    guard current.error == nil, previous.error == nil,
+      current.pendingRecords == 0, previous.pendingRecords == 0,
+      current.conflicts == 0, previous.conflicts == 0,
+      current.malformed == 0, previous.malformed == 0 else { return unavailable("记录尚未就绪，暂不计算变化。") }
+    guard !current.range.hourly || current.buckets.count == previous.buckets.count else {
+      return unavailable("两期因夏令时具有不同小时数，不直接计算变化百分比。")
+    }
+    let finished = current.buckets.filter { current.range.bucketEnd($0.day) <= now }
+    let count = min(finished.count, previous.buckets.count)
+    guard count > 0 else { return unavailable("还没有完整的可比较时段；不比较进行中的桶。") }
+    var result = UsagePeriodComparison(bucketCount: count, unit: current.range.hourly ? "小时" : "天")
+    for (a, b) in zip(finished.prefix(count), previous.buckets.prefix(count)) {
+      let x = a.tokens.metric(metric), y = b.tokens.metric(metric)
+      guard a.state == .data, b.state == .data, x.complete, y.complete else {
+        return unavailable("两期记录存在未采集时段或缺失字段，暂不计算变化。")
+      }
+      let sum = result.current.addingReportingOverflow(x.value), prior = result.previous.addingReportingOverflow(y.value)
+      guard !sum.overflow, !prior.overflow else { return unavailable("记录超过可比较范围，未计算变化。") }
+      result.current = sum.partialValue; result.previous = prior.partialValue
     }
     return result
   }
@@ -697,7 +751,7 @@ public final class UsageLedger: UsageLedgerClient {
       if step == SQLITE_DONE { return nil }
       guard step == SQLITE_ROW else { throw LedgerError.databaseUnavailable }
       let raw = string(statement, 1)
-      guard raw.utf8.count <= 16384, let data = raw.data(using: .utf8), Int(sqlite3_column_int(statement, 0)) == UsageViewState.currentVersion else { throw LedgerError.incompatibleViewState }
+      guard raw.utf8.count <= UsageViewState.maximumBytes, let data = raw.data(using: .utf8), Int(sqlite3_column_int(statement, 0)) == UsageViewState.currentVersion else { throw LedgerError.incompatibleViewState }
       let state = try JSONDecoder().decode(UsageViewState.self, from: data)
       guard state.valid else { throw LedgerError.incompatibleViewState }
       return state
@@ -705,7 +759,7 @@ public final class UsageLedger: UsageLedgerClient {
     func saveViewState(_ state: UsageViewState) throws {
       _ = try loadViewState() // Invalid/future rows are preserved, never overwritten by defaults.
       let data = try JSONEncoder().encode(state)
-      guard let json = String(data: data, encoding: .utf8), json.utf8.count <= 16384 else { throw LedgerError.databaseUnavailable }
+      guard let json = String(data: data, encoding: .utf8), json.utf8.count <= UsageViewState.maximumBytes else { throw LedgerError.databaseUnavailable }
       let statement = try prepare("INSERT INTO app_view_state(key,version,updated,value) VALUES('main',?,?,?) ON CONFLICT(key) DO UPDATE SET version=excluded.version,updated=excluded.updated,value=excluded.value")
       defer { sqlite3_finalize(statement) }
       sqlite3_bind_int(statement, 1, Int32(state.version)); sqlite3_bind_int64(statement, 2, Int64(Date().timeIntervalSince1970 * 1000)); bind(json, statement, 3)

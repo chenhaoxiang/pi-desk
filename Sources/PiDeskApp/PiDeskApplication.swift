@@ -23,8 +23,9 @@ import SwiftUI
   }
   func showManager(activate: Bool = true) {
     if manager == nil {
+      let narrow = model.isPreview && CommandLine.arguments.contains("--narrow-preview")
       let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
+        contentRect: NSRect(x: 0, y: 0, width: narrow ? 960 : 1120, height: narrow ? 620 : 760),
         styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
         backing: .buffered, defer: false)
       window.title = model.isPreview ? "Pi Desk 合成预览" : "Pi Desk"
@@ -49,6 +50,14 @@ import SwiftUI
       manager?.orderFrontRegardless()
     }
     updateUsageInterest()
+    if model.isPreview && CommandLine.arguments.contains("--narrow-preview") {
+      DispatchQueue.main.async { [weak self] in
+        guard let self, let window = self.manager else { return }
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.setFrame(NSRect(origin: window.frame.origin, size: NSSize(width: 960, height: 620)), display: true)
+        self.island.updateGeometry(animated: false)
+      }
+    }
   }
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
@@ -69,7 +78,7 @@ import SwiftUI
     } label: {
       MenuLabel().environmentObject(delegate.model)
     }.menuBarExtraStyle(.window)
-    Settings { SettingsPage().environmentObject(delegate.model).frame(width: 600).padding(20) }
+    Settings { ScrollView { SettingsPage().environmentObject(delegate.model).padding(20) }.frame(width: 640, height: 560) }
       .commands {
         CommandGroup(after: .appInfo) {
           Button("打开管理窗口") { delegate.showManager() }.keyboardShortcut("0", modifiers: .command)
@@ -81,7 +90,7 @@ import SwiftUI
           Button("重要事项") { delegate.model.navigate(to: "重要事项") }.keyboardShortcut("3", modifiers: .command)
           Divider()
           Button("搜索会话") { delegate.model.focusSessionSearch() }.keyboardShortcut("f", modifiers: .command)
-          Button("下一个需关注会话") { delegate.model.nextAttentionSession() }
+          Button("下一个需关注会话") { delegate.model.nextAttentionSession() }.keyboardShortcut("n", modifiers: [.command, .option])
         }
       }
   }
@@ -137,8 +146,8 @@ struct DeskWindow: View {
             Label(page, systemImage: icon(page))
             Spacer()
             if page == "会话" { Text("\(model.visibleSessions.count)").foregroundStyle(.secondary) }
-            if page == "重要事项" && model.inputCount > 0 {
-              Text("\(model.inputCount)").foregroundStyle(.orange)
+            if page == "重要事项" && model.attentionCount > 0 {
+              Text("\(model.attentionCount)").foregroundStyle(.orange)
             }
           }.padding(.vertical, 5).tag(page)
         }.listStyle(.sidebar)
@@ -159,7 +168,7 @@ struct DeskWindow: View {
         } else {
           HSplitView {
             SessionList().frame(minWidth: 250, idealWidth: 285, maxWidth: 335)
-            ScrollView { SessionDetail().padding(25) }.frame(minWidth: 430)
+            ScrollView { SessionDetail().padding(22) }.id(model.current?.snapshot.identity).frame(minWidth: 430)
           }
         }
       }
@@ -170,7 +179,7 @@ struct DeskWindow: View {
     HStack {
       VStack(alignment: .leading, spacing: 5) {
         Text(model.page == "会话" ? "工作概览" : (model.page == "Token" ? "用量总览" : model.page)).font(.system(size: model.page == "Token" ? 19 : 21, weight: .semibold))
-        if model.page != "Token" { Text("查看正在发生的事，不改变原来的推进方式").font(.caption).foregroundStyle(.secondary) }
+        if model.page != "Token" { Text("\(model.connectedCount) 个已接入 · \(model.attentionCount) 个需关注").font(.caption).foregroundStyle(.secondary) }
       }
       Spacer()
       if model.isPreview { PreviewBadge() }
@@ -178,10 +187,13 @@ struct DeskWindow: View {
         Label("本机连接暂不可用", systemImage: "wifi.exclamationmark").font(.caption).foregroundStyle(
           .orange)
       }
-      Label("已确认执行 \(model.activeCount)", systemImage: "circle.fill").font(.system(size: 11))
+      Label("运行中 \(model.activeCount)", systemImage: "circle.fill").font(.system(size: 11))
         .foregroundStyle(StatusTone.green.ink(dark: scheme == .dark))
       if model.unknownExecutionCount > 0 {
         Label("\(model.unknownExecutionCount) 状态待核", systemImage: "questionmark.circle").font(.system(size: 11)).foregroundStyle(.orange)
+      }
+      if model.unreadResultCount > 0 {
+        Label("\(model.unreadResultCount) 新变化", systemImage: "circle.fill").font(.system(size: 11)).foregroundStyle(.blue)
       }
       if model.inputCount > 0 {
         Label("\(model.inputCount) 需输入", systemImage: "questionmark.circle.fill").font(
@@ -212,9 +224,15 @@ struct SessionList: View {
       }.padding(17)
       VStack(spacing: 10) {
         TextField("搜索会话、项目或模型", text: $model.search).textFieldStyle(.roundedBorder).focused($searchFocused).accessibilityLabel("搜索已接入会话")
-        Picker("状态筛选", selection: $model.sessionFilter) {
-          ForEach(["在线", "全部", "运行中", "需输入", "断连"], id: \.self) { Text($0).tag($0) }
-        }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("按状态筛选会话")
+        HStack {
+          Picker("状态", selection: $model.sessionFilter) {
+            ForEach(AppModel.sessionFilters, id: \.self) { Text($0).tag($0) }
+          }.pickerStyle(.menu).accessibilityLabel("按状态筛选会话")
+          Spacer(minLength: 0)
+          Button { model.nextAttentionSession() } label: { Image(systemName: "arrow.right.circle") }
+            .buttonStyle(.borderless).disabled(model.attentionCount == 0).help("下一个需关注会话")
+            .accessibilityLabel("下一个需关注会话")
+        }
         if !model.hiddenSessions.isEmpty { Button("显示已隐藏卡片（不改变运行）") { model.clearHiddenSessions() }.font(.caption2) }
       }.padding(.horizontal, 13).padding(.bottom, 12)
       ScrollView {
@@ -239,8 +257,9 @@ struct SessionList: View {
                 session: s, selected: model.selected == s.snapshot.identity.sessionKey,
                 onSelect: { model.select(s.snapshot.identity) })
             }.buttonStyle(.plain).focusable().accessibilityLabel(
-              s.snapshot.display.name + " · " + Presentation.status(s).title)
+              model.sessionTitle(s) + " · " + Presentation.status(s).title)
               .contextMenu {
+                Button(model.isPinned(s.snapshot.identity) ? "取消置顶" : "置顶此会话") { model.togglePin(s.snapshot.identity) }
                 if s.connection != .connected { Button("仅隐藏卡片（不停止工作）") { model.hideDisconnected(s.snapshot.identity) } }
               }
           }
@@ -261,95 +280,91 @@ struct SessionDetail: View {
       VStack(alignment: .leading, spacing: 21) {
         HStack(alignment: .top) {
           VStack(alignment: .leading, spacing: 7) {
-            Text(snap.display.name).font(.system(size: 25, weight: .semibold)).fixedSize(
+            Text(model.sessionTitle(session)).font(.system(size: 23, weight: .semibold)).fixedSize(
               horizontal: false, vertical: true)
             Text(
               [Presentation.project(snap), snap.display.branch, Presentation.shortModel(snap)]
                 .compactMap { $0 }.joined(separator: " · ")
             ).font(.system(size: 12)).foregroundStyle(.secondary)
-            Text(Presentation.createdAbsolute(snap)).font(.caption).foregroundStyle(.secondary)
+            SessionIdentityControls(session: session).id(snap.identity)
           }
           Spacer()
           VStack(alignment: .trailing, spacing: 7) {
-            StatusPill(status: Presentation.connectionStatus(session))
             StatusPill(status: Presentation.status(session))
+            Label(Presentation.connection(session.connection), systemImage: Presentation.connectionStatus(session).symbol)
+              .font(.caption).foregroundStyle(.secondary)
           }
         }
-        Text(Presentation.executionCoverage(session)).font(.caption).foregroundStyle(.secondary)
-        SessionActions(session: session).id(snap.identity)
-        DisclosureGroup("原会话定位诊断") {
-          VStack(alignment: .leading, spacing: 7) {
-            Text(model.routeNotes[snap.identity] ?? "没有可用的精确路由；将从当前连接核验，不按cwd猜窗口或启动第二Pi。")
-            HStack {
-              Button("刷新定位") { model.refreshOriginalRoute(identity: snap.identity) }.disabled(session.connection != .connected)
-              Button("检查终端权限（只读）") { model.checkOriginalRoutePermission(identity: snap.identity) }.disabled(session.connection != .connected)
-              Button("请求终端定位权限") { model.checkOriginalRoutePermission(identity: snap.identity, requestConsent: true) }.disabled(session.connection != .connected)
-            }
-          }.font(.caption).foregroundStyle(.secondary).padding(.top, 7)
-        }.font(.caption)
-        if !model.canOpenOriginal(identity: snap.identity) {
-          Text(model.routeNotes[snap.identity] ?? "当前原会话不可定位；详见定位诊断，不会启动第二Pi。").font(.caption).foregroundStyle(.secondary)
+        if Presentation.needsExecutionReview(session) {
+          Label("执行状态待核，详见诊断", systemImage: "info.circle").font(.caption).foregroundStyle(.orange)
         }
-        if !snap.inputs.isEmpty {
+        SessionActions(session: session).id(snap.identity)
+        if let note = model.sessionNotes[snap.identity] {
+          Label(note, systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        if !model.canOpenOriginal(identity: snap.identity) {
+          Text("原会话暂不可定位，原因见下方定位诊断。").font(.caption).foregroundStyle(.secondary)
+        }
+        if Presentation.needsInput(session) {
           DeskCard {
             VStack(alignment: .leading, spacing: 9) {
-              Label("原会话需要输入", systemImage: "questionmark.circle.fill").font(
-                .subheadline.weight(.semibold)
-              ).foregroundStyle(StatusTone.amber.ink(dark: scheme == .dark))
-              Text("请在原会话处理；已读和关闭提醒不会代答，也不会改变执行。").font(.caption).foregroundStyle(.secondary)
-              HStack {
-                Button(model.originalRouteLabel(identity: snap.identity)) { model.openOriginal(identity: snap.identity) }.buttonStyle(.bordered).disabled(!model.canOpenOriginal(identity: snap.identity))
-                ForEach(snap.inputs.prefix(1)) { input in
-                  Button("标为已读") { model.markRead(input, session: snap.identity) }.buttonStyle(
-                    .borderless)
-                }
-              }
+              Label("等待你输入", systemImage: "questionmark.circle.fill").font(.subheadline.weight(.semibold))
+                .foregroundStyle(StatusTone.amber.ink(dark: scheme == .dark))
+              Text(SessionExperience.timing(session)).font(.caption).foregroundStyle(.secondary)
+              Text("请到原会话处理。已读只改变提醒表现，不会代答。").font(.caption).foregroundStyle(.secondary)
+              let read = snap.inputs.allSatisfy { model.isRead($0, session: snap.identity) }
+              Button(read ? "已读 · 仍待输入" : "标为已读") {
+                for input in snap.inputs { model.markRead(input, session: snap.identity) }
+              }.buttonStyle(.borderless).disabled(read)
             }
           }
         }
-        HStack(alignment: .top, spacing: 12) {
-          DeskCard {
-            VStack(alignment: .leading, spacing: 8) {
-              Text("当前活动").font(.caption).foregroundStyle(.secondary)
-              Label(
-                Presentation.activity(session),
-                systemImage: snap.tools.isEmpty ? "circle.dotted" : "wrench.and.screwdriver"
-              ).font(.system(size: 13, weight: .medium)).fixedSize(
-                horizontal: false, vertical: true)
+        if !Presentation.needsInput(session) {
+        DeskCard {
+          VStack(alignment: .leading, spacing: 10) {
+            HStack { Text("当前活动").font(.subheadline.weight(.semibold)); Spacer(); Text(SessionExperience.timing(session)).font(.caption).foregroundStyle(.secondary) }
+            Label(Presentation.activity(session), systemImage: snap.tools.isEmpty ? "circle.dotted" : "wrench.and.screwdriver")
+              .font(.system(size: 14, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+            if let started = snap.activity?.turnStartedAt {
+              Text("回合开始 " + Date(timeIntervalSince1970: started / 1000).formatted()).font(.caption).foregroundStyle(.secondary)
             }
-          }
-          DeskCard {
-            VStack(alignment: .leading, spacing: 8) {
-              Text("子任务信息").font(.caption).foregroundStyle(.secondary)
-              Text(snap.runs.isEmpty ? "暂无已报告的子任务" : "\(snap.runs.count) 项状态已返回").font(
-                .system(size: 13, weight: .medium))
-              Text(snap.childCoverage == "owner-reported" ? "来自原系统投影" : "覆盖仍待核实").font(.caption)
-                .foregroundStyle(.secondary)
+            if let ended = snap.activity?.turnEndedAt {
+              Text("回合结束 " + Date(timeIntervalSince1970: ended / 1000).formatted() + " · 业务结果请查看原会话").font(.caption).foregroundStyle(.secondary)
             }
           }
         }
-        DeskCard { UsageTiles(snapshot: snap) }
+        }
+        OperationsSection(identity: snap.identity)
         DisclosureGroup("子任务 \(snap.runs.count) · " + Presentation.coverage(snap.childCoverage)) {
           RunsSection(session: session)
         }.font(.caption)
         DisclosureGroup("已有计划 \(snap.schedules.count) · 按原系统管理") {
           SchedulesSection(session: session)
         }.font(.caption)
-        if !model.actionNote.isEmpty {
-          Label(model.actionNote, systemImage: "info.circle").font(.caption).foregroundStyle(
-            .secondary
-          ).fixedSize(horizontal: false, vertical: true)
-        }
-        OperationsSection(identity: snap.identity)
+        DisclosureGroup("会话用量 · " + Presentation.usage(snap).scope) {
+          DeskCard { UsageTiles(snapshot: snap) }
+        }.font(.caption)
+        DisclosureGroup("原会话定位诊断") {
+          VStack(alignment: .leading, spacing: 9) {
+            Text(model.routeNotes[snap.identity] ?? "没有可用的精确路由；不会按名称猜测窗口或启动第二个Pi。")
+            ViewThatFits(in: .horizontal) {
+              HStack { routeButtons(session) }
+              VStack(alignment: .leading, spacing: 8) { routeButtons(session) }
+            }
+          }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+        }.font(.caption)
         SessionDiagnostics(session: session)
-        Text("最后观测：" + Date(timeIntervalSince1970: snap.observedAt / 1000).formatted()).font(
-          .caption2
-        ).foregroundStyle(.tertiary)
       }
     } else {
       ContentUnavailableView(
         "选择一个会话", systemImage: "rectangle.stack", description: Text("查看状态、定位现场，或向原 Pi 追加要求。"))
     }
+  }
+  @ViewBuilder private func routeButtons(_ session: SessionView) -> some View {
+    Button("刷新定位") { model.refreshOriginalRoute(identity: session.snapshot.identity) }.disabled(session.connection != .connected)
+    Button("检查终端权限") { model.checkOriginalRoutePermission(identity: session.snapshot.identity) }.disabled(session.connection != .connected)
+    Button("请求终端定位权限") { model.checkOriginalRoutePermission(identity: session.snapshot.identity, requestConsent: true) }.disabled(session.connection != .connected)
   }
 }
 struct RunsSection: View {
@@ -482,6 +497,7 @@ struct OperationsSection: View {
             VStack(alignment: .leading, spacing: 6) {
               HStack {
                 Text(Presentation.action(r.action))
+                Text(Date(timeIntervalSince1970: r.submittedAt / 1000).formatted(date: .omitted, time: .shortened)).foregroundStyle(.secondary)
                 Spacer()
                 Text(Presentation.receipt(r.status)).foregroundStyle(
                   r.status == "unknown" ? .orange : .secondary)
@@ -540,61 +556,68 @@ struct AttentionPage: View {
   @EnvironmentObject var model: AppModel
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
-        Toggle("静音本次提醒（不回答原问题）", isOn: $model.muted).font(.caption)
-        ForEach(model.sessions, id: \.snapshot.identity) { s in
-          if !s.snapshot.inputs.isEmpty || s.snapshot.execution == .failed {
-            DeskCard {
-              VStack(alignment: .leading, spacing: 11) {
-                HStack {
-                  Text(s.snapshot.display.name).font(.headline)
-                  Spacer()
-                  StatusPill(status: Presentation.status(s))
-                }
-                Text(Presentation.activity(s)).font(.subheadline)
-                HStack {
-                  Button(model.originalRouteLabel(identity: s.snapshot.identity)) { model.openOriginal(identity: s.snapshot.identity) }.disabled(!model.canOpenOriginal(identity: s.snapshot.identity))
-                  ForEach(s.snapshot.inputs) { i in
-                    Button(model.isRead(i, session: s.snapshot.identity) ? "已读" : "标为已读") {
-                      model.markRead(i, session: s.snapshot.identity)
-                    }
-                  }
-                }.buttonStyle(.bordered)
-              }
-            }
-          }
+      VStack(alignment: .leading, spacing: 20) {
+        Toggle("本次静音提醒", isOn: $model.muted).font(.caption)
+          .help("只改变提醒表现，不回答或取消原问题")
+        section("等待你输入", sessions: model.attentionSessions.filter { Presentation.needsInput($0) })
+        section("本轮出现异常", sessions: model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) == .failed })
+        section("本轮结束，有新变化", sessions: model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) != .failed && model.hasUnreadResult($0) })
+        if model.attentionCount == 0 {
+          ContentUnavailableView("当前没有需关注事项", systemImage: "checkmark.circle", description: Text("会话会继续独立运行。"))
         }
-        if model.inputCount == 0 {
-          Label("当前没有已报告的待输入事项", systemImage: "checkmark.circle").font(.subheadline)
-            .foregroundStyle(.secondary).padding(.vertical, 12)
-        }
-        Text("提醒关闭或发送失败不影响原问题、原通知与自动推进。").font(.caption).foregroundStyle(.secondary)
+        Text("已读不回答问题；本轮结束不代表业务验收通过。").font(.caption).foregroundStyle(.secondary)
         DisclosureGroup("治理与验证来源") {
-          ForEach(model.sessions, id: \.snapshot.identity) { s in
+          ForEach(model.sessions.filter { !$0.snapshot.evidence.isEmpty }, id: \.snapshot.identity) { s in
             VStack(alignment: .leading, spacing: 6) {
-              Text(s.snapshot.display.name).font(.caption.weight(.medium))
-              if s.snapshot.evidence.isEmpty {
-                Text("治理/CI 来源未配置").font(.caption).foregroundStyle(.secondary)
-              }
+              Text(model.sessionTitle(s)).font(.caption.weight(.medium))
               ForEach(s.snapshot.evidence) { e in
-                Text(
-                  e.category + " · 原系统报告 " + Presentation.runState(e.status) + " · "
-                    + (e.nature == "advice" ? "建议" : "当前版本绑定未核验")
-                ).font(.caption)
-                Text(e.source + " · " + (e.head ?? "版本未知")).font(.caption2.monospaced())
-                  .foregroundStyle(.secondary)
+                Text(e.category + " · 原系统报告 " + Presentation.runState(e.status) + " · " + (e.nature == "advice" ? "建议" : "当前版本绑定未核验")).font(.caption)
+                Text(e.source + " · " + (e.head ?? "版本未知")).font(.caption2.monospaced()).foregroundStyle(.secondary)
               }
             }
           }
+          if model.sessions.allSatisfy({ $0.snapshot.evidence.isEmpty }) { Text("尚未配置治理/CI来源").font(.caption).foregroundStyle(.secondary) }
         }.font(.caption)
+      }
+    }
+  }
+  @ViewBuilder private func section(_ title: String, sessions: [SessionView]) -> some View {
+    if !sessions.isEmpty {
+      Text(title + " · \(sessions.count)").font(.subheadline.weight(.semibold))
+      ForEach(sessions, id: \.snapshot.identity) { s in
+        DeskCard {
+          VStack(alignment: .leading, spacing: 10) {
+            HStack { Text(model.sessionTitle(s)).font(.headline).lineLimit(2); Spacer(); StatusPill(status: Presentation.status(s)) }
+            Text(Presentation.activity(s)).font(.subheadline)
+            Text(SessionExperience.timing(s)).font(.caption).foregroundStyle(.secondary)
+            HStack {
+              Button("查看详情") { model.select(s.snapshot.identity); model.navigate(to: "会话") }
+              Button(model.originalRouteLabel(identity: s.snapshot.identity)) { model.openOriginal(identity: s.snapshot.identity) }
+                .disabled(!model.canOpenOriginal(identity: s.snapshot.identity))
+              if Presentation.needsInput(s) {
+                let read = s.snapshot.inputs.allSatisfy { model.isRead($0, session: s.snapshot.identity) }
+                Button(read ? "已读 · 仍待输入" : "标为已读") {
+                  for input in s.snapshot.inputs { model.markRead(input, session: s.snapshot.identity) }
+                }.disabled(read)
+              } else if model.hasUnreadResult(s) {
+                Button("标为已查看") { model.markResultViewed(s.snapshot.identity) }
+              }
+            }.buttonStyle(.bordered).font(.caption)
+          }
+        }
       }
     }
   }
 }
 struct SettingsPage: View {
   @EnvironmentObject var model: AppModel
+  @State private var section = "Pi Desk"
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
+      Picker("设置分类", selection: $section) {
+        ForEach(["Pi Desk", "Pi 原生设置", "高级连接"], id: \.self) { Text($0).tag($0) }
+      }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("设置分类")
+      if section == "Pi Desk" {
       DeskCard {
         VStack(alignment: .leading, spacing: 12) {
           HStack {
@@ -611,19 +634,6 @@ struct SettingsPage: View {
           Button("展开顶部速览") { model.showIsland() }.buttonStyle(.bordered)
         }
       }
-      PiSettingsCard(projectCwd: model.current?.snapshot.display.cwd ?? model.sessions.first?.snapshot.display.cwd)
-      DeskCard {
-        VStack(alignment: .leading, spacing: 12) {
-          Text("原系统入口").font(.subheadline.weight(.semibold))
-          TextField("Herdr 可执行文件绝对路径（可选）", text: $model.settings.herdrExecutable).textFieldStyle(
-            .roundedBorder)
-          TextField("精确 HTTPS 管理页（可选）", text: $model.settings.managementURL).textFieldStyle(
-            .roundedBorder)
-          Button("打开已配置管理页") { model.openManagement() }.disabled(
-            LinkPolicy.exactHTTPS(model.settings.managementURL) == nil)
-          Text("没有准确会话路由时会说明原因，不激活其他同名窗口。").font(.caption).foregroundStyle(.secondary)
-        }
-      }
       DeskCard {
         VStack(alignment: .leading, spacing: 12) {
           Text("提醒表现").font(.subheadline.weight(.semibold))
@@ -635,12 +645,25 @@ struct SettingsPage: View {
             Button("发送测试通知") { model.sendTestNotification() }.disabled(!model.notificationsAuthorized || model.isPreview)
           }.font(.caption)
           Text("仅主动点击开启时向系统申请许可；是否允许由你在系统提示中决定。拒绝或发送失败不影响原Pi通知与自动化。").font(.caption).foregroundStyle(.secondary)
-          Button("保存本 App 设置") { model.saveSettings() }.buttonStyle(.bordered)
+          Button("保存 Pi Desk 设置") { model.saveSettings() }.buttonStyle(.bordered)
         }
       }
-      if !model.actionNote.isEmpty {
-        Text(model.actionNote).font(.caption).foregroundStyle(.secondary)
       }
+      if section == "Pi 原生设置" {
+        Text("这里修改的是 Pi 用户默认设置，下次会话生效；当前会话和项目覆盖不变。").font(.caption).foregroundStyle(.secondary)
+        PiSettingsCard(projectCwd: model.current?.snapshot.display.cwd ?? model.sessions.first?.snapshot.display.cwd)
+      }
+      if section == "高级连接" {
+        DeskCard {
+          VStack(alignment: .leading, spacing: 12) {
+            Text("可选管理入口").font(.subheadline.weight(.semibold))
+            TextField("Herdr 可执行文件绝对路径（可选）", text: $model.settings.herdrExecutable).textFieldStyle(.roundedBorder)
+            TextField("精确 HTTPS 管理页（可选）", text: $model.settings.managementURL).textFieldStyle(.roundedBorder)
+            Button("打开已配置管理页") { model.openManagement() }.disabled(LinkPolicy.exactHTTPS(model.settings.managementURL) == nil)
+            Text("不使用 Herdr 也可以查看 Pi 状态；精确路由不可用时不会跳到其他会话。").font(.caption).foregroundStyle(.secondary)
+            Button("保存 Pi Desk 设置") { model.saveSettings() }.buttonStyle(.bordered)
+          }
+        }
       DisclosureGroup("诊断信息与版本来源") {
         VStack(alignment: .leading, spacing: 8) {
           Text(BuildIdentity.label).font(.caption.monospaced()).textSelection(.enabled)
@@ -650,6 +673,13 @@ struct SettingsPage: View {
           Text("本机 ad-hoc 构建，未公证、未对外发行；不强制重载已有业务会话。").font(.caption).foregroundStyle(.secondary)
         }
       }.font(.caption)
+      }
+      if !model.actionNote.isEmpty { Text(model.actionNote).font(.caption).foregroundStyle(.secondary) }
+    }.onAppear {
+      guard model.isPreview, let index = CommandLine.arguments.firstIndex(of: "--visual-settings-section"),
+        index + 1 < CommandLine.arguments.count else { return }
+      let requested = CommandLine.arguments[index + 1]
+      if ["Pi Desk", "Pi 原生设置", "高级连接"].contains(requested) { section = requested }
     }
   }
 }

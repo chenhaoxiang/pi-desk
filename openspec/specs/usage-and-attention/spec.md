@@ -101,6 +101,18 @@ Pi Desk SHALL 默认展示跨所有已记录Pi会话的时间总用量，支持�
 - **WHEN** 来源不支持记录、字段缺失、文件/数据库损坏或队列/磁盘满
 - **THEN** 保留已知量、旧库及明确错误/partial，不清空伪成功，不增加执行确认、不改变Pi工作
 
+#### Scenario: User compares adjacent periods
+- **WHEN** the user explicitly expands period comparison
+- **THEN** the current and preceding equal-calendar-length ranges are read sequentially through the existing ledger with identical source/model/metric/timezone; only matching completed buckets participate, without replacing the main total or scanning session logs
+
+#### Scenario: Comparison coverage is incomplete
+- **WHEN** either period has uncollected buckets, missing metric fields, pending/index errors, conflicting data or incompatible DST hour counts
+- **THEN** no percentage increase or decrease is fabricated; a known zero baseline remains zero without an infinite percentage, and values remain recorded-data comparisons rather than billing claims
+
+#### Scenario: Filters change during a comparison
+- **WHEN** model, source or dates change while either range is being read
+- **THEN** old callbacks cannot publish a comparison for the new selection and the latest valid selection is queried without racing the coalescing ledger callbacks
+
 ### Requirement: Actual attention without extra work
 
 Pi Desk SHALL 根据实际待输入生命周期和有来源的任务状态呈现重要事项，不把idle、无输出或每个工具错误当需人工决策，不为监控持续调用模型。
@@ -112,6 +124,14 @@ Pi Desk SHALL 根据实际待输入生命周期和有来源的任务状态呈现
 #### Scenario: Custom UI ownership is unknown
 - **WHEN** 只观察到generic custom UI而没有准确问题归属
 - **THEN** 不伪造问题内容或假设另一个ask工具已要求用户回答
+
+#### Scenario: New turn-end observation is unread
+- **WHEN** the bridge provides an actual settled event, current execution evidence and no pending continuation for the same runtime
+- **THEN** the app may display an unread turn-change marker separately from required input and failure; viewing it records only a bounded runtime-scoped display marker, not business success or an execution action
+
+#### Scenario: Runtime changed after viewing
+- **WHEN** the same native session loads a new runtime
+- **THEN** a previous runtime's viewed marker does not dismiss a new turn-end observation, and disconnected or missing-current-proof records do not create fresh result reminders
 
 ### Requirement: Notification and input independence
 

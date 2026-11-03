@@ -23,6 +23,10 @@ import Darwin
     try put(root,id:"b",model:"fixture/gpt-6.1-sol",value:30)
     let ledger = UsageLedger(root:root)
     var state = UsageViewState(); state.page = "Token"; state.usageOrigin = UsageOrigin.history.rawValue; state.usageModel = "fixture/gpt-6.1-sol"; state.selectedKeyHash = UsageViewStateKey.hash("session-key")
+    state.pinnedKeyHashes = [UsageViewStateKey.hash("pin")]
+    state.sessionAliases = [UsageViewStateKey.hash("alias"): "登录修复"]
+    state.reviewedResultSequences = [UsageViewStateKey.hash("epoch-result"): 3]
+    state.comparisonEnabled = true
     precondition(ledger.flushViewState(state), "view state flush must complete before shutdown returns")
     let restored = await loadState(ledger)
     precondition(restored == state && restored?.version == UsageViewState.currentVersion, "low-sensitivity view state round trips in the existing SQLite")
@@ -33,6 +37,17 @@ import Darwin
       var expected = legacy; expected.page = "会话"
       precondition(migrated == expected, "legacy navigation migrates only page, preserving filters/token preferences/hash selection")
     }
+    var maximumState = state
+    maximumState.dismissedKeyHashes = (0..<1024).map { UsageViewStateKey.hash("read-\($0)") }
+    maximumState.pinnedKeyHashes = (0..<64).map { UsageViewStateKey.hash("pin-\($0)") }
+    maximumState.sessionAliases = Dictionary(uniqueKeysWithValues: (0..<32).map { (UsageViewStateKey.hash("alias-\($0)"), String(repeating: "A", count: 128)) })
+    maximumState.reviewedResultSequences = Dictionary(uniqueKeysWithValues: (0..<64).map { (UsageViewStateKey.hash("result-\($0)"), 9_007_199_254_740_991) })
+    let maximumBytes = try JSONEncoder().encode(maximumState).count
+    precondition(maximumState.valid && maximumBytes <= UsageViewState.maximumBytes)
+    precondition(ledger.flushViewState(maximumState), "all advertised preference caps fit the bounded row")
+    let maximumRestored = await loadState(ledger)
+    precondition(maximumRestored == maximumState, "alias, pin, reviewed and existing input state survive real SQLite reopen/read")
+    precondition(ledger.flushViewState(state))
     let first = await refresh(ledger,range);precondition(first.recordCount==2 && first.models.count==2)
     _ = await refresh(ledger,range) // One post-unlink metadata change is allowed.
     let before = await diagnostics(ledger)

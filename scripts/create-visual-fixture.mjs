@@ -21,10 +21,11 @@ const common = {
 		queries: ["refresh", "usage.refresh"],
 		owners: {
 			pi: "extension-api-1.4",
-			"pi-desk-bridge": "027572e36fc9143f1c8ade44156ded44d417c5f2",
+			"pi-desk-bridge": "synthetic-experience-preview",
 		},
 	},
 	pending: false,
+	executionObservation: { version: 1, observedAt: Date.now(), source: "lifecycle", idle: false },
 	childCoverage: "owner-reported",
 	tools: [],
 	runs: [],
@@ -88,13 +89,14 @@ add("synthetic-input", "epoch-input", 1, "官网优化", "running", {
 			id: "input-1",
 			source: "pi:input-required",
 			kind: "question",
-			startedAt: Date.now(),
+			startedAt: Date.now() - 90_000,
 		},
 	],
 });
 add("synthetic-run", "epoch-run", 1, "接口联调", "running", {
 	display: { ...common.display, name: "接口联调", branch: "feat/api-contract" },
 	tools: ["edit"],
+	activity: { sequence: 4, kind: "tool-start", at: Date.now() - 8000, turnStartedAt: Date.now() - 120_000 },
 	runs: [
 		{
 			key: "child-1",
@@ -112,6 +114,8 @@ add("synthetic-run", "epoch-run", 1, "接口联调", "running", {
 add("synthetic-done", "epoch-done", 1, "测试检查", "settled", {
 	display: { ...common.display, name: "测试检查", branch: "fix/regression" },
 	execution: "settled",
+	executionObservation: { version: 1, observedAt: Date.now(), source: "lifecycle", idle: true },
+	activity: { sequence: 7, kind: "agent-settled", at: Date.now() - 30_000, turnStartedAt: Date.now() - 180_000, turnEndedAt: Date.now() - 30_000, turnEndSequence: 7 },
 	usage: [
 		{
 			...common.usage?.[0],

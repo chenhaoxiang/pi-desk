@@ -107,6 +107,60 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     precondition(model.visibleSessions.count == 3 && model.connectedCount == 3 && model.activeCount == 1 && model.unknownExecutionCount == 1, "online includes idle/legacy, active is a lower bound and old busy is explicitly pending")
     model.select(snapshot.identity)
     precondition(model.sectionRefreshRequestedAt.isEmpty, "ordinary row selection must not query owner status")
+    let live = model.current!
+    precondition(model.sessionTitle(live) != "Pi", "unnamed sessions need a stable distinguishing label")
+    precondition(model.setAlias("  登录修复  ", for: snapshot.identity))
+    precondition(model.sessionTitle(live) == "登录修复" && !model.setAlias("bad\nname", for: snapshot.identity))
+    model.search = "登录修复"; precondition(model.visibleSessions.count == 1, "local alias must be searchable")
+    model.search = ""; model.togglePin(snapshot.identity)
+    precondition(model.sessions.first?.snapshot.identity == snapshot.identity && model.isPinned(snapshot.identity))
+    model.togglePin(snapshot.identity); precondition(model.sessions.map { $0.snapshot.identity.sessionKey } == orderBeforeStateChange)
+    precondition(model.setAlias("", for: snapshot.identity), "empty alias restores source name")
+    let question = try JSONDecoder().decode(InputNotice.self, from: Data(#"{"id":"late-question","source":"fixture","kind":"question","startedAt":1000}"#.utf8))
+    var largeList = (0..<64).map { index -> SessionView in
+      var item = live
+      item.snapshot.identity.nativeSessionId = "spotlight-\(index)"
+      item.snapshot.inputs = index == 63 ? [question] : []
+      return item
+    }
+    let spotlight = SessionExperience.spotlight(largeList, pinned: [largeList[20].snapshot.identity.sessionKey])
+    precondition(spotlight.count == 4 && spotlight[0].snapshot.identity == largeList[63].snapshot.identity, "late input is not hidden behind first four sessions")
+    precondition(spotlight[1].snapshot.identity == largeList[20].snapshot.identity, "pin wins over ordinary running but not input")
+    largeList[63].connection = .disconnected
+    precondition(!SessionExperience.spotlight(largeList, pinned: []).contains { $0.snapshot.identity == largeList[63].snapshot.identity }, "old disconnected input is not a live spotlight")
+    let oldState = UsageViewState()
+    var oldJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(oldState)) as! [String: Any]
+    oldJSON.removeValue(forKey: "pinnedKeyHashes"); oldJSON.removeValue(forKey: "sessionAliases")
+    let migrated = try JSONDecoder().decode(UsageViewState.self, from: JSONSerialization.data(withJSONObject: oldJSON))
+    precondition(migrated.valid && migrated.pinnedKeyHashes == nil && migrated.sessionAliases == nil, "version-1 preferences remain readable")
+    var resultSnapshot = snapshot
+    resultSnapshot.seq += 1; resultSnapshot.execution = .settled; resultSnapshot.executionObservation?.idle = true
+    resultSnapshot.activity = SessionActivity(sequence: 3, kind: "agent-settled", at: snapshot.observedAt, turnStartedAt: snapshot.observedAt - 1000, turnEndedAt: snapshot.observedAt, turnEndSequence: 3)
+    var resultStore = stateStore
+    precondition(resultStore.apply(WireRecord(kind: "snapshot", identity: resultSnapshot.identity, snapshot: resultSnapshot), connection: liveConnection, now: snapshot.observedAt))
+    model.store = resultStore
+    let result = model.store.sessions[snapshot.identity.sessionKey]!
+    precondition(model.hasUnreadResult(result) && model.unreadResultCount == 1)
+    var pendingResult = result; pendingResult.snapshot.pending = true
+    precondition(!model.hasUnreadResult(pendingResult), "pending continuation cannot become a completed-result reminder")
+    var missingProof = result; missingProof.snapshot.executionObservation = nil
+    precondition(!model.hasUnreadResult(missingProof), "missing current execution proof cannot create a fresh result reminder")
+    var offlineResult = result; offlineResult.connection = .disconnected
+    precondition(!model.hasUnreadResult(offlineResult), "disconnected records cannot create a fresh result reminder")
+    model.markResultViewed(snapshot.identity)
+    precondition(!model.hasUnreadResult(result) && model.store.requests.count == requestsBefore, "viewing is display-only")
+    var newEpoch = resultSnapshot; newEpoch.identity.runtimeEpoch = "new-experience-epoch"
+    precondition(model.store.apply(WireRecord(kind: "hello", identity: newEpoch.identity, snapshot: newEpoch), connection: UUID(), now: snapshot.observedAt))
+    precondition(model.hasUnreadResult(model.store.sessions[newEpoch.identity.sessionKey]!), "read marker cannot cross runtimes")
+    model.note("new runtime note", for: newEpoch.identity)
+    model.note("must not land", for: snapshot.identity)
+    precondition(model.sessionNotes[newEpoch.identity] == "new runtime note" && model.sessionNotes[snapshot.identity] == nil)
+    var legacyTiming = result; legacyTiming.snapshot.activity = nil
+    precondition(SessionExperience.timing(legacyTiming) == "活动时间未提供")
+    precondition(SessionExperience.elapsed(since: -1) == nil)
+    var invalidActivity = resultSnapshot.activity!; invalidActivity.turnEndSequence = 99
+    precondition(!invalidActivity.valid)
+    model.store = stateStore
     model.sessionFilter = "运行中"
     precondition(model.visibleSessions.count == model.activeCount && model.visibleSessions.first?.snapshot.identity == snapshot.identity)
     snapshot.seq += 1
@@ -188,6 +242,23 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     model.usageCustomEnd = calendar.date(byAdding: .day, value: 400, to: today)!
     model.refreshUsage()
     precondition(!model.customRangeIsValid && model.customRangeIssue?.contains("400") == true && ledger.calls == validCalls && model.aggregate == validAggregate, "UI and ledger share the inclusive 400-day limit")
+    model.usageCustomStart = today; model.usageCustomEnd = today
+    model.usageComparisonEnabled = true; ledger.hold = true
+    model.refreshUsage()
+    let comparisonCalls = ledger.calls
+    let primaryCompletion = ledger.completion!, primaryRange = ledger.range!
+    primaryCompletion(.empty(primaryRange))
+    precondition(model.usageLoading && ledger.calls == comparisonCalls + 1 && ledger.range == primaryRange.previousPeriod, "comparison is sequential, not a race in the coalescing ledger")
+    let priorCompletion = ledger.completion!, priorRange = ledger.range!
+    model.usageModel = "fixture/changed-during-comparison"; model.refreshUsage()
+    priorCompletion(.empty(priorRange))
+    precondition(model.usageLoading && ledger.calls == comparisonCalls + 2 && model.comparisonAggregate == nil, "stale comparison schedules latest filter without publishing old values")
+    let latestMain = ledger.completion!, latestRange = ledger.range!
+    latestMain(.empty(latestRange))
+    let latestPrior = ledger.completion!, latestPriorRange = ledger.range!
+    latestPrior(.empty(latestPriorRange))
+    precondition(!model.usageLoading && model.comparisonAggregate?.selectedModel == model.usageModel && model.aggregate.selectedModel == model.usageModel)
+    model.usageComparisonEnabled = false; ledger.hold = false
     print("Narrow UX checks passed: visible/background usage interest, explicit authorization only, authorized/denied/error/send-failure, duplicate request, invalid custom range and stale in-flight preservation.")
   }
 }

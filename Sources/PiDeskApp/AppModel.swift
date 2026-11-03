@@ -48,6 +48,11 @@ struct DeskSettings: Codable {
   @Published var searchFocusRequest = 0
   @Published var sessionFilter = "在线"
   @Published var hiddenSessions: Set<String> = []
+  @Published var pinnedKeyHashes: Set<String> = []
+  @Published var sessionAliases: [String: String] = [:]
+  @Published var reviewedResultSequences: [String: Int] = [:]
+  @Published private(set) var sessionNotes: [Identity: String] = [:]
+  static let sessionFilters = ["在线", "运行中", "需关注", "需输入", "已置顶", "全部", "断连"]
   @Published var usagePreset: UsagePreset = .today
   @Published var usageMetric: UsageMetric = .interaction
   @Published var usageModel = ""
@@ -56,6 +61,8 @@ struct DeskSettings: Codable {
   @Published var usageCustomEnd = Date()
   @Published var aggregate = UsageAggregate.empty(.make(preset: .today))
   @Published var usageLoading = false
+  @Published var usageComparisonEnabled = false
+  @Published var comparisonAggregate: UsageAggregate?
   @Published var notificationStatus = "尚未检查系统通知状态"
   @Published var requestingNotifications = false
   @Published var notificationsAuthorized = false
@@ -139,15 +146,69 @@ struct DeskSettings: Codable {
     }
     drafts[identity] = value
   }
+  func sessionTitle(_ session: SessionView) -> String {
+    sessionAliases[UsageViewStateKey.hash(session.snapshot.identity.sessionKey)] ?? SessionExperience.title(session.snapshot)
+  }
+  func isPinned(_ identity: Identity) -> Bool { pinnedKeyHashes.contains(UsageViewStateKey.hash(identity.sessionKey)) }
+  func togglePin(_ identity: Identity) {
+    let key = UsageViewStateKey.hash(identity.sessionKey)
+    if pinnedKeyHashes.contains(key) { pinnedKeyHashes.remove(key) }
+    else if pinnedKeyHashes.count < 64 { pinnedKeyHashes.insert(key) }
+    persistViewState()
+  }
+  func alias(_ identity: Identity) -> String { sessionAliases[UsageViewStateKey.hash(identity.sessionKey)] ?? "" }
+  @discardableResult func setAlias(_ text: String, for identity: Identity) -> Bool {
+    let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let key = UsageViewStateKey.hash(identity.sessionKey)
+    guard value.utf8.count <= 128, !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }),
+      value.isEmpty || sessionAliases[key] != nil || sessionAliases.count < 32 else { return false }
+    sessionAliases[key] = value.isEmpty ? nil : value
+    persistViewState()
+    return true
+  }
+  var spotlightSessions: [SessionView] {
+    SessionExperience.spotlight(sessions,
+      pinned: Set(sessions.filter { isPinned($0.snapshot.identity) }.map { $0.snapshot.identity.sessionKey }),
+      unread: Set(sessions.filter(hasUnreadResult).map { $0.snapshot.identity.sessionKey }))
+  }
+  private func resultKey(_ identity: Identity) -> String { UsageViewStateKey.hash(identity.sessionKey + ":" + identity.runtimeEpoch) }
+  func hasUnreadResult(_ session: SessionView) -> Bool {
+    guard session.connection == .connected, Presentation.hasExecutionEvidence(session), session.snapshot.pending != true, !Presentation.needsInput(session),
+      [.settled, .failed, .aborted].contains(Presentation.executionState(session)),
+      let activity = session.snapshot.activity, activity.valid, let sequence = activity.turnEndSequence else { return false }
+    return (reviewedResultSequences[resultKey(session.snapshot.identity)] ?? 0) < sequence
+  }
+  func markResultViewed(_ identity: Identity) {
+    guard let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity,
+      hasUnreadResult(session), let sequence = session.snapshot.activity?.turnEndSequence else { return }
+    let key = resultKey(identity)
+    if reviewedResultSequences.count >= 64, reviewedResultSequences[key] == nil, let old = reviewedResultSequences.keys.sorted().first { reviewedResultSequences.removeValue(forKey: old) }
+    reviewedResultSequences[key] = sequence
+    persistViewState()
+  }
+  func note(_ message: String, for identity: Identity) {
+    guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
+    sessionNotes = sessionNotes.filter { store.sessions[$0.key.sessionKey]?.snapshot.identity == $0.key }
+    sessionNotes[identity] = message
+  }
+  func needsAttention(_ session: SessionView) -> Bool {
+    session.connection == .connected && (Presentation.needsInput(session) || Presentation.executionState(session) == .failed || hasUnreadResult(session))
+  }
+  var attentionSessions: [SessionView] {
+    sessions.enumerated().filter { needsAttention($0.element) }.sorted { a, b in
+      let x = Presentation.priority(a.element), y = Presentation.priority(b.element)
+      return x == y ? a.offset < b.offset : x < y
+    }.map(\.element)
+  }
+  var attentionCount: Int { attentionSessions.count }
+  var unreadResultCount: Int { sessions.filter(hasUnreadResult).count }
   func navigate(to page: String) {
     self.page = ["会话", "Token", "重要事项", "设置"].contains(page) ? page : "会话"
     showManager(); persistViewState()
   }
   func focusSessionSearch() { navigate(to: "会话"); searchFocusRequest += 1 }
   func nextAttentionSession() {
-    let candidates = sessions.filter { session in
-      session.connection == .connected && (session.snapshot.execution == .failed || session.snapshot.inputs.contains { !isRead($0, session: session.snapshot.identity) })
-    }
+    let candidates = attentionSessions
     guard !candidates.isEmpty else { actionNote = "当前没有未读需关注会话"; return }
     let index = selected.flatMap { key in candidates.firstIndex { $0.snapshot.identity.sessionKey == key } }.map { ($0 + 1) % candidates.count } ?? 0
     page = "会话"; select(candidates[index].snapshot.identity, refreshOwner: false); showManager()
@@ -160,6 +221,7 @@ struct DeskSettings: Codable {
       hiddenSessions.remove(identity.sessionKey)
     }
     selected = identity.sessionKey
+    markResultViewed(identity)
     selectionPinned = true
     pendingSelectionHash = UsageViewStateKey.hash(identity.sessionKey)
     persistViewState()
@@ -193,7 +255,11 @@ struct DeskSettings: Codable {
     if let value = UsageMetric(rawValue: state.usageMetric) { usageMetric = value }
     if let value = UsageOrigin(rawValue: state.usageOrigin) { usageOrigin = value }
     page = state.page
-    if ["在线", "全部", "运行中", "需输入", "断连"].contains(state.sessionFilter) { sessionFilter = state.sessionFilter }
+    if Self.sessionFilters.contains(state.sessionFilter) { sessionFilter = state.sessionFilter }
+    pinnedKeyHashes = Set(state.pinnedKeyHashes ?? [])
+    sessionAliases = state.sessionAliases ?? [:]
+    reviewedResultSequences = state.reviewedResultSequences ?? [:]
+    usageComparisonEnabled = state.comparisonEnabled ?? false
     usageModel = state.usageModel
     if let start = state.customStartMS { usageCustomStart = Date(timeIntervalSince1970: Double(start) / 1000) }
     if let end = state.customEndMS { usageCustomEnd = Date(timeIntervalSince1970: Double(end) / 1000) }
@@ -207,6 +273,10 @@ struct DeskSettings: Codable {
   private func currentViewState() -> UsageViewState {
     var state = UsageViewState()
     state.page = page; state.sessionFilter = sessionFilter
+    state.pinnedKeyHashes = pinnedKeyHashes.sorted()
+    state.sessionAliases = sessionAliases
+    state.reviewedResultSequences = reviewedResultSequences
+    state.comparisonEnabled = usageComparisonEnabled
     state.usagePreset = usagePreset.rawValue; state.usageMetric = usageMetric.rawValue
     state.usageOrigin = usageOrigin.rawValue; state.usageModel = usageModel
     state.customStartMS = Int64(usageCustomStart.timeIntervalSince1970 * 1000)
@@ -293,6 +363,8 @@ struct DeskSettings: Codable {
   }
   var sessions: [SessionView] {
     store.sessions.values.sorted {
+      let pinnedA = isPinned($0.snapshot.identity), pinnedB = isPinned($1.snapshot.identity)
+      if pinnedA != pinnedB { return pinnedA }
       let a = sessionOrder[$0.snapshot.identity.sessionKey] ?? Int.max
       let b = sessionOrder[$1.snapshot.identity.sessionKey] ?? Int.max
       if a != b { return a < b }
@@ -310,8 +382,8 @@ struct DeskSettings: Codable {
   var visibleSessions: [SessionView] {
     sessions.filter { s in
       let snap = s.snapshot
-      let matchesSearch = search.isEmpty || [snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
-      let matchesState = sessionFilter == "在线" ? s.connection == .connected : sessionFilter == "全部" || (sessionFilter == "运行中" && Presentation.isExecutionActive(s)) || (sessionFilter == "需输入" && Presentation.needsInput(s)) || (sessionFilter == "断连" && s.connection != .connected)
+      let matchesSearch = search.isEmpty || [sessionTitle(s), snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
+      let matchesState = sessionFilter == "在线" ? s.connection == .connected : sessionFilter == "全部" || (sessionFilter == "运行中" && Presentation.isExecutionActive(s)) || (sessionFilter == "需输入" && Presentation.needsInput(s)) || (sessionFilter == "需关注" && needsAttention(s)) || (sessionFilter == "已置顶" && isPinned(snap.identity)) || (sessionFilter == "断连" && s.connection != .connected)
       return matchesSearch && matchesState && (!hiddenSessions.contains(snap.identity.sessionKey) || s.connection == .connected)
     }
   }
@@ -339,22 +411,40 @@ struct DeskSettings: Codable {
       return
     }
     let range = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)
-    if isPreview { aggregate = UsageAggregate.empty(range, preview: true).filtered(origin:usageOrigin,model: usageModel.isEmpty ? nil : usageModel); return }
+    if isPreview {
+      aggregate = UsageAggregate.empty(range, preview: true).filtered(origin: usageOrigin, model: usageModel.isEmpty ? nil : usageModel)
+      comparisonAggregate = usageComparisonEnabled ? UsageAggregate.empty(range.previousPeriod, preview: true).filtered(origin: usageOrigin, model: usageModel.isEmpty ? nil : usageModel) : nil
+      return
+    }
     guard !usageLoading, let ledger else { return }
     usageLoading = true; lastUsageRefresh = Date()
     let filter = usageModel.isEmpty ? nil : usageModel
-    ledger.refresh(range: range, model: filter, origin:usageOrigin) { [weak self] result in
+    ledger.refresh(range: range, model: filter, origin: usageOrigin) { [weak self] result in
       guard let self else { return }
-      self.usageLoading = false
-      guard self.customRangeIsValid else { return }
-      let expected = UsageDateRange.make(preset: self.usagePreset, customStart: self.usageCustomStart, customEnd: self.usageCustomEnd)
-      guard expected == result.range, self.usageOrigin == result.selectedOrigin, (self.usageModel.isEmpty ? nil : self.usageModel) == result.selectedModel else { self.refreshUsage(); return }
+      guard self.customRangeIsValid else { self.usageLoading = false; return }
+      guard self.matchesUsageSelection(result) else { self.usageLoading = false; self.refreshUsage(); return }
       if result.error != nil, self.aggregate.totals.seen, self.aggregate.range == result.range,
         self.aggregate.selectedOrigin == result.selectedOrigin, self.aggregate.selectedModel == result.selectedModel {
         self.aggregate.error = result.error
         self.aggregate.coverageReasons = result.coverageReasons
       } else { self.aggregate = result }
+      guard self.usageComparisonEnabled, result.error == nil else {
+        self.comparisonAggregate = nil; self.usageLoading = false; return
+      }
+      // One ledger client coalesces requests. Chain, rather than race, the two ranges.
+      ledger.refresh(range: result.range.previousPeriod, model: filter, origin: result.selectedOrigin) { [weak self] prior in
+        guard let self else { return }
+        self.usageLoading = false
+        guard self.customRangeIsValid else { return }
+        guard self.matchesUsageSelection(result) else { self.refreshUsage(); return }
+        self.comparisonAggregate = self.usageComparisonEnabled ? prior : nil
+      }
     }
+  }
+  private func matchesUsageSelection(_ result: UsageAggregate) -> Bool {
+    let expected = UsageDateRange.make(preset: usagePreset, customStart: usageCustomStart, customEnd: usageCustomEnd)
+    return expected == result.range && usageOrigin == result.selectedOrigin
+      && (usageModel.isEmpty ? nil : usageModel) == result.selectedModel
   }
   func checkNotificationStatus() {
     guard !isPreview, let notificationClient else {
@@ -450,19 +540,21 @@ struct DeskSettings: Codable {
           }
         }
         if args.contains("--large-list-preview"), let first = preview.records.first, let base = first.snapshot {
-          for index in 1..<64 {
+          for index in 1..<(65 - preview.records.count) {
             var snap = base
             snap.identity.nativeSessionId = "synthetic-list-\(index)"
             snap.identity.runtimeEpoch = "synthetic-epoch-\(index)"
             snap.display.name = "合成项目 \(index) · 长会话名称的搜索与键盘导航检查"
+            if index < 64 - preview.records.count { snap.inputs = [] }
             _ = store.apply(WireRecord(kind: "hello", identity: snap.identity, snapshot: snap), connection: UUID(), now: Date().timeIntervalSince1970 * 1000)
             rememberSessionOrder(snap.identity)
           }
         }
         store.tick(now: Date().timeIntervalSince1970 * 1000)
         selected = sessions.first?.snapshot.identity.sessionKey
-        if let previewPage = argument("--visual-page"), ["会话", "Token", "设置"].contains(previewPage) { page = previewPage }
+        if let previewPage = argument("--visual-page"), ["会话", "Token", "重要事项", "设置"].contains(previewPage) { page = previewPage }
         if page == "Token" {
+          usageComparisonEnabled = args.contains("--compare-preview")
           refreshUsage()
           if args.contains("--invalid-custom-preview") {
             usagePreset = .custom
@@ -516,9 +608,13 @@ struct DeskSettings: Codable {
         return
       }
       if !wasKnown { rememberSessionOrder(record.identity) }
+      if record.kind == "action-result", let id = record.requestId, let request = store.requests[id] {
+        note(Presentation.action(request.action) + "：" + Presentation.receipt(request.status), for: record.identity)
+      }
       peerRoutes = peerRoutes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
       routeNotes = routeNotes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
       if let session = store.sessions[record.identity.sessionKey] { resolveOriginalRoute(session) }
+      if selected == record.identity.sessionKey && managerIsVisible && page == "会话" { markResultViewed(record.identity) }
       restoreHidden(record.identity, connection: store.sessions[record.identity.sessionKey]?.connection ?? .connected)
       selectPreferredSession()
       notify()
@@ -569,17 +665,17 @@ struct DeskSettings: Codable {
         identity: s.snapshot.identity, action: action, target: target, parameters: parameters,
         now: Date().timeIntervalSince1970 * 1000)
     else {
-      actionNote = "目标不可用，或已有相同操作等待回执；草稿已保留"
+      if let targetIdentity = identity ?? current?.snapshot.identity { note("目标不可用，或相同操作仍在等待回执；草稿已保留", for: targetIdentity) }
       return false
     }
     do {
       _ = try Wire.encode(record)
       server.send(record, to: s.connectionId)
-      actionNote = "已发出请求；受理与实际结果分别显示"
+      note("已发出请求，等待原会话回执", for: s.snapshot.identity)
       return true
     } catch {
       store.failSend(record.requestId!)
-      actionNote = "请求未确认，未自动重发；草稿已保留"
+      note("请求未确认，未自动重发；草稿已保留", for: s.snapshot.identity)
       return false
     }
   }
@@ -602,7 +698,7 @@ struct DeskSettings: Codable {
     let currentIdentity = s.snapshot.identity
     if route.kind == "terminal" {
       guard (route.terminalApp == nil || route.terminalApp == "com.apple.Terminal"), let ttyPath = route.ttyPath, TerminalRouteActivator.acceptsTTY(ttyPath, terminalRunning: TerminalRouteActivator.isTerminalRunning()) else {
-        actionNote = "当前会话没有可验证的Terminal.app TTY路由；不会打开新终端或恢复第二个Pi"
+        note("原会话暂不可定位，详见定位诊断", for: currentIdentity)
         return
       }
       Task {
@@ -617,24 +713,25 @@ struct DeskSettings: Codable {
           let permission = await TerminalRouteActivator.permissionStatus()
           guard permission == "终端Automation已授权" else {
             routeNotes[currentIdentity] = permission
-            actionNote = "未发起终端定位：" + permission
+            note("终端定位权限不可用，详见定位诊断", for: currentIdentity)
             return
           }
           guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
           let result = try await TerminalRouteActivator.focus(ttyPath: ttyPath)
           guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
           routeNotes[currentIdentity] = "Pi Desk同进程AppleEvent已唯一匹配并回读：" + result
-          actionNote = "已定位准确Terminal tab（\(result)）；未启动新的Pi writer"
+          note("已打开准确的原会话", for: currentIdentity)
+          markResultViewed(currentIdentity)
         } catch {
           let reason = error is NavigationError ? "当前连接/代际/peer已变化；未宣称旧路由定位成功" : TerminalRouteActivator.diagnostic(error)
           routeNotes[currentIdentity] = reason
-          actionNote = "无法定位准确Terminal tab：" + reason + "；不会自动执行pi --session"
+          note("原会话定位未成功，详见定位诊断", for: currentIdentity)
         }
       }
       return
     }
     guard route.kind == "herdr", let file = route.sessionFile, !settings.herdrExecutable.isEmpty else {
-      actionNote = "没有可用的精确Herdr/Terminal路由；不会打开同名对象或恢复第二个Pi"
+      note("没有可用的精确路由，详见定位诊断", for: currentIdentity)
       return
     }
     let executable = settings.herdrExecutable
@@ -647,8 +744,9 @@ struct DeskSettings: Codable {
         let verify = try await FiniteCommand.run(executable, ["api", "snapshot"])
         let verified = try Navigation.exactPane(snapshot: verify, sessionFile: file)
         guard verified == pane else { throw NavigationError.unavailable }
-        actionNote = "原 owner 已处理准确会话的聚焦请求"
-      } catch { actionNote = "原会话跳转失败或身份已改变；未选择其他窗口" }
+        note("已打开准确的原会话", for: currentIdentity)
+        markResultViewed(currentIdentity)
+      } catch { note("原会话跳转失败或身份已改变", for: currentIdentity) }
     }
   }
   func openManagement() {

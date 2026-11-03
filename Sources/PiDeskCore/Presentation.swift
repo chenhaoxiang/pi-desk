@@ -160,22 +160,22 @@ public enum Presentation {
     if s.connection != .connected { return "保留最后一次状态，不代表工作停止" }
     if needsInput(s) { return "原会话正在等待输入，请回到原入口处理" }
     if executionState(s) == .unknown {
-      return hasExecutionEvidence(s) ? "暂未获得准确执行状态" : "旧桥接·执行状态待核（原始状态：\(s.snapshot.execution.rawValue)）；需Pi重开或自然切换新版桥接"
+      return "暂未获得准确执行状态"
     }
     if !hasExecutionEvidence(s) {
-      return "旧桥接·执行状态待核（原始状态：\(s.snapshot.execution.rawValue)）；需Pi重开或自然切换新版桥接"
+      return "执行信息未更新，详见诊断"
     }
     if hasExecutionEvidence(s), s.snapshot.executionObservation?.idle == false, !s.snapshot.tools.isEmpty {
       return s.snapshot.tools.prefix(3).map(tool).joined(separator: " · ")
     }
     if s.snapshot.pending == true { return "原会话仍有待处理消息，尚不代表AI正在执行" }
     switch executionState(s) {
-    case .settled: return hasExecutionEvidence(s) ? "本轮对话已结束，Pi仍已接入；目标验收状态未核" : "上次观测本轮已结束；Pi仍已接入，当前执行状态待核"
-    case .waitingChildren: return "原系统正在等待子任务，自动化仍独立推进"
+    case .settled: return "本轮已结束，可查看原会话结果"
+    case .waitingChildren: return "等待子任务回传"
     case .failed: return "原系统报告本轮异常，请查看原会话"
     case .unknown: return "暂未获得准确执行状态"
     case .aborted: return "本轮已中止，不代表所有后续工作已取消"
-    default: return "按原规则推进，无需守着界面"
+    default: return "正在处理当前回合"
     }
   }
   public static func runState(_ raw: String) -> String {

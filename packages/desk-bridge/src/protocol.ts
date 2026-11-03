@@ -95,6 +95,14 @@ export type Evidence = {
 	observedAt: number;
 	nature: string;
 };
+export type SessionActivity = {
+	sequence: number;
+	kind: "agent-start" | "tool-start" | "tool-end" | "agent-settled" | "input" | "child-update";
+	at: number;
+	turnStartedAt?: number;
+	turnEndedAt?: number;
+	turnEndSequence?: number;
+};
 export type Snapshot = {
 	omitted?: Record<string, number>;
 	identity: Identity;
@@ -128,6 +136,7 @@ export type Snapshot = {
 	execution: string;
 	pending: boolean | null;
 	executionObservation?: ExecutionObservation;
+	activity?: SessionActivity;
 	childCoverage: string;
 	tools: string[];
 	runs: Run[];
@@ -234,6 +243,16 @@ export function validate(v: unknown): asserts v is RecordV1 {
 				!Number.isSafeInteger(observation.observedAt) || Number(observation.observedAt) < 0 ||
 				!["ctx.isIdle", "lifecycle"].includes(String(observation.source)) ||
 				typeof observation.idle !== "boolean")
+				throw new Error("invalid-snapshot");
+		}
+		if (s.activity !== undefined) {
+			const a = s.activity;
+			const time = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= MAX_CREATED_AT_MS;
+			if (!object(a) || !Number.isSafeInteger(a.sequence) || Number(a.sequence) < 1 ||
+				!["agent-start", "tool-start", "tool-end", "agent-settled", "input", "child-update"].includes(String(a.kind)) || !time(a.at) ||
+				[a.turnStartedAt, a.turnEndedAt].some(v => v !== undefined && !time(v)) ||
+				((a.turnEndedAt === undefined) !== (a.turnEndSequence === undefined)) ||
+				(a.turnEndSequence !== undefined && (!Number.isSafeInteger(a.turnEndSequence) || Number(a.turnEndSequence) < 1 || Number(a.turnEndSequence) > Number(a.sequence))))
 				throw new Error("invalid-snapshot");
 		}
 		if (display.route !== undefined) {

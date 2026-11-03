@@ -38,6 +38,7 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     screen: CGRect(x: 0, y: 0, width: 1440, height: 900),
     visible: CGRect(x: 0, y: 0, width: 1440, height: 868), safeTop: 0, cameraGap: 0)
   @Published var composing: Identity?
+  @Published private(set) var spotlightIdentities: [Identity] = []
   @Published var mode = "followUp"
   private var panel: IslandPanel?
   private weak var manager: NSWindow?
@@ -119,7 +120,14 @@ private final class IslandHostingView: NSHostingView<AnyView> {
       }.store(in: &subscriptions)
     model.$store.receive(on: RunLoop.main).sink { [weak self] store in
       guard let self = self else { return }
-      let count = min(store.sessions.count, 4)
+      let count = min(store.sessions.values.filter { $0.connection == .connected }.count, 4)
+      if self.state.expanded && self.spotlightIdentities.isEmpty {
+        DispatchQueue.main.async { [weak self] in
+          guard let self, self.state.expanded, self.spotlightIdentities.isEmpty else { return }
+          self.spotlightIdentities = model.spotlightSessions.map { $0.snapshot.identity }
+          self.updateGeometry(animated: false)
+        }
+      }
       if count != self.rows {
         self.rows = count
         self.updateGeometry(animated: false)
@@ -161,7 +169,9 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     else { return }
     let values: [String: Any] = [
       "synthetic": true, "panelWindowId": panel.windowNumber,
-      "managerWindowId": manager?.windowNumber ?? 0, "expanded": state.expanded,
+      "managerWindowId": manager?.windowNumber ?? 0,
+      "managerFrame": ["width": manager?.frame.width ?? 0, "height": manager?.frame.height ?? 0],
+      "expanded": state.expanded,
       "pinned": state.pinned, "editing": state.editing, "isVisible": panel.isVisible,
       "level": panel.level.rawValue,
       "frame": [
@@ -213,6 +223,7 @@ private final class IslandHostingView: NSHostingView<AnyView> {
   func expand() {
     leave?.cancel()
     guard !state.expanded else { return }
+    spotlightIdentities = model?.spotlightSessions.map { $0.snapshot.identity } ?? []
     state.expand()
     updateGeometry(animated: true)
   }
@@ -236,7 +247,7 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     reportPreview()
   }
   func compose(_ identity: Identity, mode: String) {
-    state.expand()
+    expand()
     composing = identity
     self.mode = mode
     state.editing = true
@@ -252,6 +263,14 @@ private final class IslandHostingView: NSHostingView<AnyView> {
   func editing(_ value: Bool) {
     state.editing = value
     reportPreview()
+  }
+  var spotlightSessions: [SessionView] {
+    guard let model else { return [] }
+    // Freeze row membership for this expansion; events cannot move a click target.
+    return spotlightIdentities.compactMap { identity in
+      guard let session = model.store.sessions[identity.sessionKey], session.snapshot.identity == identity else { return nil }
+      return session
+    }
   }
   func openManager(_ identity: Identity? = nil) {
     if let identity = identity {

@@ -125,3 +125,33 @@ test("local completion and process-terminal evidence invalidate cached running c
     assert.deepEqual(f.ownerCalls, []);
   } finally { f.session.close(); }
 });
+
+test("activity clocks describe events, never heartbeat, agent_end or inferred startup completion", () => {
+  const f = fixture();
+  try {
+    assert.equal(f.snapshot().activity, undefined);
+    f.state({ idle: true });
+    assert.equal(f.snapshot().activity, undefined, "native idle sampling cannot fabricate an end event");
+    f.state({ idle: false }); f.session.lifecycle("agent_start", f.ctx);
+    const started = f.snapshot().activity!;
+    assert.equal(started.kind, "agent-start");
+    assert.equal(started.turnStartedAt, started.at);
+    f.state({}); assert.deepEqual(f.snapshot().activity, started, "heartbeat is not progress");
+    f.session.tool(true, "call", "read", f.ctx);
+    const tool = f.snapshot().activity!;
+    assert.equal(tool.kind, "tool-start");
+    f.state({}); f.session.lifecycle("agent_end", f.ctx);
+    assert.deepEqual(f.snapshot().activity, tool, "agent_end is not settlement");
+    f.session.tool(false, "call", "read", f.ctx);
+    f.state({ idle: true }); f.session.lifecycle("agent_settled", f.ctx);
+    const ended = f.snapshot().activity!;
+    assert.equal(ended.kind, "agent-settled");
+    assert.equal(ended.turnEndSequence, ended.sequence);
+    assert.ok(ended.turnEndedAt! > started.at);
+    f.state({}); assert.deepEqual(f.snapshot().activity, ended);
+    f.state({ idle: false }); f.session.lifecycle("agent_start", f.ctx);
+    assert.equal(f.snapshot().activity?.turnEndSequence, undefined, "new turn cannot retain old unread result identity");
+    assert.equal(f.snapshot().activity?.turnEndedAt, undefined);
+    assert.deepEqual(f.ownerCalls, []);
+  } finally { f.session.close(); }
+});

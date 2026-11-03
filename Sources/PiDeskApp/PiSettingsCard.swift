@@ -11,7 +11,7 @@ struct PiSettingsCard: View {
           Spacer()
           Button("刷新原文件") { model.reloadPiSettings(projectCwd: projectCwd) }.disabled(model.piSettingsLoading || model.isPreview)
         }
-        Text("只读/编辑 canonical user settings.json；不创建 Pi Desk 配置副本。保存只影响下次会话，不自动重载当前Pi。")
+        Text("仅编辑原 Pi 用户设置；项目覆盖只读，不自动重载当前会话。")
           .font(.caption).foregroundStyle(.secondary)
         if model.isPreview {
           Text("合成预览：未读取真实设置，也不会写入真实文件。").font(.caption).foregroundStyle(.orange)
@@ -24,7 +24,7 @@ struct PiSettingsCard: View {
                 Picker(field.title, selection: Binding(get: { model.piSettingsSelections[field.key] ?? PiSettingsStore.unset }, set: { model.piSettingsSelections[field.key] = $0 })) {
                   Text("原生默认值").tag(PiSettingsStore.unset)
                   if let raw = snapshot.values[field.key], !field.choices.contains(raw) { Text("当前其他值（保留）").tag("__keep__") }
-                  ForEach(field.choices, id: \.self) { value in Text(value).tag(value) }
+                  ForEach(field.choices, id: \.self) { value in Text(field.choiceLabel(value)).tag(value) }
                 }.labelsHidden().frame(maxWidth: 250)
                 Spacer(minLength: 0)
               }

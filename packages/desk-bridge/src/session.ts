@@ -289,6 +289,7 @@ export class DeskSession {
 			return run;
 		});
 		this.snapshot.childCoverage = "partial";
+		if (this.snapshot.runs.some(run => run.runId === runId)) this.noteActivity("child-update");
 		this.changed();
 	}
 	private scheduleStartupReconcile() {
@@ -409,9 +410,20 @@ export class DeskSession {
 		this.usageWriter?.mark("observation-fault");
 		this.changed();
 	}
+	private noteActivity(kind: NonNullable<Snapshot["activity"]>["kind"]) {
+		const at = this.now();
+		if (!Number.isSafeInteger(at) || at < 0 || at > 7_258_118_400_000) return;
+		const previous = this.snapshot.activity;
+		const sequence = (previous?.sequence ?? 0) + 1;
+		if (!Number.isSafeInteger(sequence)) return;
+		if (kind === "agent-start") this.snapshot.activity = { sequence, kind, at, turnStartedAt: at };
+		else if (kind === "agent-settled") this.snapshot.activity = { ...previous, sequence, kind, at, turnEndedAt: at, turnEndSequence: sequence };
+		else this.snapshot.activity = { ...previous, sequence, kind, at };
+	}
 	lifecycle(kind: string, ctx: ExtensionContext, aborted = false) {
 		this.observe(ctx);
 		if (kind === "agent_start") {
+			this.noteActivity("agent-start");
 			this.finalError = false;
 			this.settledObserved = false;
 			this.awaitingSettled = true;
@@ -420,6 +432,7 @@ export class DeskSession {
 		}
 		// agent_end is deliberately not a completion boundary.
 		if (kind === "agent_settled") {
+			this.noteActivity("agent-settled");
 			this.awaitingSettled = false;
 			this.settledObserved = true;
 			this.snapshot.execution = aborted ? "aborted" : this.finalError ? "failed" : this.hasActiveChildren() ? "waiting-children" : "settled";
@@ -431,6 +444,7 @@ export class DeskSession {
 	}
 	tool(start: boolean, id: string, name: string, ctx: ExtensionContext) {
 		this.observe(ctx);
+		this.noteActivity(start ? "tool-start" : "tool-end");
 		if (start) {
 			if (this.tools.size < 32 && id.length <= 256 && safeId(name))
 				this.tools.set(id, name);

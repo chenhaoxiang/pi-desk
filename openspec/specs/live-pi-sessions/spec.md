@@ -93,6 +93,18 @@ Pi Desk SHALL provide a compact/expanded native top-edge panel as a daily visual
 - **WHEN** the user opens an append or steer composer on one session card
 - **THEN** the draft and request bind to that exact runtime even if the main-window selection changes, and unavailable navigation is explained rather than falsely activating another target
 
+#### Scenario: Many sessions and ambiguous names
+- **WHEN** many enrolled sessions share a name or working directory
+- **THEN** compact rows retain stable order during state updates, unnamed sessions receive distinguishing display labels, and optional user aliases/pins affect local presentation only, never management identity
+
+#### Scenario: Important session was enrolled late
+- **WHEN** the user expands the daily island with more than four enrolled sessions
+- **THEN** it selects at most four connected sessions by actual input, reported failure, unread turn changes, pins and running state; row identities stay fixed during that expansion so events cannot move an active click or editor to another runtime
+
+#### Scenario: Heartbeat without work events
+- **WHEN** a transport heartbeat or startup idle reconciliation arrives without a lifecycle or tool event
+- **THEN** the last-activity clock and turn-end identity do not advance; old bridges without optional event metadata explicitly show unknown timing rather than a fabricated fresh activity
+
 #### Scenario: Synthetic visual preview
 - **WHEN** explicit synthetic preview records are supplied for native screenshot checks
 - **THEN** preview state is clearly labelled and cannot dispatch real management actions or read real session content

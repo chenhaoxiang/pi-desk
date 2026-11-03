@@ -24,6 +24,12 @@ import SQLite3
   static func assert(_ condition: @autoclosure () -> Bool, _ message: String) {
     if !condition() { fatalError(message) }
   }
+  static func comparisonFixture(_ range: UsageDateRange, input: Int64, output: Int64) -> UsageAggregate {
+    var value = UsageAggregate.empty(range)
+    var tokens = UsageTokenTotals(); tokens.add(input: input, output: output, cacheRead: 0, cacheWrite: 0)
+    value.buckets = range.days.map { UsageBucket(day: $0, state: .data, tokens: tokens) }
+    return value
+  }
   static func main() throws {
     let ny = TimeZone(identifier: "America/New_York")!, sh = TimeZone(identifier: "Asia/Shanghai")!
     let spring = UsageDateRange.make(preset: .today, now: date("2024-03-10T16:00:00Z"), timeZone: ny)
@@ -35,6 +41,27 @@ import SQLite3
     assert(weekly.days.count == 7 && weekly.start == date("2024-03-26T04:00:00Z"), "7 includes today plus 6")
     let month = UsageDateRange.make(preset: .month, now: date("2024-03-10T16:00:00Z"), timeZone: ny)
     assert(month.start == date("2024-03-01T05:00:00Z") && month.end == date("2024-04-01T04:00:00Z"), "month crosses DST")
+    let ordinary = UsageDateRange.make(preset: .today, now: date("2024-04-02T16:00:00Z"), timeZone: ny)
+    let currentComparison = comparisonFixture(ordinary, input: 20, output: 10)
+    let previousComparison = comparisonFixture(ordinary.previousPeriod, input: 10, output: 5)
+    let compareNow = ordinary.start.addingTimeInterval(10.5 * 3600)
+    let comparison = UsagePeriodComparison.make(current: currentComparison, previous: previousComparison, metric: .interaction, now: compareNow)
+    assert(comparison.issue == nil && comparison.bucketCount == 10 && comparison.current == 300 && comparison.previous == 150 && comparison.percent == 100, "equal-source comparison only uses complete elapsed buckets")
+    var missingComparison = previousComparison
+    missingComparison.buckets[0] = UsageBucket(day: missingComparison.buckets[0].day, state: .uncollected, tokens: UsageTokenTotals())
+    assert(UsagePeriodComparison.make(current: currentComparison, previous: missingComparison, metric: .interaction, now: compareNow).issue != nil, "uncollected is not zero or a decrease")
+    var partialTokens = UsageTokenTotals(); partialTokens.add(input: 10, output: nil, cacheRead: 0, cacheWrite: 0)
+    missingComparison.buckets[0] = UsageBucket(day: missingComparison.buckets[0].day, state: .data, tokens: partialTokens)
+    assert(UsagePeriodComparison.make(current: currentComparison, previous: missingComparison, metric: .interaction, now: compareNow).issue != nil, "missing metric field must suppress delta")
+    missingComparison = previousComparison; missingComparison.selectedModel = "fixture/other"
+    assert(UsagePeriodComparison.make(current: currentComparison, previous: missingComparison, metric: .interaction, now: compareNow).issue != nil, "different model cannot be compared")
+    missingComparison = previousComparison; missingComparison.selectedOrigin = .history
+    assert(UsagePeriodComparison.make(current: currentComparison, previous: missingComparison, metric: .interaction, now: compareNow).issue != nil, "different origins cannot be compared")
+    let zeroComparison = UsagePeriodComparison.make(current: currentComparison, previous: comparisonFixture(ordinary.previousPeriod, input: 0, output: 0), metric: .interaction, now: compareNow)
+    assert(zeroComparison.issue == nil && zeroComparison.previous == 0 && zeroComparison.percent == nil, "known zero baseline has no fabricated percentage")
+    assert(spring.previousPeriod.start == date("2024-03-09T05:00:00Z") && spring.previousPeriod.end == spring.start, "previous period uses calendar day, not 86400 seconds")
+    assert(UsagePeriodComparison.make(current: comparisonFixture(spring, input: 1, output: 1), previous: comparisonFixture(spring.previousPeriod, input: 1, output: 1), metric: .interaction, now: spring.end).issue?.contains("夏令时") == true, "23/24 hours are not silently treated as equal")
+    assert(weekly.previousPeriod.end == weekly.start && weekly.previousPeriod.days.count == 7, "weekly comparison is adjacent and equal calendar length")
     let root = try folder("aggregate")
     try entry(root, id: "a", at: spring.start)
     try entry(root, id: "b", at: date("2024-03-10T07:00:00Z"), model: "fixture/beta", values: [40, 10, 5, 0])

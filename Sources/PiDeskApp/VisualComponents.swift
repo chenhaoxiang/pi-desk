@@ -110,7 +110,7 @@ struct SessionCard: View {
       .contentShape(RoundedRectangle(cornerRadius: 11)).accessibilityElement(children: .contain)
   }
   var metadata: String {
-    [Presentation.project(session.snapshot), Presentation.shortModel(session.snapshot)].joined(separator: " · ")
+    [model.workGroup(session.snapshot.identity), Presentation.project(session.snapshot), Presentation.shortModel(session.snapshot)].compactMap { $0 }.joined(separator: " · ")
   }
 }
 
@@ -176,6 +176,10 @@ struct MessageComposer: View {
       ).lineLimit(2...4).textFieldStyle(.plain).padding(10).background(
         .primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10)
       ).focused($focused).accessibilityLabel("只递送给当前选定会话的要求")
+        .disabled(!model.canEditDraft(identity))
+      if !model.canEditDraft(identity) {
+        Text("草稿数量已达上限；请用 ⌘K 打开草稿列表，旧草稿没有被删除。").font(.caption).foregroundStyle(.orange)
+      }
       HStack {
         Text(session == nil ? "会话已更新，草稿保留；请重新选择准确对象" : "递送到原会话，回执不代表任务完成").font(.caption)
           .foregroundStyle(.secondary)

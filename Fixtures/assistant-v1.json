@@ -1,0 +1,24 @@
+{
+  "request": {
+    "version": 1,
+    "kind": "assistant-request",
+    "identity": {"localHostId":"fixture","nativeSessionId":"assistant-session","runtimeEpoch":"assistant-epoch"},
+    "requestId": "assistant-golden",
+    "issuedAt": 1000,
+    "assistant": {
+      "operation":"analyze","provider":"codex-local-8319","modelId":"gpt-6.1-sol","thinking":"medium",
+      "sources":[{"ref":"S1","title":"合成任务","project":"fixture","status":"本轮运行","tools":["read"],"messages":[{"id":"fixture-entry","role":"user","text":"明确的合成上下文"}]}]
+    }
+  },
+  "response": {
+    "version": 1,
+    "kind": "assistant-response",
+    "identity": {"localHostId":"fixture","nativeSessionId":"assistant-session","runtimeEpoch":"assistant-epoch"},
+    "requestId": "assistant-golden",
+    "assistant": {
+      "operation":"analyze","status":"ok","code":"analysis-ready","provider":"codex-local-8319","modelId":"gpt-6.1-sol","thinking":"medium",
+      "analysis":{"overview":"合成总结","summaries":[{"ref":"S1","text":"仅依据给出的合成信息，不代表业务验收"}],"groups":[{"name":"合成分组","refs":["S1"],"reason":"用户可选择采纳"}]},
+      "usage":{"input":10,"output":20,"cacheRead":3,"cacheWrite":0},"possibleUsage":false
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import PiDeskCore
 
 private final class FakeNotifications: NotificationClient {
@@ -9,6 +10,12 @@ private final class FakeNotifications: NotificationClient {
   var deliveryError: Error?
   var holdRequest = false
   var requestCompletion: ((Result<Bool, Error>) -> Void)?
+  var activation: ((NotificationTarget) -> Void)?
+  var lastTarget: NotificationTarget?
+  func onActivation(_ handler: @escaping (NotificationTarget) -> Void) { activation = handler }
+  func post(id: String, title: String, body: String, target: NotificationTarget?, completion: @escaping (Error?) -> Void) {
+    lastTarget = target; post(id: id, title: title, body: body, completion: completion)
+  }
   func settings(_ completion: @escaping (AppNotificationAuthorization) -> Void) { completion(permission) }
   func requestAuthorization(_ completion: @escaping (Result<Bool, Error>) -> Void) {
     requested += 1
@@ -24,6 +31,13 @@ private final class FakeLedger: UsageLedgerClient {
   var range: UsageDateRange?
   var completion: ((UsageAggregate) -> Void)?
   var hold = false
+  var holdViewState = false
+  var stateCompletion: ((UsageViewState?, String?) -> Void)?
+  var savedState: UsageViewState?
+  func loadViewState(completion: @escaping (UsageViewState?, String?) -> Void) {
+    if holdViewState { stateCompletion = completion } else { completion(nil, nil) }
+  }
+  func saveViewState(_ state: UsageViewState, completion: @escaping (String?) -> Void) { savedState = state; completion(nil) }
   func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void) {
     calls += 1; self.range = range
     if hold { self.completion = completion } else { completion(.empty(range, preview: true)) }
@@ -53,6 +67,11 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     precondition(condition(), "bounded completion missing")
   }
   @MainActor static func main() async throws {
+    let legacySettings = try JSONDecoder().decode(DeskSettings.self, from: Data(#"{"herdrExecutable":"","managementURL":"","notifications":false}"#.utf8))
+    precondition(legacySettings.displayMode == .automatic && legacySettings.screenPolicy == "follow", "old app settings preserve default display behavior")
+    var chosenDisplay = legacySettings; chosenDisplay.islandMode = IslandDisplayMode.menuOnly.rawValue; chosenDisplay.islandScreen = "display:999999"
+    let restoredDisplay = try JSONDecoder().decode(DeskSettings.self, from: JSONEncoder().encode(chosenDisplay))
+    precondition(restoredDisplay.displayMode == .menuOnly && restoredDisplay.screenPolicy == "display:999999", "screen choice remains saved even when a display is unavailable")
     let notificationError = NSError(domain: "UNErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "PRIVATE_NOTIFICATION_DETAIL"])
     precondition(AppNotificationDiagnostic.detail(notificationError) == "（UNErrorDomain:1）")
     precondition(AppNotificationDiagnostic.detail(NSError(domain: "PRIVATE_DOMAIN", code: 1)).isEmpty)
@@ -96,6 +115,27 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     var legacy = snapshot; legacy.identity.nativeSessionId = "legacy-active-unknown"; legacy.executionObservation = nil
     precondition(stateStore.apply(WireRecord(kind: "hello", identity: legacy.identity, snapshot: legacy), connection: UUID(), now: legacy.observedAt))
     model.store = stateStore; model.search = ""; model.sessionFilter = "在线"
+    let destination = NotificationTarget(identity: snapshot.identity, inputID: "input-fixture")
+    let payload = destination.payload!
+    precondition(NotificationTarget.decode(payload) == destination && !payload.contains(snapshot.identity.nativeSessionId) && !payload.contains(snapshot.identity.runtimeEpoch), "notification data contains hashes, not raw session identity or text")
+    precondition(NotificationTarget.decode("{}") == nil)
+    var opened = 0; model.showManager = { opened += 1 }
+    let actionCount = model.store.requests.count
+    model.activateNotification(destination, now: 1000)
+    precondition(model.current?.snapshot.identity == snapshot.identity && model.page == "会话" && opened == 1 && model.store.requests.count == actionCount, "notification selects exact runtime without dispatching owner work")
+    let chosenBeforeStale = model.selected
+    var staleIdentity = snapshot.identity; staleIdentity.runtimeEpoch = "retired-notification-runtime"
+    model.activateNotification(NotificationTarget(identity: staleIdentity), now: 2000)
+    precondition(model.selected == chosenBeforeStale && model.navigationNotice?.contains("已更新") == true, "stale notification cannot select a replacement runtime")
+    model.store = SessionStore(); model.selected = nil
+    model.activateNotification(destination, now: 3000)
+    precondition(model.current == nil && model.page == "接入健康")
+    model.store = stateStore; model.resolveNotification(now: 4000)
+    precondition(model.current?.snapshot.identity == snapshot.identity && model.page == "会话", "cold launch waits for exact enrollment instead of choosing any existing window")
+    model.store = SessionStore(); model.activateNotification(destination, now: 5000); model.resolveNotification(now: 16000)
+    precondition(model.navigationNotice?.contains("暂未重新接入") == true && model.store.requests.isEmpty)
+    model.store = stateStore; model.page = "会话"; model.navigationNotice = nil
+    precondition(model.healthRows.contains { $0.id == "usage" } && model.store.requests.count == actionCount, "health is a local projection, not owner polling")
     let orderBeforeStateChange = model.sessions.map { $0.snapshot.identity.sessionKey }
     var settledCopy = stateStore
     var settledSnapshot = snapshot
@@ -108,6 +148,18 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     model.select(snapshot.identity)
     precondition(model.sectionRefreshRequestedAt.isEmpty, "ordinary row selection must not query owner status")
     let live = model.current!
+    let groupsBeforeRequests = model.store.requests.count
+    precondition(model.assignGroups([(snapshot.identity, "官网工作")]))
+    precondition(model.workGroup(snapshot.identity) == "官网工作" && model.commandEntries().contains { $0.identity == snapshot.identity && $0.matches("官网工作") })
+    model.groupFilter = "another-group"
+    precondition(model.visibleSessions.isEmpty && model.current == nil)
+    model.select(snapshot.identity)
+    precondition(model.groupFilter.isEmpty && model.current?.snapshot.identity == snapshot.identity, "navigation to an external group must reveal its exact target")
+    var staleGroup = snapshot.identity; staleGroup.runtimeEpoch = "group-old-epoch"
+    let groupsBefore = model.sessionGroups
+    precondition(!model.assignGroups([(snapshot.identity, "should-not-partially-apply"), (staleGroup, "invalid")]) && model.sessionGroups == groupsBefore, "group changes are atomic and runtime checked")
+    model.removeWorkGroup("官网工作")
+    precondition(model.workGroup(snapshot.identity) == nil && model.store.requests.count == groupsBeforeRequests, "removing labels cannot stop or delete work")
     precondition(model.sessionTitle(live) != "Pi", "unnamed sessions need a stable distinguishing label")
     precondition(model.setAlias("  登录修复  ", for: snapshot.identity))
     precondition(model.sessionTitle(live) == "登录修复" && !model.setAlias("bad\nname", for: snapshot.identity))
@@ -232,6 +284,7 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     model.sendNotification(for: input, session: identity)
     await spin { model.notificationStatus.contains("发送失败") }
     precondition(fake.posts == 1 && model.store.requests.count == requestsBefore, "display failure cannot send execution actions")
+    precondition(fake.lastTarget == NotificationTarget(identity: identity, inputID: input.id), "delivery contains the exact private navigation target")
     fake.permission = .denied
     model.sendNotification(for: input, session: identity)
     await spin { model.notificationStatus.contains("已拒绝") }
@@ -279,6 +332,74 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     latestPrior(.empty(latestPriorRange))
     precondition(!model.usageLoading && model.comparisonAggregate?.selectedModel == model.usageModel && model.aggregate.selectedModel == model.usageModel)
     model.usageComparisonEnabled = false; ledger.hold = false
-    print("Narrow UX checks passed: visible/background usage interest, explicit authorization only, authorized/denied/error/send-failure, duplicate request, invalid custom range and stale in-flight preservation.")
+    // The exact menu action requests termination only. A cancelled decision must leave its UDS alive.
+    await spin { model.diagnostic == "本机连接已就绪" }
+    let socketArg = CommandLine.arguments.firstIndex(of: "--socket-path")!
+    let socketPath = CommandLine.arguments[socketArg + 1]
+    let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+    precondition(fd >= 0)
+    let peer = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+    var address = sockaddr_un(); address.sun_family = sa_family_t(AF_UNIX)
+    let pathBytes = Array(socketPath.utf8) + [UInt8(0)]
+    precondition(pathBytes.count <= MemoryLayout.size(ofValue: address.sun_path))
+    withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: pathBytes) }
+    let connected = withUnsafePointer(to: &address) { pointer in
+      pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+    }
+    precondition(connected == 0)
+    var quitLive = snapshot; quitLive.identity.nativeSessionId = "quit-cancel-live"; quitLive.seq = 1; quitLive.observedAt = Date().timeIntervalSince1970 * 1000
+    try peer.write(contentsOf: Wire.encode(WireRecord(kind: "hello", identity: quitLive.identity, snapshot: quitLive)))
+    await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 1 }
+    model.setDraft("keep-after-cancel", for: quitLive.identity)
+    var quitRequests = 0
+    model.requestTermination = { quitRequests += 1; precondition(model.requiresDraftConfirmation) }
+    model.requestQuit()
+    precondition(quitRequests == 1 && model.drafts[quitLive.identity] == "keep-after-cancel")
+    quitLive.seq = 2; quitLive.observedAt += 1
+    try peer.write(contentsOf: Wire.encode(WireRecord(kind: "snapshot", identity: quitLive.identity, snapshot: quitLive)))
+    await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 2 }
+    precondition(model.action(.message, target: Target(owner: "pi"), parameters: Parameters(text: model.drafts[quitLive.identity], mode: "followUp"), identity: quitLive.identity), "after keeping drafts the same live connection can still accept the original input")
+    model.setDraft("", for: quitLive.identity)
+    try peer.close()
+    var modalHosts = 0
+    model.showManager = { modalHosts += 1 }
+    for modal in [DeskModal.commands, .drafts, .groups] {
+      model.modal = nil; model.presentModal(modal)
+      precondition(model.modal == modal)
+    }
+    precondition(modalHosts == 3, "cold/closed manager and standalone Settings commands always request a visible sheet host")
+    model.stop()
+
+    let savedKey = UsageViewStateKey.hash(snapshot.identity.sessionKey)
+    var persisted = UsageViewState(); persisted.page = "Token"; persisted.sessionGroups = [savedKey: "已保存分组"]
+    persisted.aiUsageCounters = ["requests": 10, "unconfirmed": 2, "input": 100, "output": 200]
+    let delayed = FakeLedger(); delayed.holdViewState = true
+    let recovering = AppModel(notificationClient: fake, usageLedger: delayed)
+    recovering.navigate(to: "AI助手")
+    delayed.stateCompletion?(persisted, nil)
+    await spin { recovering.aiUsageCounters["requests"] == 10 }
+    precondition(recovering.page == "AI助手" && recovering.sessionGroups == persisted.sessionGroups, "early navigation cannot erase durable organization or usage")
+    recovering.flushViewState()
+    precondition(delayed.savedState?.aiUsageCounters == persisted.aiUsageCounters && delayed.savedState?.sessionGroups == persisted.sessionGroups)
+    recovering.stop()
+
+    let merging = FakeLedger(); merging.holdViewState = true
+    let early = AppModel(notificationClient: fake, usageLedger: merging)
+    precondition(early.store.apply(WireRecord(kind: "hello", identity: snapshot.identity, snapshot: snapshot), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    var clearing = snapshot; clearing.identity.nativeSessionId = "clear-saved-before-load"
+    precondition(early.store.apply(WireRecord(kind: "hello", identity: clearing.identity, snapshot: clearing), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    persisted.sessionGroups?[UsageViewStateKey.hash(clearing.identity.sessionKey)] = "先前标签"
+    precondition(early.assignGroups([(snapshot.identity, "启动期间修改"), (clearing.identity, "")]))
+    early.recordAssistantUsage(nil, unconfirmed: true)
+    let numericalUsage = try JSONDecoder().decode(AssistantUsage.self, from: Data(#"{"input":10,"output":20,"cacheRead":3,"cacheWrite":0}"#.utf8))
+    early.recordAssistantUsage(numericalUsage, unconfirmed: false)
+    merging.stateCompletion?(persisted, nil)
+    await spin { early.aiUsageCounters["requests"] == 12 }
+    precondition(early.aiUsageCounters["input"] == 110 && early.aiUsageCounters["output"] == 220 && early.aiUsageCounters["unconfirmed"] == 3)
+    precondition(early.workGroup(snapshot.identity) == "启动期间修改" && early.workGroup(clearing.identity) == nil, "explicit pre-load edits and removals overlay saved groups rather than replace the whole map")
+    early.flushViewState()
+    precondition(merging.savedState?.aiUsageCounters == early.aiUsageCounters && merging.savedState?.sessionGroups == early.sessionGroups)
+    early.stop()
+    print("Narrow UX checks passed: usage interest, notification/navigation, normal-quit cancellation keeps real UDS/input alive, cold modal host, delayed durable group/AI usage merge, custom ranges and stale-response preservation.")
   }
 }

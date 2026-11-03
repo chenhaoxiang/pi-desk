@@ -33,6 +33,13 @@ struct DeskSettings: Codable {
   var herdrExecutable = ""
   var managementURL = ""
   var notifications = false
+  var islandMode: String?
+  var islandScreen: String?
+  var aiProvider: String?
+  var aiModel: String?
+  var aiThinking: String?
+  var displayMode: IslandDisplayMode { IslandDisplayMode(rawValue: islandMode ?? "") ?? .automatic }
+  var screenPolicy: String { islandScreen ?? "follow" }
 }
 @MainActor final class AppModel: ObservableObject {
   @Published var store = SessionStore()
@@ -40,10 +47,14 @@ struct DeskSettings: Codable {
   @Published var page = "会话"
   @Published var diagnostic = "连接正在启动"
   @Published var actionNote = ""
+  @Published var navigationNotice: String?
+  private(set) var notificationActivationRequested = false
+  private var pendingNotification: (target: NotificationTarget, deadline: Double)?
   @Published var settings = DeskSettings()
   @Published var dismissed: Set<String> = []
   @Published var muted = false
   @Published var drafts: [Identity: String] = [:]
+  @Published var modal: DeskModal?
   @Published var search = ""
   @Published var searchFocusRequest = 0
   @Published var sessionFilter = "在线"
@@ -51,6 +62,10 @@ struct DeskSettings: Codable {
   @Published var pinnedKeyHashes: Set<String> = []
   @Published var sessionAliases: [String: String] = [:]
   @Published var reviewedResultSequences: [String: Int] = [:]
+  @Published var sessionGroups: [String: String] = [:]
+  @Published var aiUsageCounters: [String: Int64] = [:]
+  let assistant = DeskAssistantClient()
+  @Published var groupFilter = ""
   @Published private(set) var sessionNotes: [Identity: String] = [:]
   static let sessionFilters = ["在线", "运行中", "需关注", "需输入", "已置顶", "全部", "断连"]
   @Published var usagePreset: UsagePreset = .today
@@ -119,6 +134,8 @@ struct DeskSettings: Codable {
   private(set) var managerIsVisible = false
   private var viewStateLoaded = false
   private var viewStateTouchedBeforeLoad = false
+  // Only explicit group edits are overlaid onto saved data; an unloaded empty map is not a deletion.
+  private var preLoadGroupEdits: [String: String] = [:]
   private var restoringViewState = false
   private var selectionPinned = false
   private var pendingSelectionHash: String?
@@ -141,11 +158,138 @@ struct DeskSettings: Codable {
   let isPreview: Bool
   var showManager: () -> Void = {}
   var showIsland: () -> Void = {}
-  func setDraft(_ value: String, for identity: Identity) {
-    if drafts.count >= 64 && drafts[identity] == nil {
-      drafts.removeValue(forKey: drafts.keys.first!)
+  var requestTermination: () -> Void = { NSApp.terminate(nil) }
+  func requestQuit() { requestTermination() } // Teardown belongs only to applicationWillTerminate.
+  func presentModal(_ modal: DeskModal) { showManager(); self.modal = modal }
+  var unsentDraftIdentities: [Identity] {
+    drafts.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.keys.sorted {
+      ($0.sessionKey + $0.runtimeEpoch) < ($1.sessionKey + $1.runtimeEpoch)
     }
+  }
+  var unsentDraftCount: Int { unsentDraftIdentities.count + (assistant.hasUnsentExtra ? 1 : 0) }
+  var requiresDraftConfirmation: Bool { unsentDraftCount > 0 }
+  func canEditDraft(_ identity: Identity) -> Bool { drafts[identity] != nil || unsentDraftIdentities.count < 64 }
+  func setDraft(_ value: String, for identity: Identity) {
+    guard value.utf8.count <= 16384 else { note("输入超过16KiB，原草稿已保留；请缩短或分段。", for: identity); return }
+    if value.isEmpty { drafts.removeValue(forKey: identity); return }
+    if drafts[identity] == nil && drafts.count >= 64 { drafts = drafts.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
+    guard canEditDraft(identity) else { note("已有64份未发送草稿，请先到草稿列表处理；没有删除旧草稿。", for: identity); return }
     drafts[identity] = value
+  }
+  var workGroups: [String] { Array(Set(sessionGroups.values)).sorted() }
+  var groupFilterTitle: String { groupFilter.isEmpty ? "全部分组" : groupFilter == "__none__" ? "未分组" : groupFilter }
+  func workGroup(_ identity: Identity) -> String? { sessionGroups[UsageViewStateKey.hash(identity.sessionKey)] }
+  @discardableResult func assignGroups(_ changes: [(Identity, String)]) -> Bool {
+    var proposed = sessionGroups, explicit: [String: String] = [:]
+    for (identity, raw) in changes {
+      guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return false }
+      let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard name.utf8.count <= 64, !["全部分组", "未分组", "__none__"].contains(name),
+        !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else { return false }
+      let key = UsageViewStateKey.hash(identity.sessionKey)
+      proposed[key] = name.isEmpty ? nil : name; explicit[key] = name
+    }
+    guard proposed.count <= 64, Set(proposed.values).count <= 16 else { return false }
+    guard updateGroups(proposed, explicit: explicit) else { return false }
+    if !groupFilter.isEmpty { groupFilter = "" }
+    persistViewState(); return true
+  }
+  private func updateGroups(_ proposed: [String: String], explicit: [String: String] = [:]) -> Bool {
+    if !viewStateLoaded && !isPreview {
+      var edits = preLoadGroupEdits.merging(explicit) { _, new in new }
+      for key in Set(sessionGroups.keys).union(proposed.keys) where sessionGroups[key] != proposed[key] {
+        edits[key] = proposed[key] ?? ""
+      }
+      guard edits.count <= 128 else { actionNote = "分组偏好仍在加载，请稍后再修改；旧数据未覆盖。"; return false }
+      preLoadGroupEdits = edits
+    }
+    sessionGroups = proposed
+    return true
+  }
+  func removeWorkGroup(_ name: String) {
+    guard updateGroups(sessionGroups.filter { $0.value != name }) else { return }
+    if groupFilter == name { groupFilter = "" }
+    persistViewState()
+  }
+  func commandEntries() -> [DeskCommandEntry] {
+    var entries = DeskNavigation.pages.map { DeskCommandEntry(id: "page:" + $0, title: "打开" + $0, action: "page", value: $0) }
+    entries.append(DeskCommandEntry(id: "drafts", title: "查看未发送草稿", detail: "\(unsentDraftCount) 份 · 不会自动发送", action: "drafts"))
+    entries.append(DeskCommandEntry(id: "groups", title: "管理工作分组", detail: "只改变本机组织标签", action: "groups"))
+    entries.append(DeskCommandEntry(id: "attention", title: "下一个需关注会话", detail: "⌥⌘N", action: "attention"))
+    for session in sessions {
+      let identity = session.snapshot.identity
+      let title = sessionTitle(session), detail = [workGroup(identity), Presentation.project(session.snapshot), Presentation.status(session).title].compactMap { $0 }.joined(separator: " · ")
+      entries.append(DeskCommandEntry(id: "session:" + identity.sessionKey + identity.runtimeEpoch, title: title, detail: detail, action: "select", identity: identity))
+    }
+    if let session = current {
+      let identity = session.snapshot.identity
+      entries.append(DeskCommandEntry(id: "original", title: "打开原会话", detail: sessionTitle(session), action: "original", identity: identity))
+      entries.append(DeskCommandEntry(id: "pin", title: isPinned(identity) ? "取消置顶此会话" : "置顶此会话", detail: sessionTitle(session), action: "pin", identity: identity))
+    }
+    return entries
+  }
+  func performCommand(_ entry: DeskCommandEntry) {
+    if let identity = entry.identity, store.sessions[identity.sessionKey]?.snapshot.identity != identity {
+      modal = nil; navigationNotice = "命令目标所属运行已更新，请重新打开命令面板。"; return
+    }
+    modal = nil
+    switch entry.action {
+    case "page": if DeskNavigation.pages.contains(entry.value) { navigate(to: entry.value) }
+    case "select": if let identity = entry.identity { select(identity); navigate(to: "会话") }
+    case "original": if let identity = entry.identity { openOriginal(identity: identity) }
+    case "pin": if let identity = entry.identity { togglePin(identity) }
+    case "drafts": modal = .drafts
+    case "groups": modal = .groups
+    case "attention": nextAttentionSession()
+    default: break
+    }
+  }
+  func activateNotification(_ target: NotificationTarget, now: Double = Date().timeIntervalSince1970 * 1000) {
+    guard target.valid, !isPreview else { return }
+    notificationActivationRequested = true
+    modal = nil
+    pendingNotification = (target, now + 10_000)
+    navigationNotice = "正在等待原会话接入；不会打开同名替代对象。"
+    page = "接入健康"
+    resolveNotification(now: now)
+    showManager()
+  }
+  func resolveNotification(now: Double = Date().timeIntervalSince1970 * 1000) {
+    guard let pending = pendingNotification else { return }
+    if let session = sessions.first(where: { pending.target.sameSession($0.snapshot.identity) }) {
+      guard pending.target.matches(session.snapshot.identity) else {
+        pendingNotification = nil
+        navigationNotice = "这条通知所属运行已更新，未切换到新的运行，也未启动或回答任何工作。"
+        return
+      }
+      if session.connection == .connected {
+        pendingNotification = nil; navigationNotice = nil; page = "会话"
+        select(session.snapshot.identity, refreshOwner: false)
+        return
+      }
+    }
+    if now >= pending.deadline {
+      pendingNotification = nil
+      navigationNotice = "原通知目标暂未重新接入，未打开其他会话。可在接入健康中查看状态。"
+    }
+  }
+  var healthRows: [DeskHealthRow] {
+    let broken = diagnostic.hasPrefix("连接不可用")
+    var rows = [DeskHealthRow("app", "Pi Desk 本机连接", diagnostic, tone: broken ? .red : diagnostic.contains("就绪") ? .green : .blue),
+      DeskHealthRow("sessions", "会话接入", "\(connectedCount) 个在线；只显示主动接入的 Pi，不扫描历史。", tone: connectedCount > 0 ? .green : .muted)]
+    guard let session = current else {
+      rows.append(DeskHealthRow("empty", "下一步", "正常启动一个 Pi 会话，让它沿现有扩展入口接入；已有工作不需要被强制重载。"))
+      return rows
+    }
+    let snapshot = session.snapshot
+    rows.append(DeskHealthRow("execution", "执行状态", Presentation.executionCoverage(session), tone: Presentation.needsExecutionReview(session) ? .amber : .green))
+    rows.append(DeskHealthRow("route", "原会话定位", canOpenOriginal(identity: snapshot.identity) ? "已有精确路由，可从会话详情打开原现场。" : "暂不可定位；可检查终端权限或查看详情中的定位诊断，不会猜测其他窗口。", tone: canOpenOriginal(identity: snapshot.identity) ? .green : .amber))
+    if let recorder = snapshot.usageRecorder {
+      rows.append(DeskHealthRow("usage", "用量采集", "待落盘 \(recorder.pending) · 丢弃 \(recorder.dropped) · 写入失败 \(recorder.writeFailures)。统计缺口不影响 Pi 运行。", tone: recorder.dropped > 0 || recorder.writeFailures > 0 ? .amber : .green))
+    } else { rows.append(DeskHealthRow("usage", "用量采集", "此会话尚未提供持久采集信息，不等于零用量。等正常加载新版桥接，不强制重载。", tone: .amber)) }
+    rows.append(DeskHealthRow("ai", "AI 旁路能力", snapshot.capabilities.queries.contains("assistant") ? "此运行提供注册模型与有界近期文本接口；只有明确操作才调用模型。" : "此运行尚无 AI 接口；正常加载新版桥接后可用，不强制重载。", tone: snapshot.capabilities.queries.contains("assistant") ? .green : .muted))
+    rows.append(DeskHealthRow("notifications", "系统通知", notificationStatus, tone: notificationsAuthorized ? .green : .muted))
+    return rows
   }
   func sessionTitle(_ session: SessionView) -> String {
     sessionAliases[UsageViewStateKey.hash(session.snapshot.identity.sessionKey)] ?? SessionExperience.title(session.snapshot)
@@ -209,7 +353,7 @@ struct DeskSettings: Codable {
   var attentionCount: Int { attentionSessions.count }
   var unreadResultCount: Int { sessions.filter(hasUnreadResult).count }
   func navigate(to page: String) {
-    self.page = ["会话", "Token", "重要事项", "设置"].contains(page) ? page : "会话"
+    self.page = DeskNavigation.pages.contains(page) ? page : "会话"
     showManager(); persistViewState()
   }
   func focusSessionSearch() { navigate(to: "会话"); searchFocusRequest += 1 }
@@ -227,6 +371,7 @@ struct DeskSettings: Codable {
     }
     if !visibleSessions.contains(where: { $0.snapshot.identity == identity }) {
       search = ""
+      groupFilter = ""
       sessionFilter = "全部"
       hiddenSessions.remove(identity.sessionKey)
     }
@@ -268,6 +413,7 @@ struct DeskSettings: Codable {
     if Self.sessionFilters.contains(state.sessionFilter) { sessionFilter = state.sessionFilter }
     pinnedKeyHashes = Set(state.pinnedKeyHashes ?? [])
     sessionAliases = state.sessionAliases ?? [:]
+    groupFilter = state.groupFilter ?? ""
     reviewedResultSequences = state.reviewedResultSequences ?? [:]
     usageComparisonEnabled = state.comparisonEnabled ?? false
     usageModel = state.usageModel
@@ -280,11 +426,32 @@ struct DeskSettings: Codable {
       hiddenSessions.insert(session.snapshot.identity.sessionKey)
     }
   }
+  private func restoreOrganizationAndAIUsage(_ stored: UsageViewState?) {
+    defer { preLoadGroupEdits.removeAll() }
+    guard let stored, stored.valid else { return }
+    var groups = stored.sessionGroups ?? [:]
+    for (key, value) in preLoadGroupEdits { groups[key] = value.isEmpty ? nil : value }
+    var check = UsageViewState(); check.sessionGroups = groups
+    if check.valid { sessionGroups = groups }
+    else {
+      sessionGroups = stored.sessionGroups ?? [:]
+      actionNote = "启动期间的分组修改超出保存容量，旧分组已保留；请加载后重新设置。"
+    }
+    var totals = stored.aiUsageCounters ?? [:]
+    for (key, delta) in aiUsageCounters {
+      let sum = (totals[key] ?? 0).addingReportingOverflow(delta)
+      totals[key] = sum.overflow ? Int64.max : sum.partialValue
+    }
+    aiUsageCounters = totals
+  }
   private func currentViewState() -> UsageViewState {
     var state = UsageViewState()
     state.page = page; state.sessionFilter = sessionFilter
     state.pinnedKeyHashes = pinnedKeyHashes.sorted()
     state.sessionAliases = sessionAliases
+    state.sessionGroups = sessionGroups
+    state.groupFilter = groupFilter
+    state.aiUsageCounters = aiUsageCounters
     state.reviewedResultSequences = reviewedResultSequences
     state.comparisonEnabled = usageComparisonEnabled
     state.usagePreset = usagePreset.rawValue; state.usageMetric = usageMetric.rawValue
@@ -392,9 +559,10 @@ struct DeskSettings: Codable {
   var visibleSessions: [SessionView] {
     sessions.filter { s in
       let snap = s.snapshot
-      let matchesSearch = search.isEmpty || [sessionTitle(s), snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
+      let matchesSearch = search.isEmpty || [sessionTitle(s), workGroup(snap.identity) ?? "", snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
       let matchesState = sessionFilter == "在线" ? s.connection == .connected : sessionFilter == "全部" || (sessionFilter == "运行中" && Presentation.isExecutionActive(s)) || (sessionFilter == "需输入" && Presentation.needsInput(s)) || (sessionFilter == "需关注" && needsAttention(s)) || (sessionFilter == "已置顶" && isPinned(snap.identity)) || (sessionFilter == "断连" && s.connection != .connected)
-      return matchesSearch && matchesState && (!hiddenSessions.contains(snap.identity.sessionKey) || s.connection == .connected)
+      let matchesGroup = groupFilter.isEmpty || (groupFilter == "__none__" ? workGroup(snap.identity) == nil : workGroup(snap.identity) == groupFilter)
+      return matchesSearch && matchesState && matchesGroup && (!hiddenSessions.contains(snap.identity.sessionKey) || s.connection == .connected)
     }
   }
   func hideDisconnected(_ identity: Identity) {
@@ -511,7 +679,7 @@ struct DeskSettings: Codable {
         Task { @MainActor in self.checkNotificationStatus() }
         return
       }
-      notificationClient.post(id: key, title: "Pi 需要输入", body: "请回到原会话处理。原通知与自动化保持不变。") { error in
+      notificationClient.post(id: key, title: "Pi 需要输入", body: "请回到原会话处理。原通知与自动化保持不变。", target: NotificationTarget(identity: session, inputID: input.id)) { error in
         if error != nil { Task { @MainActor in self.notificationStatus = "系统通知发送失败；原入口兜底不受影响" } }
       }
     }
@@ -537,6 +705,8 @@ struct DeskSettings: Codable {
     let fixturePath = argument("--visual-fixture")
     isPreview = fixturePath != nil
     self.notificationClient = notificationClient ?? (!isPreview && Bundle.main.bundleURL.pathExtension == "app" ? SystemNotificationClient() : nil)
+    assistant.bind(self)
+    if !isPreview { self.notificationClient?.onActivation { [weak self] target in Task { @MainActor in self?.activateNotification(target) } } }
     if let fixturePath = fixturePath {
       diagnostic = "合成视觉预览 · 不连接真实会话"
       do {
@@ -569,7 +739,13 @@ struct DeskSettings: Codable {
         }
         store.tick(now: Date().timeIntervalSince1970 * 1000)
         selected = sessions.first?.snapshot.identity.sessionKey
-        if let previewPage = argument("--visual-page"), ["会话", "Token", "重要事项", "设置"].contains(previewPage) { page = previewPage }
+        if let mode = argument("--visual-display-mode"), IslandDisplayMode(rawValue: mode) != nil { settings.islandMode = mode }
+        if let modal = argument("--visual-modal").flatMap(DeskModal.init(rawValue:)) { self.modal = modal }
+        if args.contains("--draft-preview"), let first = sessions.first {
+          setDraft("明确的合成草稿；退出时默认保留，不会自动发送。", for: first.snapshot.identity)
+        }
+        if args.contains("--group-preview"), let first = sessions.first { _ = assignGroups([(first.snapshot.identity, "合成工作组")]) }
+        if let previewPage = argument("--visual-page"), DeskNavigation.pages.contains(previewPage) { page = previewPage }
         if page == "Token" {
           usageComparisonEnabled = args.contains("--compare-preview")
           refreshUsage()
@@ -592,6 +768,7 @@ struct DeskSettings: Codable {
         guard let self else { return }
         if let issue { self.actionNote = issue }
         if !self.viewStateTouchedBeforeLoad { self.applyViewState(state) }
+        self.restoreOrganizationAndAIUsage(state)
         self.viewStateLoaded = true
         self.selectPreferredSession()
         self.refreshUsage()
@@ -611,6 +788,8 @@ struct DeskSettings: Codable {
       Task { @MainActor in
         guard let self = self else { return }
         self.store.tick(now: Date().timeIntervalSince1970 * 1000)
+        self.resolveNotification()
+        self.assistant.tick(now: Date().timeIntervalSince1970 * 1000)
         self.refreshUsageIfDue()
       }
     }
@@ -618,6 +797,10 @@ struct DeskSettings: Codable {
   private func consume(_ event: SocketServer.Event) {
     switch event {
     case .record(let record, let connection):
+      if record.kind == "assistant-response" {
+        guard let session = store.sessions[record.identity.sessionKey], session.snapshot.identity == record.identity, session.connectionId == connection, session.connection == .connected else { return }
+        assistant.receive(record); return
+      }
       let wasKnown = store.sessions[record.identity.sessionKey] != nil
       guard store.apply(record, connection: connection, now: Date().timeIntervalSince1970 * 1000)
       else {
@@ -625,6 +808,7 @@ struct DeskSettings: Codable {
         return
       }
       if !wasKnown { rememberSessionOrder(record.identity) }
+      resolveNotification()
       if record.kind == "action-result", let id = record.requestId, let request = store.requests[id] {
         note(Presentation.action(request.action) + "：" + Presentation.receipt(request.status), for: record.identity)
       }
@@ -645,7 +829,30 @@ struct DeskSettings: Codable {
     case .diagnostic(let code): diagnostic = code == "socket-ready" ? "本机连接已就绪" : "连接不可用：" + code
     }
   }
+  func sendAssistant(_ payload: AssistantPayload, identity: Identity, requestID: String) -> Bool {
+    guard !isPreview, let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity,
+      session.connection == .connected, session.snapshot.capabilities.queries.contains("assistant") else { return false }
+    let record = WireRecord(kind: "assistant-request", identity: identity, requestId: requestID, issuedAt: Date().timeIntervalSince1970 * 1000, assistant: payload)
+    guard (try? Wire.encode(record)) != nil else { return false }
+    server.send(record, to: session.connectionId)
+    return true
+  }
+  func persistAISettings() {
+    saveSettings()
+    assistant.notice = actionNote
+  }
+  func recordAssistantUsage(_ usage: AssistantUsage?, unconfirmed: Bool) {
+    func add(_ key: String, _ value: Int64) {
+      let sum = (aiUsageCounters[key] ?? 0).addingReportingOverflow(value)
+      aiUsageCounters[key] = sum.overflow ? Int64.max : sum.partialValue
+    }
+    add("requests", 1)
+    if unconfirmed { add("unconfirmed", 1) }
+    if let usage, usage.valid { add("input", usage.input); add("output", usage.output); add("cacheRead", usage.cacheRead); add("cacheWrite", usage.cacheWrite) }
+    persistViewState()
+  }
   func stop() {
+    assistant.stop()
     flushViewState()
     timer?.invalidate()
     server?.stop()
@@ -787,6 +994,16 @@ struct DeskSettings: Codable {
     else {
       actionNote = "管理页仅接受无凭据的精确 HTTPS 地址"
       return
+    }
+    guard settings.aiProvider == nil || settings.aiProvider!.range(of: "^[A-Za-z0-9._-]{1,128}$", options: .regularExpression) != nil,
+      settings.aiModel == nil || settings.aiModel!.range(of: "^[A-Za-z0-9._:/+@-]{1,128}$", options: .regularExpression) != nil,
+      settings.aiThinking == nil || ["off", "minimal", "low", "medium", "high", "xhigh", "max"].contains(settings.aiThinking!),
+      !["cphone", "zooapi"].contains((settings.aiProvider ?? "").lowercased()) else {
+      actionNote = "AI 模型配置无效或不在本应用允许的渠道中，原设置未覆盖"; return
+    }
+    guard settings.islandMode == nil || IslandDisplayMode(rawValue: settings.islandMode!) != nil,
+      settings.islandScreen == nil || ["follow", "main"].contains(settings.screenPolicy) || settings.screenPolicy.range(of: "^display:[0-9]{1,10}$", options: .regularExpression) != nil else {
+      actionNote = "显示策略格式无效，原设置未被覆盖"; return
     }
     do {
       try PrivateSettings.save(JSONEncoder().encode(settings), to: settingsURL)

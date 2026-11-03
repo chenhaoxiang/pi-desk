@@ -203,15 +203,17 @@ Pi设置首批只投影canonical user `<agentDir>/settings.json`的白名单字�
 
 ## 10. 可选 AI 辅助旁路
 
-Pi Desk AI不是Agent宿主、执行器、审批人或业务状态owner。它由用户主动进入AI助手后触发，借用准确在线Pi的公开 `ModelRegistry` 与请求时认证；基础观察、输入提醒、健康页、控制和用量采集不等待它、不因它不可用降级。默认模型为 `codex-local-8319/gpt-6.1-sol`、`medium`，配置存本机Pi Desk设置，可改但只影响Desk旁路；cphone/zooapi及非注册/不可用模型拒绝，不静默换渠道、换模型、降档或重发未知请求。
+Pi Desk AI不是Agent宿主、执行器、审批人或业务状态owner。它由用户主动进入AI助手后触发，借用准确在线Pi的公开 `ModelRegistry` 与请求时认证；基础观察、输入提醒、健康页、控制和用量采集不等待它、不因它不可用降级。默认模型为 `codex-local-8319/gpt-6.1-sol`、`medium`，配置存本机Pi Desk设置，可改但只影响Desk旁路；cphone/zooapi及非注册/不可用模型拒绝，SDK的pi-virtual别名也在列表和推理准入同时排除，避免别名路由改换实际模型/档位。不静默换渠道、换模型、降档或重发未知请求。
 
-请求走独立 `assistant-request/assistant-response` UDS lane，客户端最多16个在途请求、bridge最多32个有界短期收据、每个客户端一次1个推理、请求有界超时与取消；Assistant回复不进入普通Pi快照，不在工具/生命周期回调里等待，不调用 `session.prompt`，Pi业务会话的model/thinking/tools/历史不变。回复仅有状态、结构化模型/上下文/分析和数值usage，文本上下文与AI正文不写日志/usage库（仅内存短缓存；用户明确采纳的有界分组标签作为私有显示偏好保存）；usage未确认时标unknown/possible，不伪造费用。
+请求走独立 `assistant-request/assistant-response` UDS lane，客户端最多16个在途请求、bridge最多32个有界短期收据、每个客户端一次1个推理、请求有界超时与取消；Assistant回复不进入普通Pi快照，不在工具/生命周期回调里等待，不调用 `session.prompt`，Pi业务会话的model/thinking/tools/历史不变。回复仅有状态、结构化模型/上下文/分析和数值usage，文本上下文与AI正文不写日志/usage库（仅内存短缓存；用户明确采纳的有界分组标签作为私有显示偏好保存）；usage未确认时标unknown/possible，不伪造费用。非空成功结果的四桶全零没有独立结算证据，按SDK缺省值保守记为用量未确认，不推算Token。
 
 上下文必须由用户明确选择1–8个已接入准确runtime。bridge沿当前leaf通过公开 `SessionManager.getLeafId/getEntry` 有界回溯最多128个entry，每个来源取最多8条用户/assistant文本、每条2048字节，整个AI请求最多8个来源/32KiB；不走`getBranch`、不发现历史文件、不读取废弃分支、thinking、toolCall、toolResult或凭据。发送前UI显示消息并允许逐条移除；bridge与App双方做疑似密钥/令牌/密码预检，命中则拒绝发送（这是保守预检，不是完整DLP）。AI上下文来自当前runtime，旧bridge只给元数据/不可用，不强制reload。
 
-模型输出必须是有界结构化的overview、每个输入ref一条summary、可选不重叠分组建议；ref必须来自本次输入，来源/时间/runtime通过App绑定，结果过时不得改新runtime标签。采纳只写本机工作组标签，不发Pi管理请求；失败/取消/超时/未知不自动重试。合成和真实指定模型验真分开，CI默认faux provider，不携带真实凭据。
+模型输出必须是有界结构化的overview、每个输入ref一条summary、可选不重叠分组建议；ref必须来自本次输入，来源/时间/runtime通过App绑定，结果过时不得改新runtime标签。内存缓存键包含准确broker和来源identities，命中后保留原来源，不能因文本相同改绑到替换运行；这些identity只用于本机缓存，不额外发给模型。采纳只写本机工作组标签，不发Pi管理请求；失败/取消/超时/未知不自动重试。合成和真实指定模型验真分开，CI默认faux provider，不携带真实凭据。
 
 ## 11. 验证与退出策略
+
+取消正常退出时保留连接和定时维护，teardown只在applicationWillTerminate执行；冷入口命令先建立管理窗宿主再呈现sheet。启动恢复将AI累计/分组与导航偏好分开：早期导航不跳过持久数据，早期AI数值按饱和加法合并增量，分组只覆盖明确编辑的键（含删除）；合并超容量时保留旧分组并提示重新设置，不默认清空。
 
 先fixture协议/reducer/统计与原生faux SDK，再两个隔离会话+子任务，最后按实际授权本机验收。断App、满队列、旧epoch、重复点击、回复丢失、父子重复统计和未知owner都必须有负例。
 

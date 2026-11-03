@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import PiDeskCore
 
 private final class FakeNotifications: NotificationClient {
@@ -30,6 +31,13 @@ private final class FakeLedger: UsageLedgerClient {
   var range: UsageDateRange?
   var completion: ((UsageAggregate) -> Void)?
   var hold = false
+  var holdViewState = false
+  var stateCompletion: ((UsageViewState?, String?) -> Void)?
+  var savedState: UsageViewState?
+  func loadViewState(completion: @escaping (UsageViewState?, String?) -> Void) {
+    if holdViewState { stateCompletion = completion } else { completion(nil, nil) }
+  }
+  func saveViewState(_ state: UsageViewState, completion: @escaping (String?) -> Void) { savedState = state; completion(nil) }
   func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void) {
     calls += 1; self.range = range
     if hold { self.completion = completion } else { completion(.empty(range, preview: true)) }
@@ -324,6 +332,74 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     latestPrior(.empty(latestPriorRange))
     precondition(!model.usageLoading && model.comparisonAggregate?.selectedModel == model.usageModel && model.aggregate.selectedModel == model.usageModel)
     model.usageComparisonEnabled = false; ledger.hold = false
-    print("Narrow UX checks passed: visible/background usage interest, explicit authorization only, authorized/denied/error/send-failure, duplicate request, invalid custom range and stale in-flight preservation.")
+    // The exact menu action requests termination only. A cancelled decision must leave its UDS alive.
+    await spin { model.diagnostic == "本机连接已就绪" }
+    let socketArg = CommandLine.arguments.firstIndex(of: "--socket-path")!
+    let socketPath = CommandLine.arguments[socketArg + 1]
+    let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+    precondition(fd >= 0)
+    let peer = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+    var address = sockaddr_un(); address.sun_family = sa_family_t(AF_UNIX)
+    let pathBytes = Array(socketPath.utf8) + [UInt8(0)]
+    precondition(pathBytes.count <= MemoryLayout.size(ofValue: address.sun_path))
+    withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: pathBytes) }
+    let connected = withUnsafePointer(to: &address) { pointer in
+      pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+    }
+    precondition(connected == 0)
+    var quitLive = snapshot; quitLive.identity.nativeSessionId = "quit-cancel-live"; quitLive.seq = 1; quitLive.observedAt = Date().timeIntervalSince1970 * 1000
+    try peer.write(contentsOf: Wire.encode(WireRecord(kind: "hello", identity: quitLive.identity, snapshot: quitLive)))
+    await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 1 }
+    model.setDraft("keep-after-cancel", for: quitLive.identity)
+    var quitRequests = 0
+    model.requestTermination = { quitRequests += 1; precondition(model.requiresDraftConfirmation) }
+    model.requestQuit()
+    precondition(quitRequests == 1 && model.drafts[quitLive.identity] == "keep-after-cancel")
+    quitLive.seq = 2; quitLive.observedAt += 1
+    try peer.write(contentsOf: Wire.encode(WireRecord(kind: "snapshot", identity: quitLive.identity, snapshot: quitLive)))
+    await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 2 }
+    precondition(model.action(.message, target: Target(owner: "pi"), parameters: Parameters(text: model.drafts[quitLive.identity], mode: "followUp"), identity: quitLive.identity), "after keeping drafts the same live connection can still accept the original input")
+    model.setDraft("", for: quitLive.identity)
+    try peer.close()
+    var modalHosts = 0
+    model.showManager = { modalHosts += 1 }
+    for modal in [DeskModal.commands, .drafts, .groups] {
+      model.modal = nil; model.presentModal(modal)
+      precondition(model.modal == modal)
+    }
+    precondition(modalHosts == 3, "cold/closed manager and standalone Settings commands always request a visible sheet host")
+    model.stop()
+
+    let savedKey = UsageViewStateKey.hash(snapshot.identity.sessionKey)
+    var persisted = UsageViewState(); persisted.page = "Token"; persisted.sessionGroups = [savedKey: "已保存分组"]
+    persisted.aiUsageCounters = ["requests": 10, "unconfirmed": 2, "input": 100, "output": 200]
+    let delayed = FakeLedger(); delayed.holdViewState = true
+    let recovering = AppModel(notificationClient: fake, usageLedger: delayed)
+    recovering.navigate(to: "AI助手")
+    delayed.stateCompletion?(persisted, nil)
+    await spin { recovering.aiUsageCounters["requests"] == 10 }
+    precondition(recovering.page == "AI助手" && recovering.sessionGroups == persisted.sessionGroups, "early navigation cannot erase durable organization or usage")
+    recovering.flushViewState()
+    precondition(delayed.savedState?.aiUsageCounters == persisted.aiUsageCounters && delayed.savedState?.sessionGroups == persisted.sessionGroups)
+    recovering.stop()
+
+    let merging = FakeLedger(); merging.holdViewState = true
+    let early = AppModel(notificationClient: fake, usageLedger: merging)
+    precondition(early.store.apply(WireRecord(kind: "hello", identity: snapshot.identity, snapshot: snapshot), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    var clearing = snapshot; clearing.identity.nativeSessionId = "clear-saved-before-load"
+    precondition(early.store.apply(WireRecord(kind: "hello", identity: clearing.identity, snapshot: clearing), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    persisted.sessionGroups?[UsageViewStateKey.hash(clearing.identity.sessionKey)] = "先前标签"
+    precondition(early.assignGroups([(snapshot.identity, "启动期间修改"), (clearing.identity, "")]))
+    early.recordAssistantUsage(nil, unconfirmed: true)
+    let numericalUsage = try JSONDecoder().decode(AssistantUsage.self, from: Data(#"{"input":10,"output":20,"cacheRead":3,"cacheWrite":0}"#.utf8))
+    early.recordAssistantUsage(numericalUsage, unconfirmed: false)
+    merging.stateCompletion?(persisted, nil)
+    await spin { early.aiUsageCounters["requests"] == 12 }
+    precondition(early.aiUsageCounters["input"] == 110 && early.aiUsageCounters["output"] == 220 && early.aiUsageCounters["unconfirmed"] == 3)
+    precondition(early.workGroup(snapshot.identity) == "启动期间修改" && early.workGroup(clearing.identity) == nil, "explicit pre-load edits and removals overlay saved groups rather than replace the whole map")
+    early.flushViewState()
+    precondition(merging.savedState?.aiUsageCounters == early.aiUsageCounters && merging.savedState?.sessionGroups == early.sessionGroups)
+    early.stop()
+    print("Narrow UX checks passed: usage interest, notification/navigation, normal-quit cancellation keeps real UDS/input alive, cold modal host, delayed durable group/AI usage merge, custom ranges and stale-response preservation.")
   }
 }

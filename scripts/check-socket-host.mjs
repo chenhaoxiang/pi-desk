@@ -77,11 +77,21 @@ try {
 	);
 	await a.session.waitForIdle();
 	const businessHistory = JSON.stringify(a.session.messages), businessModel = a.session.model, businessThinking = a.session.thinkingLevel;
+	let virtualRoutes = 0;
+	const aliasID = "virtual-ai-alias", aliasProvider = a.faux.getModel("faux").provider;
+	a.services.modelRuntime.registerVirtualModel({ provider: aliasProvider, id: aliasID, name: "Synthetic alias", thinkingLevels: ["medium"], route() { virtualRoutes++; return { model: a.faux.getModel("faux"), thinkingLevel: "off" }; } });
+	assert.equal(a.services.modelRuntime.getModel(aliasProvider, aliasID)?.api, "pi-virtual");
+	await until(() => a.services.modelRuntime.getAvailableSnapshot().some(m => m.provider === aliasProvider && m.id === aliasID));
 	const aiPacket = (requestId, assistant) => ({ version: 1, kind: "assistant-request", identity, requestId, issuedAt: Date.now(), assistant });
 	send(aiPacket("socket-ai-models", { operation: "models" }));
 	await until(() => records().some(r => r.requestId === "socket-ai-models" && r.assistant?.status === "ok"));
 	const registered = records().find(r => r.requestId === "socket-ai-models").assistant.models.find(m => m.provider.startsWith("desk-fixture-"));
 	assert.ok(registered, "real SDK facade exposes its registered faux model through Swift UDS");
+	assert.ok(!records().find(r => r.requestId === "socket-ai-models").assistant.models.some(m => m.provider === aliasProvider && m.modelId === aliasID), "SDK virtual aliases are not fixed-model choices");
+	send(aiPacket("socket-ai-virtual", { operation: "analyze", provider: aliasProvider, modelId: aliasID, thinking: "medium", sources: [{ ref: "S1", title: "Synthetic source", project: "fixture", status: "observed", tools: [], messages: [] }] }));
+	await until(() => records().some(r => r.requestId === "socket-ai-virtual" && r.assistant?.code === "model-unavailable"));
+	assert.equal(virtualRoutes, 0, "reject before any virtual routing or inference");
+	assert.equal(a.faux.state.callCount, 1);
 	send(aiPacket("socket-ai-context", { operation: "context" }));
 	await until(() => records().some(r => r.requestId === "socket-ai-context" && r.assistant?.status === "ok"));
 	const context = records().find(r => r.requestId === "socket-ai-context").assistant.messages;
@@ -132,6 +142,7 @@ try {
 			assistantScopedContext: true,
 			assistantDoesNotEnterBusinessHistory: true,
 			assistantDedup: true,
+			assistantRejectsSDKVirtualBeforeRouting: virtualRoutes === 0,
 			realProviderCalls: 0,
 		}),
 	);

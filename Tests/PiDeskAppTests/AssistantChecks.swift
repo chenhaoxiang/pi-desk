@@ -78,6 +78,42 @@ import PiDeskCore
     precondition(!client.canApplyGroups)
     client.applyGroups()
     precondition(model.sessionGroups == groupsBefore && model.store.requests.count == businessModelState)
+    // Broker B remains current while source A is replaced. Equal text cannot rebind cached E1 to E2.
+    var brokerSnapshot = replacement; brokerSnapshot.identity.nativeSessionId = "stable-ai-broker"
+    precondition(model.store.apply(WireRecord(kind: "hello", identity: brokerSnapshot.identity, snapshot: brokerSnapshot), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    model.select(brokerSnapshot.identity)
+    var cacheRequests: [(AssistantPayload, Identity, String)] = []
+    let scopedCache = DeskAssistantClient(transport: { payload, identity, id in cacheRequests.append((payload, identity, id)); return true })
+    scopedCache.bind(model); defer { scopedCache.stop() }
+    scopedCache.refreshModels()
+    scopedCache.receive(WireRecord(kind: "assistant-response", identity: brokerSnapshot.identity, requestId: cacheRequests.last!.2, assistant: modelReply))
+    scopedCache.choose(replacement.identity.sessionKey, selected: true); scopedCache.prepare()
+    scopedCache.receive(WireRecord(kind: "assistant-response", identity: replacement.identity, requestId: cacheRequests.last!.2, assistant: contextReply))
+    scopedCache.generate()
+    let oldSourceRequest = cacheRequests.last!
+    precondition(oldSourceRequest.1 == brokerSnapshot.identity)
+    var newest = replacement; newest.identity.runtimeEpoch = "cache-source-new-epoch"; newest.seq += 1
+    precondition(model.store.apply(WireRecord(kind: "hello", identity: newest.identity, snapshot: newest), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    scopedCache.receive(WireRecord(kind: "assistant-response", identity: brokerSnapshot.identity, requestId: oldSourceRequest.2, assistant: response.assistant))
+    precondition(scopedCache.analysis != nil && !scopedCache.canApplyGroups)
+    scopedCache.prepare()
+    scopedCache.receive(WireRecord(kind: "assistant-response", identity: newest.identity, requestId: cacheRequests.last!.2, assistant: contextReply))
+    let beforeNewRuntime = cacheRequests.count
+    scopedCache.generate()
+    precondition(cacheRequests.count == beforeNewRuntime + 1 && scopedCache.busy && scopedCache.analysis == nil, "old runtime result is not a cache hit even with identical model and source text")
+    let newSourceRequest = cacheRequests.last!
+    scopedCache.receive(WireRecord(kind: "assistant-response", identity: brokerSnapshot.identity, requestId: newSourceRequest.2, assistant: response.assistant))
+    precondition(scopedCache.canApplyGroups && scopedCache.resultSources.first?.identity == newest.identity)
+    let beforeSameRuntime = cacheRequests.count
+    scopedCache.generate()
+    precondition(cacheRequests.count == beforeSameRuntime && scopedCache.canApplyGroups, "same exact runtime retains normal cache reuse")
+    scopedCache.generate(force: true)
+    let beforeMissingUsage = model.aiUsageCounters["unconfirmed"] ?? 0
+    var zeroUsage = response.assistant!
+    zeroUsage.usage = try JSONDecoder().decode(AssistantUsage.self, from: Data(#"{"input":0,"output":0,"cacheRead":0,"cacheWrite":0}"#.utf8))
+    zeroUsage.possibleUsage = false
+    scopedCache.receive(WireRecord(kind: "assistant-response", identity: brokerSnapshot.identity, requestId: cacheRequests.last!.2, assistant: zeroUsage))
+    precondition(scopedCache.analysis != nil && model.aiUsageCounters["unconfirmed"] == beforeMissingUsage + 1, "an SDK default zero usage is not a confirmed settlement")
     model.assistant.extra = "unsent assistant context"
     precondition(model.requiresDraftConfirmation, "AI extra participates in the same exit protection")
     model.assistant.extra = ""

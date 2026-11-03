@@ -31,7 +31,8 @@ struct PreparedAssistantSource: Identifiable {
   private var generationFingerprint = ""
   private var submittedExtra = ""
   var hasUnsentExtra: Bool { !extra.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && extra != submittedExtra }
-  private struct Cached { let fingerprint: String; let analysis: AssistantAnalysis; let at: Date; let model: String }
+  private struct CacheInput: Encodable { let request: AssistantPayload; let broker: Identity; let identities: [Identity] }
+  private struct Cached { let fingerprint: String; let sources: [PreparedAssistantSource]; let analysis: AssistantAnalysis; let at: Date; let model: String }
   private var cached: Cached?
 
   func bind(_ model: AppModel) { self.model = model }
@@ -127,9 +128,11 @@ struct PreparedAssistantSource: Identifiable {
     payload.provider = provider; payload.modelId = modelID; payload.thinking = thinking; payload.sources = prepared.map(\.source); payload.extra = extra
     let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
     guard let bytes = try? encoder.encode(payload), bytes.count <= 32768 else { notice = "上下文超过32KiB，请移除消息或减少所选会话。"; return }
-    let fingerprint = NotificationTarget.hash(String(decoding: bytes, as: UTF8.self))
-    if !force, let cached, cached.fingerprint == fingerprint, Date().timeIntervalSince(cached.at) < 600 {
-      analysis = cached.analysis; generatedAt = cached.at; resultModel = cached.model; resultSources = prepared
+    // Identity stays local: equal text from a replacement runtime is not the same input.
+    guard let cacheBytes = try? encoder.encode(CacheInput(request: payload, broker: broker, identities: prepared.map(\.identity))) else { return }
+    let fingerprint = NotificationTarget.hash(String(decoding: cacheBytes, as: UTF8.self))
+    if !force, let cached, cached.fingerprint == fingerprint, cached.sources.map(\.identity) == prepared.map(\.identity), Date().timeIntervalSince(cached.at) < 600 {
+      analysis = cached.analysis; generatedAt = cached.at; resultModel = cached.model; resultSources = cached.sources
       notice = "相同输入已有缓存结果，未再次调用模型。"; return
     }
     resultSources = prepared; resultModel = provider + "/" + modelID + " · " + thinking
@@ -173,9 +176,11 @@ struct PreparedAssistantSource: Identifiable {
       let refs = Set(resultSources.map { $0.source.ref })
       if payload.status == "ok", let output = payload.analysis, output.valid(for: refs) {
         analysis = output; generatedAt = Date(); notice = "AI 建议已返回，不是执行或验收结论。"
-        cached = Cached(fingerprint: generationFingerprint, analysis: output, at: generatedAt!, model: resultModel)
+        if resultIsCurrent { cached = Cached(fingerprint: generationFingerprint, sources: resultSources, analysis: output, at: generatedAt!, model: resultModel) }
       } else { notice = message(payload.code) }
-      model?.recordAssistantUsage(payload.usage, unconfirmed: payload.possibleUsage == true || payload.status == "unknown")
+      var hasReportedTokens = false
+      if let usage = payload.usage { hasReportedTokens = usage.input > 0 || usage.output > 0 || usage.cacheRead > 0 || usage.cacheWrite > 0 }
+      model?.recordAssistantUsage(payload.usage, unconfirmed: payload.possibleUsage == true || payload.status == "unknown" || (payload.status == "ok" && !hasReportedTokens))
     case "cancel": if busy { notice = "取消请求已受理；等待原 AI 请求终态，不影响业务 Pi。" }
     default: break
     }

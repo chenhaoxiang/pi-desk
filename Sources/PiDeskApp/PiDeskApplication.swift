@@ -94,8 +94,8 @@ import SwiftUI
         CommandGroup(after: .appInfo) {
           Button("打开管理窗口") { delegate.showManager() }.keyboardShortcut("0", modifiers: .command)
           Button("展开顶部速览") { delegate.island.expand() }.disabled(delegate.model.settings.displayMode == .menuOnly)
-          Button("命令面板") { delegate.model.modal = .commands }.keyboardShortcut("k", modifiers: .command)
-          Button("未发送草稿") { delegate.model.modal = .drafts }
+          Button("命令面板") { delegate.model.presentModal(.commands) }.keyboardShortcut("k", modifiers: .command)
+          Button("未发送草稿") { delegate.model.presentModal(.drafts) }
         }
         CommandMenu("导航") {
           Button("会话") { delegate.model.navigate(to: "会话") }.keyboardShortcut("1", modifiers: .command)
@@ -137,10 +137,7 @@ struct MenuContents: View {
       Button("打开管理窗口") { model.showManager() }
       Divider()
       Toggle("本次静音提醒", isOn: $model.muted)
-      Button("退出 Pi Desk（Pi 继续）") {
-        model.stop()
-        NSApp.terminate(nil)
-      }
+      Button("退出 Pi Desk（Pi 继续）") { model.requestQuit() }
     }.padding(18).frame(width: 300)
   }
 }

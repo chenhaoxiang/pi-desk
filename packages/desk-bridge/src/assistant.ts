@@ -100,7 +100,8 @@ export class DeskAssistant {
       catch { this.finish(id, { operation: "context", status: "error", code: "context-unavailable" }); }
       return;
     }
-    const available = ctx.modelRegistry.getAvailable().filter(m => !forbiddenProvider(m.provider));
+    // Virtual aliases can reroute provider/model/thinking. This explicit fixed-model API does not admit them.
+    const available = ctx.modelRegistry.getAvailable().filter(m => m.api !== "pi-virtual" && !forbiddenProvider(m.provider));
     if (request.operation === "models") {
       const wanted = request.provider && request.modelId ? request.provider + "/" + request.modelId : "codex-local-8319/gpt-6.1-sol";
       const sorted = [...available].sort((a, b) => Number(b.provider + "/" + b.id === wanted) - Number(a.provider + "/" + a.id === wanted) || (a.provider + "/" + a.id).localeCompare(b.provider + "/" + b.id));
@@ -134,7 +135,7 @@ export class DeskAssistant {
       if (!validAnalysis(parsed, refs)) throw Error("analysis-invalid-output");
       const clean = { overview: parsed.overview, summaries: parsed.summaries.map(s => ({ ref: s.ref, text: s.text })), groups: parsed.groups.map(g => ({ name: g.name.trim(), refs: g.refs, reason: g.reason })) };
       if (!validAnalysis(clean, refs)) throw Error("analysis-invalid-output");
-      this.finish(id, { operation: "analyze", status: "ok", code: "analysis-ready", provider: model.provider, modelId: model.id, thinking: request.thinking, analysis: clean, usage: reported, possibleUsage: !reported });
+      this.finish(id, { operation: "analyze", status: "ok", code: "analysis-ready", provider: model.provider, modelId: model.id, thinking: request.thinking, analysis: clean, usage: reported, possibleUsage: !reported || !Object.values(reported).some(value => value > 0) });
     } catch {
       this.finish(id, { operation: "analyze", status: controller.signal.aborted ? "unknown" : "error", code: controller.signal.aborted ? "cancel-or-timeout" : "analysis-unconfirmed", possibleUsage: true, usage: reported });
     } finally { clearTimeout(timer); if (this.active?.id === id) this.active = undefined; }

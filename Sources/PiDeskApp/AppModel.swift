@@ -134,6 +134,8 @@ struct DeskSettings: Codable {
   private(set) var managerIsVisible = false
   private var viewStateLoaded = false
   private var viewStateTouchedBeforeLoad = false
+  // Only explicit group edits are overlaid onto saved data; an unloaded empty map is not a deletion.
+  private var preLoadGroupEdits: [String: String] = [:]
   private var restoringViewState = false
   private var selectionPinned = false
   private var pendingSelectionHash: String?
@@ -156,6 +158,9 @@ struct DeskSettings: Codable {
   let isPreview: Bool
   var showManager: () -> Void = {}
   var showIsland: () -> Void = {}
+  var requestTermination: () -> Void = { NSApp.terminate(nil) }
+  func requestQuit() { requestTermination() } // Teardown belongs only to applicationWillTerminate.
+  func presentModal(_ modal: DeskModal) { showManager(); self.modal = modal }
   var unsentDraftIdentities: [Identity] {
     drafts.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.keys.sorted {
       ($0.sessionKey + $0.runtimeEpoch) < ($1.sessionKey + $1.runtimeEpoch)
@@ -175,21 +180,34 @@ struct DeskSettings: Codable {
   var groupFilterTitle: String { groupFilter.isEmpty ? "全部分组" : groupFilter == "__none__" ? "未分组" : groupFilter }
   func workGroup(_ identity: Identity) -> String? { sessionGroups[UsageViewStateKey.hash(identity.sessionKey)] }
   @discardableResult func assignGroups(_ changes: [(Identity, String)]) -> Bool {
-    var proposed = sessionGroups
+    var proposed = sessionGroups, explicit: [String: String] = [:]
     for (identity, raw) in changes {
       guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return false }
       let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
       guard name.utf8.count <= 64, !["全部分组", "未分组", "__none__"].contains(name),
         !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else { return false }
-      proposed[UsageViewStateKey.hash(identity.sessionKey)] = name.isEmpty ? nil : name
+      let key = UsageViewStateKey.hash(identity.sessionKey)
+      proposed[key] = name.isEmpty ? nil : name; explicit[key] = name
     }
     guard proposed.count <= 64, Set(proposed.values).count <= 16 else { return false }
-    sessionGroups = proposed
+    guard updateGroups(proposed, explicit: explicit) else { return false }
     if !groupFilter.isEmpty { groupFilter = "" }
     persistViewState(); return true
   }
+  private func updateGroups(_ proposed: [String: String], explicit: [String: String] = [:]) -> Bool {
+    if !viewStateLoaded && !isPreview {
+      var edits = preLoadGroupEdits.merging(explicit) { _, new in new }
+      for key in Set(sessionGroups.keys).union(proposed.keys) where sessionGroups[key] != proposed[key] {
+        edits[key] = proposed[key] ?? ""
+      }
+      guard edits.count <= 128 else { actionNote = "分组偏好仍在加载，请稍后再修改；旧数据未覆盖。"; return false }
+      preLoadGroupEdits = edits
+    }
+    sessionGroups = proposed
+    return true
+  }
   func removeWorkGroup(_ name: String) {
-    sessionGroups = sessionGroups.filter { $0.value != name }
+    guard updateGroups(sessionGroups.filter { $0.value != name }) else { return }
     if groupFilter == name { groupFilter = "" }
     persistViewState()
   }
@@ -395,9 +413,7 @@ struct DeskSettings: Codable {
     if Self.sessionFilters.contains(state.sessionFilter) { sessionFilter = state.sessionFilter }
     pinnedKeyHashes = Set(state.pinnedKeyHashes ?? [])
     sessionAliases = state.sessionAliases ?? [:]
-    sessionGroups = state.sessionGroups ?? [:]
     groupFilter = state.groupFilter ?? ""
-    aiUsageCounters = state.aiUsageCounters ?? [:]
     reviewedResultSequences = state.reviewedResultSequences ?? [:]
     usageComparisonEnabled = state.comparisonEnabled ?? false
     usageModel = state.usageModel
@@ -409,6 +425,24 @@ struct DeskSettings: Codable {
     for session in sessions where session.connection != .connected && pendingHiddenHashes.contains(UsageViewStateKey.hash(session.snapshot.identity.sessionKey)) {
       hiddenSessions.insert(session.snapshot.identity.sessionKey)
     }
+  }
+  private func restoreOrganizationAndAIUsage(_ stored: UsageViewState?) {
+    defer { preLoadGroupEdits.removeAll() }
+    guard let stored, stored.valid else { return }
+    var groups = stored.sessionGroups ?? [:]
+    for (key, value) in preLoadGroupEdits { groups[key] = value.isEmpty ? nil : value }
+    var check = UsageViewState(); check.sessionGroups = groups
+    if check.valid { sessionGroups = groups }
+    else {
+      sessionGroups = stored.sessionGroups ?? [:]
+      actionNote = "启动期间的分组修改超出保存容量，旧分组已保留；请加载后重新设置。"
+    }
+    var totals = stored.aiUsageCounters ?? [:]
+    for (key, delta) in aiUsageCounters {
+      let sum = (totals[key] ?? 0).addingReportingOverflow(delta)
+      totals[key] = sum.overflow ? Int64.max : sum.partialValue
+    }
+    aiUsageCounters = totals
   }
   private func currentViewState() -> UsageViewState {
     var state = UsageViewState()
@@ -734,6 +768,7 @@ struct DeskSettings: Codable {
         guard let self else { return }
         if let issue { self.actionNote = issue }
         if !self.viewStateTouchedBeforeLoad { self.applyViewState(state) }
+        self.restoreOrganizationAndAIUsage(state)
         self.viewStateLoaded = true
         self.selectPreferredSession()
         self.refreshUsage()

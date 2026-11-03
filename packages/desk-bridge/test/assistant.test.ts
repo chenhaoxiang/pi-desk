@@ -10,7 +10,7 @@ const identity = { localHostId: "fixture", nativeSessionId: "assistant-session",
 const tick = (ms = 15) => new Promise<void>(resolve => setTimeout(resolve, ms));
 const analysis = { overview: "合成概览", summaries: [{ ref: "S1", text: "依据合成输入，不代表验收完成" }], groups: [{ name: "合成分组", refs: ["S1"], reason: "用户可选择采纳" }] };
 const source = { ref: "S1", title: "Synthetic task", project: "fixture", status: "running", tools: ["read"], messages: [{ id: "entry", role: "user", text: "USER_ALLOWED" }] };
-function fixture(options: { hold?: boolean; output?: unknown; timeout?: number; throwProvider?: boolean } = {}) {
+function fixture(options: { hold?: boolean; output?: unknown; timeout?: number; throwProvider?: boolean; usageMode?: "missing" | "zero" } = {}) {
   let calls = 0, businessAborts = 0, ownAborts = 0;
   const captured: { context: unknown; options: unknown }[] = [], replies: RecordV1[] = [];
   const observers = new Set<() => void>();
@@ -30,7 +30,7 @@ function fixture(options: { hold?: boolean; output?: unknown; timeout?: number; 
       getAvailable: () => [model],
       streamSimple(_model: unknown, context: unknown, streamOptions: { signal?: AbortSignal; reasoning?: string }) {
         calls++; captured.push({ context, options: streamOptions });
-        const response = () => ({ role: "assistant", provider: model.provider, model: model.id, content: [{ type: "text", text: JSON.stringify(options.output ?? analysis) }], stopReason: "stop", usage: { input: 10, output: 20, cacheRead: 3, cacheWrite: 0 } });
+        const response = () => ({ role: "assistant", provider: model.provider, model: model.id, content: [{ type: "text", text: JSON.stringify(options.output ?? analysis) }], stopReason: "stop", usage: options.usageMode === "missing" ? undefined : options.usageMode === "zero" ? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } : { input: 10, output: 20, cacheRead: 3, cacheWrite: 0 } });
         return { result: () => {
           if (options.throwProvider) return Promise.reject(Error("PRIVATE_PROVIDER_HEADER"));
           if (!options.hold) return Promise.resolve(response());
@@ -123,6 +123,20 @@ test("invalid refs and provider errors remain errors, never new execution instru
     const f = fixture(options);
     try { f.service.handle(f.generate()); await f.settled("analysis-1"); assert.equal(f.counts().calls, 1); assert.equal(f.replies.at(-1)?.assistant?.status, "error"); assert.ok(!JSON.stringify(f.replies).includes("PRIVATE_PROVIDER_HEADER")); }
     finally { f.service.close(); }
+  }
+});
+test("successful nonempty output with missing or SDK-default zero usage remains usage-unconfirmed", async () => {
+  for (const usageMode of ["missing", "zero"] as const) {
+    const f = fixture({ usageMode });
+    try {
+      f.service.handle(f.generate()); await f.settled("analysis-1");
+      const reply = f.replies.at(-1)?.assistant;
+      assert.equal(reply?.status, "ok"); assert.deepEqual(reply?.analysis, analysis);
+      assert.equal(reply?.possibleUsage, true, "valid analysis is not a usage settlement receipt");
+      if (usageMode === "missing") assert.equal(reply?.usage, undefined);
+      else assert.deepEqual(reply?.usage, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+      assert.equal(f.counts().calls, 1);
+    } finally { f.service.close(); }
   }
 });
 test("assistant schema rejects oversized arrays, unrecognized refs, unsupported kinds and stale identities", async () => {

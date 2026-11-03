@@ -27,6 +27,7 @@ import Darwin
     state.sessionAliases = [UsageViewStateKey.hash("alias"): "登录修复"]
     state.reviewedResultSequences = [UsageViewStateKey.hash("epoch-result"): 3]
     state.comparisonEnabled = true
+    state.aiUsageCounters = ["requests": 2, "unconfirmed": 1, "input": 10, "output": 20, "cacheRead": 3, "cacheWrite": 0]
     precondition(ledger.flushViewState(state), "view state flush must complete before shutdown returns")
     let restored = await loadState(ledger)
     precondition(restored == state && restored?.version == UsageViewState.currentVersion, "low-sensitivity view state round trips in the existing SQLite")
@@ -41,6 +42,8 @@ import Darwin
     maximumState.dismissedKeyHashes = (0..<1024).map { UsageViewStateKey.hash("read-\($0)") }
     maximumState.pinnedKeyHashes = (0..<64).map { UsageViewStateKey.hash("pin-\($0)") }
     maximumState.sessionAliases = Dictionary(uniqueKeysWithValues: (0..<32).map { (UsageViewStateKey.hash("alias-\($0)"), String(repeating: "A", count: 128)) })
+    maximumState.sessionGroups = Dictionary(uniqueKeysWithValues: (0..<64).map { (UsageViewStateKey.hash("group-\($0)"), "分组-\($0 % 16)") })
+    maximumState.groupFilter = "分组-1"
     maximumState.reviewedResultSequences = Dictionary(uniqueKeysWithValues: (0..<64).map { (UsageViewStateKey.hash("result-\($0)"), 9_007_199_254_740_991) })
     let maximumBytes = try JSONEncoder().encode(maximumState).count
     precondition(maximumState.valid && maximumBytes <= UsageViewState.maximumBytes)

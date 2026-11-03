@@ -267,10 +267,11 @@ public struct WireRecord: Codable, Sendable {
   public var query: String?
   public var result: ActionResult?
   public var operation: Operation?
+  public var assistant: AssistantPayload?
   public init(
     kind: String, identity: Identity, snapshot: Snapshot? = nil, requestId: String? = nil,
     issuedAt: Double? = nil, action: Action? = nil, target: Target? = nil,
-    parameters: Parameters? = nil, query: String? = nil
+    parameters: Parameters? = nil, query: String? = nil, assistant: AssistantPayload? = nil
   ) {
     self.kind = kind
     self.identity = identity
@@ -281,6 +282,7 @@ public struct WireRecord: Codable, Sendable {
     self.target = target
     self.parameters = parameters
     self.query = query
+    self.assistant = assistant
   }
   public func validate() throws {
     guard version == 1 else { throw WireError.incompatibleVersion }
@@ -301,6 +303,10 @@ public struct WireRecord: Codable, Sendable {
         ["rejected", "accepted", "queued", "requested", "unknown"].contains(r.status),
         r.code.utf8.count <= 128
       else { throw WireError.invalidRecord }
+    case "assistant-request", "assistant-response":
+      guard let id = requestId, !id.isEmpty, id.utf8.count <= 128, let payload = assistant, payload.valid else { throw WireError.invalidRecord }
+      if kind == "assistant-request" { guard let date = issuedAt, date.isFinite, payload.status == nil else { throw WireError.invalidRecord } }
+      else { guard payload.status != nil else { throw WireError.invalidRecord } }
     case "operation-update": guard operation != nil else { throw WireError.invalidRecord }
     default: throw WireError.invalidRecord
     }

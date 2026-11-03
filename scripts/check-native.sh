@@ -7,6 +7,7 @@ swift run --skip-build PiDeskTransportTests
 bash scripts/check-draft.sh --skip-build
 bash scripts/check-usage.sh
 bash scripts/check-narrow-ux.sh
+bash scripts/check-assistant.sh --skip-build
 bash scripts/check-ledger-cache.sh
 bash scripts/check-pi-settings.sh
 /usr/bin/python3 Tests/PiDeskAppTests/HistoryBackfillChecks.py

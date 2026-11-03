@@ -75,6 +75,26 @@ try {
 		records().find((r) => r.requestId === "socket-send-1").result.status,
 		"requested",
 	);
+	await a.session.waitForIdle();
+	const businessHistory = JSON.stringify(a.session.messages), businessModel = a.session.model, businessThinking = a.session.thinkingLevel;
+	const aiPacket = (requestId, assistant) => ({ version: 1, kind: "assistant-request", identity, requestId, issuedAt: Date.now(), assistant });
+	send(aiPacket("socket-ai-models", { operation: "models" }));
+	await until(() => records().some(r => r.requestId === "socket-ai-models" && r.assistant?.status === "ok"));
+	const registered = records().find(r => r.requestId === "socket-ai-models").assistant.models.find(m => m.provider.startsWith("desk-fixture-"));
+	assert.ok(registered, "real SDK facade exposes its registered faux model through Swift UDS");
+	send(aiPacket("socket-ai-context", { operation: "context" }));
+	await until(() => records().some(r => r.requestId === "socket-ai-context" && r.assistant?.status === "ok"));
+	const context = records().find(r => r.requestId === "socket-ai-context").assistant.messages;
+	assert.ok(context.some(m => m.role === "user") && context.every(m => ["user", "assistant"].includes(m.role)));
+	const summary = { overview: "Synthetic UDS result", summaries: [{ ref: "S1", text: "Evidence only, not business completion" }], groups: [{ name: "Synthetic group", refs: ["S1"], reason: "Local display suggestion" }] };
+	a.faux.setResponses(Array.from({ length: 12 }, () => ai.fauxAssistantMessage(JSON.stringify(summary))));
+	const aiAnalysis = aiPacket("socket-ai-analysis", { operation: "analyze", provider: registered.provider, modelId: registered.modelId, thinking: registered.thinkingLevels[0], sources: [{ ref: "S1", title: "Synthetic source", project: "fixture", status: "observed", tools: [], messages: context }] });
+	send(aiAnalysis); send(aiAnalysis);
+	await until(() => records().some(r => r.requestId === "socket-ai-analysis" && r.assistant?.status === "ok"));
+	assert.equal(a.faux.state.callCount, 2, "duplicate AI packet cannot spend twice");
+	assert.equal(JSON.stringify(a.session.messages), businessHistory, "assistant inference must not enter business conversation history");
+	assert.equal(a.session.model, businessModel); assert.equal(a.session.thinkingLevel, businessThinking);
+	assert.equal(b.faux.state.callCount, 0);
 	const previous = server;
 	previous.kill("SIGKILL");
 	await new Promise((r) => previous.once("exit", r));
@@ -82,7 +102,7 @@ try {
 		a.session.prompt("continues without app"),
 		b.session.prompt("independent continues"),
 	]);
-	assert.equal(a.faux.state.callCount, 2);
+	assert.equal(a.faux.state.callCount, 3);
 	assert.equal(b.faux.state.callCount, 1);
 	events.length = 0;
 	await start();
@@ -95,7 +115,7 @@ try {
 			).size === 2,
 		10000,
 	);
-	assert.equal(a.faux.state.callCount, 2);
+	assert.equal(a.faux.state.callCount, 3);
 	assert.equal(b.faux.state.callCount, 1);
 	assert.deepEqual(a.errors, []);
 	assert.deepEqual(b.errors, []);
@@ -108,6 +128,10 @@ try {
 			dedup: true,
 			killReceiverPiContinues: true,
 			reconnectNoReplay: true,
+			assistantRegisteredModel: true,
+			assistantScopedContext: true,
+			assistantDoesNotEnterBusinessHistory: true,
+			assistantDedup: true,
 			realProviderCalls: 0,
 		}),
 	);

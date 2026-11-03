@@ -16,9 +16,9 @@
 		"test:native-sdk": "node --import tsx scripts/check-baseline.mjs && node --import tsx scripts/check-recovery-native.mjs && node --import tsx scripts/check-native-host.mjs && node --import tsx scripts/check-native-controls.mjs && node --import tsx scripts/check-input-native.mjs"
 	},
 	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "1.5.0",
 		"@types/node": "24.19.2",
-		"typescript": "6.0.2",
 		"tsx": "4.21.0",
-		"@earendil-works/pi-coding-agent": "1.4.0"
+		"typescript": "6.0.2"
 	}
 }

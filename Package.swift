@@ -15,7 +15,7 @@ let package = Package(
     .executableTarget(
       name: "PiDeskCoreTests", dependencies: ["PiDeskCore"], path: "Tests/PiDeskCoreTests"),
     .executableTarget(
-      name: "PiDeskTransportTests", dependencies: ["PiDeskTransport"],
+      name: "PiDeskTransportTests", dependencies: ["PiDeskTransport", "PiDeskCore"],
       path: "Tests/PiDeskTransportTests"),
   ], swiftLanguageModes: [.v5]
 )

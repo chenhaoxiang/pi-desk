@@ -28,6 +28,7 @@ import {
 	scheduleProjection,
 } from "./owners.ts";
 import { ActionRouter } from "./actions.ts";
+import { DeskAssistant, assistantSupported } from "./assistant.ts";
 import { BridgeTransport } from "./transport.ts";
 import { runtimePath, helperPath } from "./security.ts";
 import { projectMetadata } from "./metadata.ts";
@@ -71,6 +72,7 @@ export class DeskSession {
 	private subagents: OwnerRPC;
 	private schedules: OwnerRPC;
 	private router: ActionRouter;
+	private assistant: DeskAssistant;
 	private transport: TransportLike;
 	private usage: AttachmentUsage;
 	private usageWriter?: UsageWriter;
@@ -130,6 +132,7 @@ export class DeskSession {
 					"usage.refresh",
 					"schedules.refresh",
 					"operation.status",
+					...(assistantSupported(ctx) ? ["assistant"] : []),
 				],
 				owners: {
 					pi: "extension-api-1.4",
@@ -179,6 +182,7 @@ export class DeskSession {
 				() => this.record("hello"),
 				(r) => this.receive(r),
 			);
+		this.assistant = new DeskAssistant(() => this.ctx, identity, record => this.transport.reply(record), this.now);
 		this.off.push(
 			pi.events.on("subagents:rpc:v1:ready", () => this.deferRefresh(false)),
 		);
@@ -820,6 +824,7 @@ export class DeskSession {
 	}
 	private receive(r: RecordV1) {
 		if (this.stopped) return;
+		if (r.kind === "assistant-request") { this.assistant.handle(r); return; }
 		if (r.kind === "action") {
 			if (this.receiving >= 8) {
 				this.transport.reply({
@@ -859,6 +864,7 @@ export class DeskSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.usageWriter?.close();
+		this.assistant.close();
 		this.ctx = undefined;
 		for (const off of this.off) off();
 		this.off = [];

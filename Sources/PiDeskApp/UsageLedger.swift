@@ -88,7 +88,7 @@ public enum UsageOrigin: String, CaseIterable, Identifiable {
 }
 public struct UsageViewState: Codable, Equatable {
   public static let currentVersion = 1
-  public static let maximumBytes = 96 * 1024
+  public static let maximumBytes = 128 * 1024
   public var version: Int = currentVersion
   public var page: String = "会话"
   public var sessionFilter: String = "在线"
@@ -106,11 +106,14 @@ public struct UsageViewState: Codable, Equatable {
   public var sessionAliases: [String: String]?
   public var reviewedResultSequences: [String: Int]?
   public var comparisonEnabled: Bool?
+  public var sessionGroups: [String: String]?
+  public var groupFilter: String?
+  public var aiUsageCounters: [String: Int64]?
 
   public init() {}
   public var migratedNavigation: UsageViewState {
     var result = self
-    if !["会话", "Token", "重要事项", "设置"].contains(result.page) { result.page = "会话" }
+    if !["会话", "Token", "重要事项", "AI助手", "接入健康", "设置"].contains(result.page) { result.page = "会话" }
     return result
   }
   public var valid: Bool {
@@ -123,6 +126,10 @@ public struct UsageViewState: Codable, Equatable {
       && validDates && (selectedKeyHash == nil || hash(selectedKeyHash!))
       && hiddenKeyHashes.count <= 64 && hiddenKeyHashes.allSatisfy(hash)
       && dismissedKeyHashes.count <= 1024 && dismissedKeyHashes.allSatisfy(hash)
+      && (aiUsageCounters ?? [:]).count <= 6 && (aiUsageCounters ?? [:]).allSatisfy { ["requests", "unconfirmed", "input", "output", "cacheRead", "cacheWrite"].contains($0.key) && $0.value >= 0 }
+      && (groupFilter == nil || (groupFilter!.utf8.count <= 64 && !groupFilter!.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })))
+      && (sessionGroups ?? [:]).count <= 64 && Set((sessionGroups ?? [:]).values).count <= 16
+      && (sessionGroups ?? [:]).allSatisfy { key, value in hash(key) && !value.isEmpty && value.utf8.count <= 64 && !["全部分组", "未分组", "__none__"].contains(value) && !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) }
       && (reviewedResultSequences ?? [:]).count <= 64 && (reviewedResultSequences ?? [:]).allSatisfy { key, value in hash(key) && value > 0 && value <= 9_007_199_254_740_991 }
       && (pinnedKeyHashes ?? []).count <= 64 && (pinnedKeyHashes ?? []).allSatisfy(hash)
       && (sessionAliases ?? [:]).count <= 32 && (sessionAliases ?? [:]).allSatisfy { key, value in

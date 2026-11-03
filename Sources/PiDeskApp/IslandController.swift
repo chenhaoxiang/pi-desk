@@ -51,6 +51,7 @@ private final class IslandHostingView: NSHostingView<AnyView> {
   private var started = false
   private var rows = 0
   private var pointerInside = false
+  private var appliedMode: IslandDisplayMode?
   private var localMonitor: Any?
   var reducedMotion: Bool {
     NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -84,6 +85,25 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     else { return nil }
     return NSScreen.screens[index]
   }
+  private func preferredScreen(_ settings: DeskSettings) -> NSScreen? {
+    if let preview = previewScreen() { return preview }
+    if settings.screenPolicy == "main" { return NSScreen.screens.first }
+    if settings.screenPolicy.hasPrefix("display:"), let id = UInt32(settings.screenPolicy.dropFirst(8)) {
+      return NSScreen.screens.first { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == id } ?? NSScreen.screens.first
+    }
+    return manager?.screen ?? NSScreen.main ?? NSScreen.screens.first
+  }
+  private func applyDisplay(_ settings: DeskSettings) {
+    screen = preferredScreen(settings)
+    let changed = appliedMode != settings.displayMode
+    appliedMode = settings.displayMode
+    if settings.displayMode == .menuOnly { collapse(); panel?.orderOut(nil); reportPreview(); return }
+    if changed && settings.displayMode == .pinned { expand(); state.pinned = true }
+    else if changed { state.pinned = false }
+    updateGeometry(animated: false)
+    panel?.orderFrontRegardless()
+    reportPreview()
+  }
   private func createPanel(model: AppModel) {
     guard !started else { return }
     started = true
@@ -111,8 +131,9 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     hosting.hoverChanged = { [weak self] value in self?.hover(value) }
     panel.contentView = hosting
     self.panel = panel
-    updateGeometry(animated: false)
-    panel.orderFrontRegardless()
+    applyDisplay(model.settings)
+    model.$settings.removeDuplicates { $0.displayMode == $1.displayMode && $0.screenPolicy == $1.screenPolicy }.dropFirst()
+      .receive(on: RunLoop.main).sink { [weak self] value in self?.applyDisplay(value) }.store(in: &subscriptions)
     NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
       .receive(on: RunLoop.main).sink { [weak self] _ in
         self?.screen = self?.previewScreen() ?? self?.manager?.screen ?? NSScreen.main
@@ -144,7 +165,8 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     if CommandLine.arguments.contains("--island-expanded") { expand() }
   }
   func updateGeometry(animated: Bool) {
-    guard let panel = panel, let screen = screen ?? NSScreen.main else { return }
+    guard let panel = panel, let screen = preferredScreen(model?.settings ?? DeskSettings()) ?? self.screen ?? NSScreen.main else { return }
+    self.screen = screen
     var gap = 0.0
     if let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
       gap = max(0, right.minX - left.maxX)
@@ -222,6 +244,7 @@ private final class IslandHostingView: NSHostingView<AnyView> {
     panel?.makeKey()
   }
   func expand() {
+    guard model?.settings.displayMode != .menuOnly else { return }
     leave?.cancel()
     guard !state.expanded else { return }
     spotlightIdentities = model?.spotlightSessions.map { $0.snapshot.identity } ?? []

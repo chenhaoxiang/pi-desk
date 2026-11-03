@@ -291,7 +291,7 @@ public final class SocketServer: @unchecked Sendable {
             c.identity = record.identity
           }
           guard c.identity == record.identity,
-            ["hello", "snapshot", "action-result", "operation-update"].contains(record.kind)
+            ["hello", "snapshot", "action-result", "operation-update", "assistant-response"].contains(record.kind)
           else {
             closeClient(c.id)
             return

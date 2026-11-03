@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { validAssistant, type AssistantPayload } from "./assistant-protocol.ts";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
@@ -177,6 +178,7 @@ export type RecordV1 = {
 	parameters?: Parameters;
 	query?: string;
 	result?: Result;
+	assistant?: AssistantPayload;
 	operation?: {
 		owner: string;
 		runId: string;
@@ -324,6 +326,10 @@ export function validate(v: unknown): asserts v is RecordV1 {
 			!safeId(v.result.code)
 		)
 			throw new Error("invalid-result");
+	} else if (v.kind === "assistant-request" || v.kind === "assistant-response") {
+		if (!safeId(v.requestId) || !validAssistant(v.assistant) ||
+			(v.kind === "assistant-request" && (!Number.isFinite(v.issuedAt) || v.assistant.status !== undefined)) ||
+			(v.kind === "assistant-response" && v.assistant.status === undefined)) throw new Error("invalid-assistant");
 	} else if (v.kind === "operation-update") {
 		if (!object(v.operation)) throw new Error("invalid-operation");
 	} else throw new Error("unknown-kind");

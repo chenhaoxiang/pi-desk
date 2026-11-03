@@ -19,7 +19,8 @@ import SwiftUI
   func applicationDidFinishLaunching(_ notification: Notification) {
     model.showManager = { [weak self] in self?.showManager() }
     island.start(model: model)
-    if CommandLine.arguments.contains("--show-manager") { showManager(activate: false) }
+    if model.notificationActivationRequested { showManager() }
+    else if CommandLine.arguments.contains("--show-manager") { showManager(activate: false) }
   }
   func showManager(activate: Bool = true) {
     if manager == nil {
@@ -64,6 +65,16 @@ import SwiftUI
     showManager()
     return true
   }
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    guard model.requiresDraftConfirmation else { return .terminateNow }
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "还有 \(model.unsentDraftCount) 份未发送草稿"
+    alert.informativeText = "退出或更新不会停止 Pi，但这些草稿不会自动保存。保留草稿可继续使用 App；只有明确丢弃才退出。"
+    alert.addButton(withTitle: "保留草稿，继续使用")
+    alert.addButton(withTitle: "丢弃草稿并退出")
+    return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+  }
   func applicationWillTerminate(_ notification: Notification) {
     model.flushViewState()
     island.stop()
@@ -82,12 +93,16 @@ import SwiftUI
       .commands {
         CommandGroup(after: .appInfo) {
           Button("打开管理窗口") { delegate.showManager() }.keyboardShortcut("0", modifiers: .command)
-          Button("展开顶部速览") { delegate.island.expand() }
+          Button("展开顶部速览") { delegate.island.expand() }.disabled(delegate.model.settings.displayMode == .menuOnly)
+          Button("命令面板") { delegate.model.modal = .commands }.keyboardShortcut("k", modifiers: .command)
+          Button("未发送草稿") { delegate.model.modal = .drafts }
         }
         CommandMenu("导航") {
           Button("会话") { delegate.model.navigate(to: "会话") }.keyboardShortcut("1", modifiers: .command)
           Button("Token") { delegate.model.navigate(to: "Token") }.keyboardShortcut("2", modifiers: .command)
           Button("重要事项") { delegate.model.navigate(to: "重要事项") }.keyboardShortcut("3", modifiers: .command)
+          Button("接入健康") { delegate.model.navigate(to: "接入健康") }.keyboardShortcut("4", modifiers: .command)
+          Button("AI助手") { delegate.model.navigate(to: "AI助手") }.keyboardShortcut("5", modifiers: .command)
           Divider()
           Button("搜索会话") { delegate.model.focusSessionSearch() }.keyboardShortcut("f", modifiers: .command)
           Button("下一个需关注会话") { delegate.model.nextAttentionSession() }.keyboardShortcut("n", modifiers: [.command, .option])
@@ -118,7 +133,7 @@ struct MenuContents: View {
       if model.unknownExecutionCount > 0 {
         Text("执行状态待核 \(model.unknownExecutionCount)（不代表本机全部Pi）").font(.caption).foregroundStyle(.orange)
       }
-      Button("展开顶部速览") { model.showIsland() }
+      Button("展开顶部速览") { model.showIsland() }.disabled(model.settings.displayMode == .menuOnly)
       Button("打开管理窗口") { model.showManager() }
       Divider()
       Toggle("本次静音提醒", isOn: $model.muted)
@@ -132,7 +147,7 @@ struct MenuContents: View {
 struct DeskWindow: View {
   @EnvironmentObject var model: AppModel
   @Environment(\.colorScheme) private var scheme
-  let pages = ["会话", "Token", "重要事项", "设置"]
+  let pages = DeskNavigation.pages
   var body: some View {
     NavigationSplitView {
       VStack(spacing: 0) {
@@ -159,7 +174,19 @@ struct DeskWindow: View {
       VStack(spacing: 0) {
         header
         Divider()
-        if model.page == "设置" {
+        if let notice = model.navigationNotice {
+          HStack(alignment: .top) {
+            Label(notice, systemImage: "info.circle").font(.caption).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button { model.navigationNotice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).accessibilityLabel("关闭导航提示")
+          }.padding(14).foregroundStyle(.secondary)
+          Divider()
+        }
+        if model.page == "AI助手" {
+          AssistantPage(model: model)
+        } else if model.page == "接入健康" {
+          HealthPage()
+        } else if model.page == "设置" {
           ScrollView { SettingsPage().padding(24) }
         } else if model.page == "Token" {
           AggregateTokenPage()
@@ -174,6 +201,13 @@ struct DeskWindow: View {
       }
     }.background(Color(nsColor: .windowBackgroundColor))
       .onChange(of: model.page) { _, _ in model.persistViewState() }
+      .sheet(item: $model.modal) { modal in
+        switch modal {
+        case .commands: CommandPaletteView().environmentObject(model)
+        case .drafts: DraftsView(model: model).environmentObject(model)
+        case .groups: WorkGroupsView().environmentObject(model)
+        }
+      }
   }
   var header: some View {
     HStack {
@@ -209,6 +243,7 @@ struct DeskWindow: View {
   func icon(_ p: String) -> String {
     [
       "会话": "rectangle.stack", "Token": "chart.bar", "重要事项": "bell", "设置": "gearshape",
+      "AI助手": "sparkles", "接入健康": "heart.text.square",
     ][p] ?? "circle"
   }
 }
@@ -227,7 +262,15 @@ struct SessionList: View {
         HStack {
           Picker("状态", selection: $model.sessionFilter) {
             ForEach(AppModel.sessionFilters, id: \.self) { Text($0).tag($0) }
-          }.pickerStyle(.menu).accessibilityLabel("按状态筛选会话")
+          }.pickerStyle(.menu).labelsHidden().frame(width: 96).accessibilityLabel("按状态筛选会话")
+          Menu {
+            Button("全部分组") { model.groupFilter = ""; model.persistViewState() }
+            Button("未分组") { model.groupFilter = "__none__"; model.persistViewState() }
+            ForEach(model.workGroups, id: \.self) { name in Button(name) { model.groupFilter = name; model.persistViewState() } }
+            Divider()
+            Button("管理工作分组") { model.modal = .groups }
+          } label: { Label(model.groupFilterTitle, systemImage: "folder").lineLimit(1) }
+            .menuStyle(.borderlessButton).help(model.groupFilterTitle).accessibilityLabel("按工作分组筛选，当前" + model.groupFilterTitle)
           Spacer(minLength: 0)
           Button { model.nextAttentionSession() } label: { Image(systemName: "arrow.right.circle") }
             .buttonStyle(.borderless).disabled(model.attentionCount == 0).help("下一个需关注会话")
@@ -245,7 +288,7 @@ struct SessionList: View {
           if model.visibleSessions.isEmpty && !model.sessions.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
               Text(model.sessionFilter == "在线" && model.search.isEmpty ? "当前没有在线会话；断连记录可在“断连”或“全部”查看。" : "没有匹配的会话；可调整搜索或筛选。")
-              Button("清除搜索与筛选") { model.search = ""; model.sessionFilter = "在线" }.buttonStyle(.borderless)
+              Button("清除搜索与筛选") { model.search = ""; model.sessionFilter = "在线"; model.groupFilter = "" }.buttonStyle(.borderless)
               Text("这里只隐藏显示，不会停止或删除原Pi工作。").foregroundStyle(.secondary)
             }.font(.caption).padding()
           }
@@ -286,7 +329,10 @@ struct SessionDetail: View {
               [Presentation.project(snap), snap.display.branch, Presentation.shortModel(snap)]
                 .compactMap { $0 }.joined(separator: " · ")
             ).font(.system(size: 12)).foregroundStyle(.secondary)
-            SessionIdentityControls(session: session).id(snap.identity)
+            HStack(spacing: 14) {
+              SessionIdentityControls(session: session)
+              WorkGroupControl(session: session)
+            }.id(snap.identity)
           }
           Spacer()
           VStack(alignment: .trailing, spacing: 7) {
@@ -652,6 +698,7 @@ struct SettingsPage: View {
         ForEach(["Pi Desk", "Pi 原生设置", "高级连接"], id: \.self) { Text($0).tag($0) }
       }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("设置分类")
       if section == "Pi Desk" {
+      DisplayPreferencesView()
       DeskCard {
         VStack(alignment: .leading, spacing: 12) {
           HStack {
@@ -665,7 +712,10 @@ struct SettingsPage: View {
             if model.isPreview { PreviewBadge() }
           }
           Text("顶部速览让你随时看到进展；退出界面，Pi 仍独立运行。").font(.caption).foregroundStyle(.secondary)
-          Button("展开顶部速览") { model.showIsland() }.buttonStyle(.bordered)
+          HStack {
+            Button("展开顶部速览") { model.showIsland() }.buttonStyle(.bordered).disabled(model.settings.displayMode == .menuOnly)
+            Button("配置 AI 助手") { model.navigate(to: "AI助手") }.buttonStyle(.bordered)
+          }
         }
       }
       DeskCard {

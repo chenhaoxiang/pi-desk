@@ -7,8 +7,8 @@ release_scope: 接口基线快照与本地实现接线；非全模式认证
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-24
-verification_scope: 指定公开源码基线、隔离Pi1.4与Subagents0.80及Schedule源码seam；非全局热加载/业务环境
+verified: 2026-11-04
+verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift UDS合成接线、指定模型合成请求；旧owner组合沿原日期范围，非全局热加载/业务正文验收
 ---
 
 # 接口核实与集成矩阵
@@ -79,3 +79,13 @@ verification_scope: 指定公开源码基线、隔离Pi1.4与Subagents0.80及Sch
 Schedule在线管理seam位于该owner的本地 `249a8fa8529c4ac988f1b5a4845426ce6aa2dd79`（含 `85c58cd`），原0.4.1-fork.4旧运行不因此获得能力。Intercom v1 outbox未改、不用于精确递送；管理已接入会话走本身native API。原生输入事件可用，question producer按其实际加载能力出现；Terminal 精确 TTY/window 已实机回读，2026-10-29 用户已确认通知可见与 VoiceOver 关键焦点；Herdr 正向实机仍未验证，不将缺失路由负例冒称成功。详见[实施记录](implementation-plan.md#6-本地实施与证据层级)。
 
 公开参考：[Pi扩展声明](https://github.com/chenhaoxiang/pi/blob/aabcd6e46d5d6f80338f41c41554d1dea5e7eea7/packages/coding-agent/src/core/extensions/types.ts)、[Subagents公共合同](https://github.com/chenhaoxiang/pi-subagents/blob/7ff515bf5fa8873a678c444885903ba1eeb9f061/docs/extension-api.md)、[Intercom扩展合同](https://github.com/chenhaoxiang/pi-intercom/blob/8953e0689b05368295540692525d688ad57494bd/extension-api.ts)、[Schedule常驻合同](https://github.com/chenhaoxiang/pi-schedule-prompt/blob/6ac872f0b090fbcbc0708e7ceff91d7a5506a3b5/docs/durable-supervisor.md)、[Vista非授权边界](https://github.com/chenhaoxiang/pi-vista/blob/0295559fef2d00dddd1a706731c04329108d3ffd/docs/pi-continuum.md)。
+
+## 7. 可选 AI 与交互接线
+
+本轮开发SDK固定为1.5.0。生产bridge仅通过上下文公开的`modelRegistry.getAvailable/streamSimple`复用注册模型及认证，凭据不会回App；没有独立Agent、工具注册、业务`prompt()`调用或模型切换。以`assistant`能力声明和运行时方法检测准入；旧host/bridge不支持时明确unavailable，基础功能不变，不强reload。
+
+`assistant-request/assistant-response`经现有私有UDS和双端UID校验，保持准确identity/epoch/requestId；模型列表与上下文读取不推理，分析才使用独立模型/思考档，取消只终止该AI的AbortSignal。`scripts/check-socket-host.mjs`已经用真实SDK注册faux模型跑过模型列表、当前分支文本和分析去重，验证业务history/model/thinking不变、断接收器业务继续及重连不重放。
+
+近期文本从公开`SessionManager.getLeafId/getEntry`沿parentId最多128个条目取8条text消息，不调用全分支扫描或历史文件发现，排除thinking/tool/image等非授权块；上下文与原文不进入usage索引。AI结果必须通过有界结构与来源ref校验，应用分组再次核runtime。默认`codex-local-8319/gpt-6.1-sol`、`medium`已做一次真实SDK合成请求，返回结构化结果及数值usage，费用未估算；此测试没有业务会话正文。独立测试的provider-scoped可用性结果显式注入其临时facade，不冒称全局注册表快照自动刷新；真实SDK/UDS的faux测试另证明正常宿主facade接线。
+
+通知只存目标hash并通过原生通知delegate回调，UI冷启动有界等原对象，不启动Pi或代答。草稿正常退出前默认保留，未持久化正文，不承诺异常崩溃恢复。健康/命令/分组/显示策略只改本机表现或显式固定管理入口；本轮不修改Schedule或其他owner的management RPC。

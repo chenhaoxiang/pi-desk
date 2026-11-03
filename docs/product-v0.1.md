@@ -7,8 +7,8 @@ release_scope: 首版合同与本地源码候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-30
-verification_scope: 用户范围、隔离faux-native、本机已配置路径及用户确认的通知与VoiceOver；非Herdr正向实机或正式发行
+verified: 2026-11-04
+verification_scope: 本轮通知/健康/草稿/分组/显示/可选AI源码与合成回归、指定模型合成请求；旧本机现场证据沿原版本，不含新版全控件或Herdr实机认证
 ssot: true
 ---
 
@@ -47,7 +47,7 @@ ssot: true
 
 ## 4. 统计与一次性历史例外
 
-默认仍不发现旧会话、不自动扫描历史JSONL、rollout、终端内容、认证与模型配置。App只读已投影的usage索引；可以在已接入owner内访问当前usage标量/原生统计结果。2026-10-26用户明确授权的唯一例外是独立worker对canonical Pi JSONL做一次只读metadata preview/apply/rollback，不保存或输出正文、工具参数/结果、原路径或原会话ID；不在App启动、刷新或turn时重扫，不扩为历史会话UI。
+默认仍不发现旧会话、不自动扫描历史JSONL、rollout、终端内容、认证与模型配置。App只读已投影的usage索引；可以在已接入owner内访问当前usage标量/原生统计结果。2026-10-26用户明确授权的历史文件读取唯一例外是独立worker对canonical Pi JSONL做一次只读metadata preview/apply/rollback，不保存或输出正文、工具参数/结果、原路径或原会话ID；不在App启动、刷新或turn时重扫，不扩为历史会话UI。
 
 - 普通 TUI 扩展首先提供 `attachment-window`：从本次扩展接入起观测到的已结算 usage，重载后新窗口明确重置。
 - owner 可提供原生当前会话累计时，另列 `native-session-total`，不能把接入窗口值标成会话全部消耗。
@@ -75,3 +75,15 @@ ssot: true
 - 比较关闭/接入两组相同fixture的执行轨迹、模型调用数、人工确认数、原参数及额外开销。
 
 本机已配置路径已完成源码/隔离 SDK、Subagents/计划 owner、多会话 GUI、Terminal 精确定位和代表性键盘/内外屏验收；2026-10-29 用户另明确确认通知可见、VoiceOver 能朗读并遍历会话列表及关键设置控件。各项保留原版本证据，不改标成 build46 全面重验。Herdr 未配置，正向实机未验证；按既有路由不可用场景明确失败、不跳错对象，不宣称兼容已获实机认证。长期 provider、所有历史 owner 和任意显示器组合不是本轮新增前置；本机交付不等于正式发行。现行规范见 [live-pi-sessions](../openspec/specs/live-pi-sessions/spec.md)、[owned-management](../openspec/specs/owned-management/spec.md)、[usage-and-attention](../openspec/specs/usage-and-attention/spec.md)；实施历史保留在[首版归档](../openspec/changes/archive/2026-10-30-pi-desk-v0-1/tasks.md)。
+
+## 7. 本轮交互与可选 AI 增强
+
+本轮用户另批准通知精确跳转、接入健康、未发送草稿保护、统一命令面板、多会话组织、顶部显示策略与可配置AI辅助；单一Change为`pi-desk-assistant`。这不把基础观察、健康或控制改成模型驱动，不降低原自动化。
+
+- 通知只按哈希目标定位准确runtime，冷启动有界等待接入；旧runtime不转给同名对象，不启动Pi或回答问题。
+- 草稿只在App内存，正常退出/更新存在未发送内容时默认保留并取消退出，明确丢弃后才退出。包含AI补充说明；异常崩溃恢复未实现，不把正文写进usage库。
+- 工作组是本机标签，最多16组/64归属；顶部显示和屏幕选择不影响Pi或采集。⌘K只调用固定导航/显示动作，无任意shell或模型指令代理。
+- AI默认`codex-local-8319/gpt-6.1-sol`、`medium`，可从Pi注册且可用模型中修改；不修改业务Pi默认值，不静默换模/降档。当前实现借用一个兼容在线Pi的公开ModelRegistry；没有该入口时AI明确不可用，不强制启动或重载Pi。
+- 用户已明确选择按需使用所选已接入会话的近期消息：只从当前leaf经公开getEntry/parentId最多回溯128个条目，取至多8条用户/助手文本、每条2KiB，不读其他分支/历史目录、思考和工具原文。可预览并移除消息；检测到疑似敏感值时不发送，但不保证识别所有敏感内容。
+- 模型输入最多8个明确选中来源、总32KiB；可选补充说明最多4KiB，也计入总预算，无工具，不追加业务历史。结果标为带来源的建议；只可由用户采纳为本机标签，过时runtime不得应用，不能改变执行、输入、权限或验证状态。
+- 推理只有显式用户请求；一次至多1个，支持取消/超时，未知结果不自动重发。数值用量在Pi Desk AI单列、不是账单；不持久化上下文、prompt、分析正文或思考；用户明确采纳的有界分组标签作为私有显示偏好保存。

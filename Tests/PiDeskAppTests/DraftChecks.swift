@@ -83,6 +83,27 @@ import PiDeskCore
     model.select(a.identity)
     precondition(model.current?.snapshot.identity == a.identity && model.sessionFilter == "全部")
     precondition(model.store.requests.count == countBeforeSelect)
+    precondition(model.requiresDraftConfirmation, "normal app quit must protect unsent drafts")
+    model.setDraft("", for: a.identity); model.setDraft("   ", for: b.identity)
+    precondition(!model.requiresDraftConfirmation, "empty/whitespace input does not invent an exit blocker")
+    let beforePalette = model.store.requests.count
+    let entries = model.commandEntries()
+    precondition(entries.contains { $0.action == "drafts" } && entries.contains { $0.title.contains("接入健康") })
+    if let entry = entries.first(where: { $0.action == "select" && $0.identity == b.identity }) {
+      model.modal = .commands; model.performCommand(entry)
+      precondition(model.modal == nil && model.current?.snapshot.identity == b.identity && model.store.requests.count == beforePalette, "palette selection is local navigation, not an owner query")
+    } else { fatalError("missing palette session") }
+    model.performCommand(DeskCommandEntry(id: "retired", title: "same name", action: "select", identity: stale))
+    precondition(model.store.requests.count == beforePalette && model.navigationNotice?.contains("已更新") == true)
+    for index in 0..<64 {
+      model.setDraft("protected \(index)", for: Identity(localHostId: "fixture", nativeSessionId: "draft-cap-\(index)", runtimeEpoch: "epoch"))
+    }
+    let fullDrafts = model.drafts
+    model.setDraft("must not evict", for: Identity(localHostId: "fixture", nativeSessionId: "draft-overflow", runtimeEpoch: "epoch"))
+    precondition(model.drafts == fullDrafts && model.unsentDraftIdentities.count == 64, "capacity must never silently evict another unsent draft")
+    let firstDraft = model.unsentDraftIdentities[0]
+    model.setDraft(String(repeating: "x", count: 16385), for: firstDraft)
+    precondition(model.drafts == fullDrafts, "oversized paste keeps the prior draft")
     print(
       "AppModel draft checks passed: unavailable, duplicate/pending, disconnected preserve input; only admitted request clears."
     )

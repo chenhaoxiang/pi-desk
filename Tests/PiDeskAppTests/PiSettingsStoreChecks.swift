@@ -10,6 +10,9 @@ import Foundation
   static func sha(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
   static func write(_ text: String, _ url: URL, mode: mode_t = 0o600) throws { try Data(text.utf8).write(to: url); chmod(url.path, mode) }
   @MainActor static func main() async throws {
+    precondition(PiSettingField.fields.first { $0.key == "theme" }?.choiceLabel("dark") == "深色")
+    precondition(PiSettingField.fields.first { $0.key == "quietStartup" }?.choiceLabel("header") == "仅显示启动标题")
+    precondition(PiSettingField.fields.first { $0.key == "defaultThinkingLevel" }?.choiceLabel("xhigh") == "更高")
     let base = URL(fileURLWithPath: CommandLine.arguments[1]), agent = base.appendingPathComponent("agent"), backup = base.appendingPathComponent("backups")
     try FileManager.default.createDirectory(at: agent, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     let path = agent.appendingPathComponent("settings.json")

@@ -34,6 +34,9 @@ struct AggregateTokenPage: View {
         }
         summaryCard
         trendCard
+        DisclosureGroup("对比前一等长时段", isExpanded: $model.usageComparisonEnabled) {
+          comparisonContent.padding(.top, 8)
+        }.font(.caption)
         DisclosureGroup(isExpanded: $showDetails) {
           recordDetails.padding(.top, 8)
         } label: {
@@ -61,6 +64,7 @@ struct AggregateTokenPage: View {
       .onChange(of: model.usageModel) { _, _ in model.persistViewState(); model.refreshUsage() }
       .onChange(of: model.usageOrigin) { _, _ in model.persistViewState(); model.refreshUsage() }
       .onChange(of: model.usageMetric) { _, _ in model.persistViewState() }
+      .onChange(of: model.usageComparisonEnabled) { _, _ in model.persistViewState(); model.refreshUsage() }
       .onChange(of: model.usageCustomStart) { _, _ in model.persistViewState(); model.refreshUsage() }
       .onChange(of: model.usageCustomEnd) { _, _ in model.persistViewState(); model.refreshUsage() }
   }
@@ -150,6 +154,29 @@ struct AggregateTokenPage: View {
       }
     }
   }
+  private var comparisonContent: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("前期：" + dateText(usage.range.previousPeriod.start, format: "yyyy/M/d") + " — " + dateText(usage.range.previousPeriod.endDate, format: "yyyy/M/d"))
+      if let prior = model.comparisonAggregate {
+        let comparison = UsagePeriodComparison.make(current: usage, previous: prior, metric: metric)
+        if let issue = comparison.issue {
+          Label(issue, systemImage: "info.circle").foregroundStyle(.secondary)
+        } else {
+          HStack(spacing: 22) {
+            VStack(alignment: .leading, spacing: 4) { Text("本期可比记录").foregroundStyle(.secondary); Text(compact(comparison.current)).font(.title3.monospacedDigit()) }
+            VStack(alignment: .leading, spacing: 4) { Text("前期可比记录").foregroundStyle(.secondary); Text(compact(comparison.previous)).font(.title3.monospacedDigit()) }
+            Spacer(minLength: 0)
+            if let percent = comparison.percent { Text(String(format: "%+.1f%%", percent)).font(.title3.monospacedDigit()) }
+            else { Text("前期为0，不计算百分比").foregroundStyle(.secondary) }
+          }
+          Text("两期均取前 \(comparison.bucketCount) 个已结束的" + comparison.unit + "桶，不含进行中时段。").foregroundStyle(.secondary)
+        }
+      } else {
+        Text(model.usageLoading ? "正在读取同口径记录…" : "尚无可比较记录").foregroundStyle(.secondary)
+      }
+      Text("相同来源、模型与" + metric.title + "口径；仅比较已记录数据，不代表全量消费或账单变化。").foregroundStyle(.secondary)
+    }.frame(maxWidth: .infinity, alignment: .leading)
+  }
   private var modelCard: some View {
     DeskCard {
       VStack(alignment: .leading, spacing: 10) {
@@ -159,7 +186,12 @@ struct AggregateTokenPage: View {
           HStack {
             Text(entry.model).font(.subheadline).lineLimit(2).textSelection(.enabled)
             Spacer()
-            Text(value(entry.tokens.metric(metric))).font(.subheadline.monospacedDigit())
+            VStack(alignment: .trailing, spacing: 3) {
+              Text(value(entry.tokens.metric(metric))).font(.subheadline.monospacedDigit())
+              if usage.totals.metric(metric).value > 0 {
+                Text(String(format: "记录占比 %.1f%%", Double(entry.tokens.metric(metric).value) / Double(usage.totals.metric(metric).value) * 100)).font(.caption2).foregroundStyle(.secondary)
+              }
+            }
           }.accessibilityElement(children: .combine).accessibilityLabel(entry.model + " · " + exact(metric, entry.tokens))
           GeometryReader { geometry in
             RoundedRectangle(cornerRadius: 3).fill(.blue.opacity(0.5))
@@ -188,7 +220,7 @@ struct AggregateTokenPage: View {
         Text("仅恢复元数据；未知物理模型不猜成GPT，缺字段不补0。导入只执行一次，不在启动或刷新时再扫JSONL。")
       }
       if !oldSessions.isEmpty {
-        Text("\(oldSessions.count) 个在线会话仍用旧桥接，实时记录有缺口；等待自然加载，不强制重载。")
+        Text("\(oldSessions.count) 个在线会话未提供实时采集信息，覆盖可能不完整；等待自然加载，不强制重载。")
         ForEach(oldSessions, id: \.snapshot.identity) { session in Text(session.snapshot.display.name + " · " + (session.snapshot.display.model ?? "模型未知")) }
       }
       ForEach(usage.coverageReasons, id: \.self) { Text($0) }
@@ -204,7 +236,7 @@ struct AggregateTokenPage: View {
     if usage.pendingRecords > 0 { return "\(usage.pendingRecords) 条待索引，当前为已知下界。" }
     if usage.conflicts > 0 || usage.malformed > 0 { return "记录有冲突或不可读项；原数据已保留。" }
     if !usage.totals.metric(metric).known { return usage.recordCount > 0 ? "所选字段未知，不以0补齐。" : "此范围/来源尚未采集，不代表零消费。" }
-    if !oldSessions.isEmpty { return "\(oldSessions.count) 个旧桥接有实时覆盖缺口 · 详情已折叠" }
+    if !oldSessions.isEmpty { return "\(oldSessions.count) 个会话缺少实时采集信息 · 详情已折叠" }
     return nil
   }
   private var updateLabel: String { usage.refreshedAt.map { "更新 " + $0.formatted(date: .omitted, time: .shortened) } ?? "尚未更新" }

@@ -61,6 +61,10 @@ Pi Desk SHALL 绑定请求、会话runtime及owner运行引用，拒绝过期或
 - **WHEN** 用户界面仍持有旧epoch的运行卡片
 - **THEN** 对该对象的控制被拒绝并要求刷新，不转发到新会话或同名对象
 
+#### Scenario: Selection changes before feedback arrives
+- **WHEN** the user selects another session while an action receipt or exact-navigation result is pending
+- **THEN** feedback remains attached to the original identity and runtime, and is never displayed as the newly selected session's result; requested/accepted/unknown still do not mean completed
+
 ### Requirement: Owner qualified recovery and schedules
 
 Pi Desk SHALL 由原owner验证恢复资格、运行归属和计划状态，保留不同owner的命名空间；恢复失败不得隐式新建运行或修改任务存储。

@@ -7,8 +7,8 @@ release_scope: 本机实现与首版已配置路径收口；非正式发行或�
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-28
-verification_scope: Swift/TS源码、UDS/隔离真实SDK与owner组合；不含业务会话/Herdr实机和长时可靠性
+verified: 2026-11-03
+verification_scope: 本轮活动/偏好/时段对比源码及原生、UDS、SDK合成回归；既有owner组合证据沿原范围，不含业务会话/Herdr实机或长时可靠性
 ---
 
 # 系统架构
@@ -64,6 +64,14 @@ openspec/changes/archive/2026-10-30-pi-desk-v0-1/  # 首版实施历史
 子运行使用owner `runId`与必要child index。Fleet display key只用于展示，不能转换成控制ID。Pi进程内多个会话不能用process-global parent变量当完整父子树；先用Subagents owner投影，环境字段最多是待核实提示。
 
 App断线重连同一epoch，要求全量当前快照并保留monotonic seq；新epoch清除旧控制能力和未完成UI请求绑定。对旧epoch晚到的回复/动作拒绝，不把旧模型、状态或对象当当前。
+
+### 3.1.1 体验投影与本机偏好
+
+可选 `activity` 只由真实 agent_start、工具开始/结束、agent_settled 与准确子任务事件更新，包含有界 sequence/kind/at、回合起止及结束序号。心跳、刷新、startup idle 对账不更新该时钟；不转发消息、工具参数或结果。旧 bridge 缺字段显示活动时间未提供，不强制 reload。未查看变化要求当前执行证明、无 pending 且状态为已结束/异常/中止，并按 runtime 的结束序号记已查看，不能代替业务验收或回答输入。
+
+主列表只在用户主动置顶时改变分组，普通状态变化不重排；顶部速览在展开时按输入、异常、未查看变化、置顶、运行选择至多四个在线对象，并冻结该次展开的准确 identities 和槽位；失效 epoch 以等高禁用占位保留，不让后续行或编辑器前移。原会话路由及操作反馈也绑定 identity/epoch，异步回执不跟随当前选中对象漂移。
+
+显示别名由用户主动输入，最多32个、每个128字节；置顶和结束已查看各最多64项。它们复用私有 `app_view_state`，会话键只保存 hash，别名不包含自动采集的原始名称/路径。v1新增字段为optional、旧偏好兼容；单行上限96 KiB覆盖既有1024个输入已读标记及新增偏好的共同上限，不创建新库、扫描或权限。Pi原生设置仍只有原生文件白名单和独立的安全写入路径。
 
 ### 3.2 分开保存的维度
 
@@ -158,6 +166,10 @@ App请求由连接owner在原宿主事件循环的应用层回调处理，不从
 apply绑定preview/source-set hash并校验冻结前缀，正常退出本App维护时Pi仍spool；SQLite backup API获得包含WAL的一致快照，原DB/WAL/SHM和install manifest只作补充备份，目录0700/文件0600。单事务插入、quick_check、import receipt；重复apply幂等。八列usage_entries保持兼容，provenance/import/alias/conflict为附加表；来源标签不改变消费identity。rollback只移除该import新增且未实时确认的行，后续实时数据和既有冲突审计不清除；App回退与数据回退分开。
 
 UI从索引展示实时/一次性历史/去重合计，以及各来源最早记录、冻结覆盖日期和不完整原因。utility queue缓存按rowid增量归桶/来源，模型筛选保持同口径；不会为展示重新打开JSONL。
+
+### 同口径时段对比
+
+用户展开对比时，App先接收本期结果，再顺序查询相邻的前一等长日历日范围，避免既有 latest-only 合并队列丢掉其中一个回调；任一筛选变化都重新绑定本期/前期，旧在途结果不覆盖新选择。比较只取两期均已结束的前N个小时/日桶，不包含当前未结束桶；来源、物理模型、metric和时区相同才可计算。未知桶、缺字段、索引故障/待索引/冲突、溢出及按来源结构化的采集器丢弃/待落盘/写失败、历史导入跳过或冲突均抑制百分比；正常的统计范围说明不算采集缺口，前期真实零保留零但不算百分比；DST导致单日小时数不同时明确不可直接比较。结果仅为已记录元数据对比，不是全量消费、额度或账单变化。默认折叠不增加查询，展开仍复用既有utility队列与至多3范围缓存。
 
 ### 本App窗口兴趣与统计首屏
 

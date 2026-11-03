@@ -48,6 +48,11 @@ public struct UsageDateRange: Equatable, Hashable {
     }
   }
 
+  public var previousPeriod: UsageDateRange {
+    let days = max(1, timeZoneCalendar.dateComponents([.day], from: start, to: end).day ?? 1)
+    return UsageDateRange(start: timeZoneCalendar.date(byAdding: .day, value: -days, to: start) ?? start,
+      end: start, preset: .custom, timeZone: timeZone)
+  }
   public var endDate: Date {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timeZone
@@ -83,6 +88,7 @@ public enum UsageOrigin: String, CaseIterable, Identifiable {
 }
 public struct UsageViewState: Codable, Equatable {
   public static let currentVersion = 1
+  public static let maximumBytes = 96 * 1024
   public var version: Int = currentVersion
   public var page: String = "会话"
   public var sessionFilter: String = "在线"
@@ -95,6 +101,11 @@ public struct UsageViewState: Codable, Equatable {
   public var selectedKeyHash: String?
   public var hiddenKeyHashes: [String] = []
   public var dismissedKeyHashes: [String] = []
+  // Optional additions keep existing version-1 preferences readable.
+  public var pinnedKeyHashes: [String]?
+  public var sessionAliases: [String: String]?
+  public var reviewedResultSequences: [String: Int]?
+  public var comparisonEnabled: Bool?
 
   public init() {}
   public var migratedNavigation: UsageViewState {
@@ -106,12 +117,18 @@ public struct UsageViewState: Codable, Equatable {
     func hash(_ value: String) -> Bool { value.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil }
     let validDates = [customStartMS, customEndMS].allSatisfy { $0 == nil || (946684800000...7258118400000).contains($0!) }
     return version == Self.currentVersion && !page.isEmpty && page.utf8.count <= 64 && !page.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
-      && ["在线", "全部", "运行中", "需输入", "断连"].contains(sessionFilter)
+      && ["在线", "全部", "运行中", "需输入", "需关注", "已置顶", "断连"].contains(sessionFilter)
       && UsagePreset(rawValue: usagePreset) != nil && UsageMetric(rawValue: usageMetric) != nil && UsageOrigin(rawValue: usageOrigin) != nil
       && (usageModel.isEmpty || usageModel.range(of: "^[A-Za-z0-9._:/+@ -]{1,128}$", options: .regularExpression) != nil)
       && validDates && (selectedKeyHash == nil || hash(selectedKeyHash!))
       && hiddenKeyHashes.count <= 64 && hiddenKeyHashes.allSatisfy(hash)
       && dismissedKeyHashes.count <= 1024 && dismissedKeyHashes.allSatisfy(hash)
+      && (reviewedResultSequences ?? [:]).count <= 64 && (reviewedResultSequences ?? [:]).allSatisfy { key, value in hash(key) && value > 0 && value <= 9_007_199_254_740_991 }
+      && (pinnedKeyHashes ?? []).count <= 64 && (pinnedKeyHashes ?? []).allSatisfy(hash)
+      && (sessionAliases ?? [:]).count <= 32 && (sessionAliases ?? [:]).allSatisfy { key, value in
+        hash(key) && !value.isEmpty && value.utf8.count <= 128
+          && !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
+      }
   }
 }
 public enum UsageViewStateKey {
@@ -260,6 +277,11 @@ public struct UsageAggregate: Equatable {
   public var conflicts = 0
   public var malformed = 0
   public var coverageReasons: [String] = []
+  public var originComparisonGaps: [String: Set<String>] = [:]
+  public var comparisonGaps: Set<String> {
+    selectedOrigin == .combined ? originComparisonGaps.values.reduce(into: Set<String>()) { $0.formUnion($1) }
+      : (originComparisonGaps[selectedOrigin.rawValue] ?? [])
+  }
   public var error: String?
   public var refreshedAt: Date?
 
@@ -340,6 +362,46 @@ public struct UsageAggregate: Equatable {
       result.refreshedAt = Date()
     } else {
       result.buckets = range.days.map { UsageBucket(day: $0, state: .uncollected, tokens: UsageTokenTotals()) }
+    }
+    return result
+  }
+}
+
+public struct UsagePeriodComparison {
+  public var issue: String?
+  public var current: Int64 = 0
+  public var previous: Int64 = 0
+  public var bucketCount = 0
+  public var unit = "天"
+  public var percent: Double? { previous > 0 ? (Double(current) / Double(previous) - 1) * 100 : nil }
+
+  public static func make(current: UsageAggregate, previous: UsageAggregate, metric: UsageMetric, now: Date = Date()) -> UsagePeriodComparison {
+    func unavailable(_ reason: String) -> UsagePeriodComparison { UsagePeriodComparison(issue: reason) }
+    guard current.range.validationIssue == nil, previous.range == current.range.previousPeriod,
+      current.selectedModel == previous.selectedModel, current.selectedOrigin == previous.selectedOrigin,
+      current.timeZoneID == previous.timeZoneID else { return unavailable("比较范围或筛选已变化，请等待更新。") }
+    guard current.error == nil, previous.error == nil,
+      current.pendingRecords == 0, previous.pendingRecords == 0,
+      current.conflicts == 0, previous.conflicts == 0,
+      current.malformed == 0, previous.malformed == 0 else { return unavailable("记录尚未就绪，暂不计算变化。") }
+    guard current.comparisonGaps.isEmpty, previous.comparisonGaps.isEmpty else {
+      return unavailable("采集存在已知缺口，暂不计算变化。")
+    }
+    guard !current.range.hourly || current.buckets.count == previous.buckets.count else {
+      return unavailable("两期因夏令时具有不同小时数，不直接计算变化百分比。")
+    }
+    let finished = current.buckets.filter { current.range.bucketEnd($0.day) <= now }
+    let count = min(finished.count, previous.buckets.count)
+    guard count > 0 else { return unavailable("还没有完整的可比较时段；不比较进行中的桶。") }
+    var result = UsagePeriodComparison(bucketCount: count, unit: current.range.hourly ? "小时" : "天")
+    for (a, b) in zip(finished.prefix(count), previous.buckets.prefix(count)) {
+      let x = a.tokens.metric(metric), y = b.tokens.metric(metric)
+      guard a.state == .data, b.state == .data, x.complete, y.complete else {
+        return unavailable("两期记录存在未采集时段或缺失字段，暂不计算变化。")
+      }
+      let sum = result.current.addingReportingOverflow(x.value), prior = result.previous.addingReportingOverflow(y.value)
+      guard !sum.overflow, !prior.overflow else { return unavailable("记录超过可比较范围，未计算变化。") }
+      result.current = sum.partialValue; result.previous = prior.partialValue
     }
     return result
   }
@@ -501,6 +563,7 @@ public final class UsageLedger: UsageLedgerClient {
       var aggregate = try db.aggregate(range: range)
       counters["aggregateRows", default: 0] += db.lastAggregateRows
       aggregate.pendingRecords = importResult.pending
+      aggregate.originComparisonGaps[UsageOrigin.realtime.rawValue] = importResult.gaps
       aggregate.malformed = importResult.malformed
       aggregate.conflicts = importResult.conflicts
       if aggregate.conflicts > 0 { aggregate.coverageReasons.append("重复receipt内容冲突，保留首次记录") }
@@ -697,7 +760,7 @@ public final class UsageLedger: UsageLedgerClient {
       if step == SQLITE_DONE { return nil }
       guard step == SQLITE_ROW else { throw LedgerError.databaseUnavailable }
       let raw = string(statement, 1)
-      guard raw.utf8.count <= 16384, let data = raw.data(using: .utf8), Int(sqlite3_column_int(statement, 0)) == UsageViewState.currentVersion else { throw LedgerError.incompatibleViewState }
+      guard raw.utf8.count <= UsageViewState.maximumBytes, let data = raw.data(using: .utf8), Int(sqlite3_column_int(statement, 0)) == UsageViewState.currentVersion else { throw LedgerError.incompatibleViewState }
       let state = try JSONDecoder().decode(UsageViewState.self, from: data)
       guard state.valid else { throw LedgerError.incompatibleViewState }
       return state
@@ -705,7 +768,7 @@ public final class UsageLedger: UsageLedgerClient {
     func saveViewState(_ state: UsageViewState) throws {
       _ = try loadViewState() // Invalid/future rows are preserved, never overwritten by defaults.
       let data = try JSONEncoder().encode(state)
-      guard let json = String(data: data, encoding: .utf8), json.utf8.count <= 16384 else { throw LedgerError.databaseUnavailable }
+      guard let json = String(data: data, encoding: .utf8), json.utf8.count <= UsageViewState.maximumBytes else { throw LedgerError.databaseUnavailable }
       let statement = try prepare("INSERT INTO app_view_state(key,version,updated,value) VALUES('main',?,?,?) ON CONFLICT(key) DO UPDATE SET version=excluded.version,updated=excluded.updated,value=excluded.value")
       defer { sqlite3_finalize(statement) }
       sqlite3_bind_int(statement, 1, Int32(state.version)); sqlite3_bind_int64(statement, 2, Int64(Date().timeIntervalSince1970 * 1000)); bind(json, statement, 3)
@@ -722,11 +785,11 @@ public final class UsageLedger: UsageLedgerClient {
       }
       return result.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
-    func importSpool() throws -> (pending: Int, malformed: Int, conflicts: Int, reasons: [String]) {
+    func importSpool() throws -> (pending: Int, malformed: Int, conflicts: Int, reasons: [String], gaps: Set<String>) {
       let files = try spoolFiles()
       if files.isEmpty {
         let status = try recorderStatus()
-        return (0, status.malformed, Int(try scalar("SELECT count(*) FROM usage_conflicts")), Array(status.reasons))
+        return (0, status.malformed, Int(try scalar("SELECT count(*) FROM usage_conflicts")), Array(status.reasons), status.gaps)
       }
       let cursor = files.isEmpty ? 0 : Int(try scalar("SELECT COALESCE((SELECT value FROM usage_meta WHERE key='scan-cursor'),0)")) % files.count
       let batch = Array((Array(files.dropFirst(cursor)) + Array(files.prefix(cursor))).prefix(1024))
@@ -775,7 +838,7 @@ public final class UsageLedger: UsageLedgerClient {
       reasons.formUnion(recorders.reasons)
       if files.count > 1024 { reasons.insert("尚有记录等待索引") }
       return (max(0, files.count - accepted.count), malformed + recorders.malformed,
-        Int(try scalar("SELECT count(*) FROM usage_conflicts")), Array(reasons))
+        Int(try scalar("SELECT count(*) FROM usage_conflicts")), Array(reasons), recorders.gaps)
     }
     private func markRealtimeReceipt(_ id: String) throws {
       let s=try prepare("UPDATE usage_provenance SET has_realtime=1 WHERE id=?")
@@ -804,20 +867,23 @@ public final class UsageLedger: UsageLedgerClient {
       }
       return !same
     }
-    private func recorderStatus() throws -> (reasons: Set<String>, malformed: Int) {
+    private func recorderStatus() throws -> (reasons: Set<String>, malformed: Int, gaps: Set<String>) {
       let dir = root.appendingPathComponent("recorders")
       let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
-      var reasons = Set<String>(), malformed = 0
+      var reasons = Set<String>(), gaps = Set<String>(), malformed = 0
       for file in files.prefix(4096) where file.pathExtension == "json" {
         guard let data = try? UsageLedger.readPrivate(file), let value = try? JSONDecoder().decode(DiskRecorder.self, from: data),
           value.version == 1, value.kind == "recorder" else { malformed += 1; reasons.insert("记录器状态不可读"); continue }
-        if value.dropped > 0 { reasons.insert("记录队列曾丢弃，当前为已知下界") }
-        if value.pending > 0 { reasons.insert("Pi仍有记录待落盘") }
-        if value.writeFailures > 0 { reasons.insert("记录器曾写盘失败，覆盖不完整") }
-        for reason in value.reasons where reason != "auxiliary-usage-not-covered" { reasons.insert(Self.reasonText(reason)) }
+        if value.dropped > 0 { reasons.insert("记录队列曾丢弃，当前为已知下界"); gaps.insert("recorder-dropped") }
+        if value.pending > 0 { reasons.insert("Pi仍有记录待落盘"); gaps.insert("recorder-pending") }
+        if value.writeFailures > 0 { reasons.insert("记录器曾写盘失败，覆盖不完整"); gaps.insert("recorder-write-failure") }
+        for reason in value.reasons where reason != "auxiliary-usage-not-covered" {
+          reasons.insert(Self.reasonText(reason))
+          if !["tool-usage-unattributed", "boundary-usage-not-covered"].contains(reason) { gaps.insert("recorder-coverage") }
+        }
       }
-      if files.count > 4096 { reasons.insert("部分记录器状态未加载") }
-      return (reasons, malformed)
+      if files.count > 4096 { reasons.insert("部分记录器状态未加载"); gaps.insert("recorder-status-truncated") }
+      return (reasons, malformed, gaps)
     }
     static func reasonText(_ reason: String) -> String {
       switch reason {
@@ -901,6 +967,7 @@ public final class UsageLedger: UsageLedgerClient {
       let currentBucket = range.bucket(for: Date())
       result.buckets = range.days.map { day in UsageBucket(day: day, state: day > currentBucket ? .future : (aggregateDays[day] == nil ? .uncollected : .data), tokens: aggregateDays[day] ?? UsageTokenTotals()) }
       result.historyReasons = []; result.historyImportedAt = nil; result.historyMinDate = nil; result.historyMaxDate = nil
+      result.originComparisonGaps[UsageOrigin.history.rawValue] = []
       let history=try prepare("SELECT applied,summary_json FROM history_imports WHERE status='applied' ORDER BY applied DESC LIMIT 1")
       if sqlite3_step(history)==SQLITE_ROW {
         result.historyImportedAt=Date(timeIntervalSince1970:Double(int(history,0) ?? 0)/1000)
@@ -908,6 +975,10 @@ public final class UsageLedger: UsageLedgerClient {
           if let minimum=receipt["minUTCms"] as? Double { result.historyMinDate=Date(timeIntervalSince1970:minimum/1000) }
           if let maximum=receipt["maxUTCms"] as? Double { result.historyMaxDate=Date(timeIntervalSince1970:maximum/1000) }
           if let coverage=receipt["coverage"] as? [String:Int] {
+            let informational = ["bytes-scanned", "not-final", "same-file-replay", "fork-copy-aliases", "non-pi-or-unsupported-header"]
+            if coverage.contains(where: { $0.value > 0 && !informational.contains($0.key) }) {
+              result.originComparisonGaps[UsageOrigin.history.rawValue, default: []].insert("history-incomplete")
+            }
             if (coverage["non-pi-or-unsupported-header"] ?? 0)>0 { result.historyReasons.append("非Pi SessionHeader格式的旁路JSONL未纳入") }
             if (coverage["ambiguous-candidates"] ?? 0)>0 { result.historyReasons.append("父链缺失/冲突继承项保守跳过") }
             for (key, label) in [
@@ -917,7 +988,10 @@ public final class UsageLedger: UsageLedgerClient {
               ("missing-valid-occurrence", "缺有效消费时间")
             ] { if let count = coverage[key], count > 0 { result.historyReasons.append("\(label)：\(count)项，未猜测或补0") } }
           }
-          if let conflicts = receipt["conflicts"] as? Int, conflicts > 0 { result.historyReasons.append("导入内容冲突：\(conflicts)项，保留原记录") }
+          if let conflicts = receipt["conflicts"] as? Int, conflicts > 0 {
+            result.historyReasons.append("导入内容冲突：\(conflicts)项，保留原记录")
+            result.originComparisonGaps[UsageOrigin.history.rawValue, default: []].insert("history-conflict")
+          }
         }
       }
       sqlite3_finalize(history)

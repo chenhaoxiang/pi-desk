@@ -66,83 +66,83 @@ struct SessionCard: View {
   @EnvironmentObject var model: AppModel
   var append: ((Identity, String) -> Void)?
   var body: some View {
-    HStack(spacing: 12) {
-      RoundedRectangle(cornerRadius: 3).fill(Presentation.status(session).tone.color).frame(
-        width: 3)
-      VStack(alignment: .leading, spacing: 9) {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(session.snapshot.display.name).font(
-            .system(size: island ? 15 : 14, weight: .semibold)
-          ).lineLimit(island ? 1 : 2).fixedSize(horizontal: false, vertical: true).help(session.snapshot.display.name)
+    HStack(spacing: 10) {
+      RoundedRectangle(cornerRadius: 2).fill(Presentation.status(session).tone.color).frame(width: 3)
+      VStack(alignment: .leading, spacing: 7) {
+        HStack(spacing: 6) {
+          Text(model.sessionTitle(session)).font(.system(size: 14, weight: .semibold))
+            .lineLimit(1).help(model.sessionTitle(session))
           Spacer(minLength: 0)
-          StatusPill(status: Presentation.status(session))
-        }.frame(height: island ? 24 : 38, alignment: .top)
+          if model.hasUnreadResult(session) {
+            Circle().fill(.blue).frame(width: 7, height: 7).accessibilityLabel("本轮结束后有未查看变化")
+          }
+          if model.isPinned(session.snapshot.identity) {
+            Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary).accessibilityLabel("已置顶")
+          }
+        }
+        HStack(spacing: 6) {
+          StatusPill(status: Presentation.status(session)).fixedSize()
+          Text(Presentation.activity(session)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+        }
         HStack(spacing: 4) {
           Circle().fill(Presentation.connectionStatus(session).tone.color).frame(width: 5, height: 5)
-          Text(Presentation.connection(session.connection))
-          Text("·").foregroundStyle(.tertiary)
-          Text(metadata)
-          Text("·").foregroundStyle(.tertiary)
-          Text(Presentation.createdShort(session.snapshot))
-        }.font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-          .frame(height: 16, alignment: .leading)
-        HStack(spacing: 7) {
-          Image(
-            systemName: session.snapshot.tools.isEmpty ? "circle.dotted" : "wrench.and.screwdriver"
-          ).foregroundStyle(Presentation.status(session).tone.color)
-          Text(Presentation.activity(session)).lineLimit(island ? 1 : 2)
-        }.font(.system(size: 12)).foregroundStyle(.primary.opacity(0.86))
-          .frame(height: island ? 17 : 34, alignment: .top)
-        Group {
-          if !session.snapshot.runs.isEmpty {
-            Label(
-              session.connection != .connected
-                ? "子任务状态待更新"
-                : session.snapshot.runs.contains(where: { $0.state == "running" })
-                  ? "有已报告的子任务正在运行" : "子任务状态已更新", systemImage: "point.3.connected.trianglepath.dotted"
-            ).font(.system(size: 10)).foregroundStyle(.secondary)
-          } else {
-            Color.clear
-          }
-        }.frame(height: 14, alignment: .leading)
+          Text(metadata).lineLimit(1).truncationMode(.middle)
+          Spacer(minLength: 2)
+          Text(SessionExperience.timing(session)).lineLimit(1).layoutPriority(1)
+        }.font(.system(size: 11)).foregroundStyle(.secondary)
+          .help(Presentation.connection(session.connection) + " · " + metadata)
         if island {
           HStack(spacing: 8) {
             Button("查看详情", action: onSelect).buttonStyle(.bordered)
-            Button(model.originalRouteLabel(identity: session.snapshot.identity)) { model.openOriginal(identity: session.snapshot.identity) }.buttonStyle(.borderless)
-              .disabled(!model.canOpenOriginal(identity: session.snapshot.identity))
-            Spacer()
-            if session.connection == .connected {
-              Button {
-                append?(session.snapshot.identity, "followUp")
-              } label: {
-                Image(systemName: "text.badge.plus")
-              }.help("追加要求").accessibilityLabel("向" + session.snapshot.display.name + "追加要求")
-            }
+            Button(model.originalRouteLabel(identity: session.snapshot.identity)) { model.openOriginal(identity: session.snapshot.identity) }
+              .buttonStyle(.borderless).disabled(!model.canOpenOriginal(identity: session.snapshot.identity))
+            Spacer(minLength: 0)
+            Button { append?(session.snapshot.identity, "followUp") } label: { Image(systemName: "text.badge.plus") }
+              .disabled(session.connection != .connected).help("追加要求")
+              .accessibilityLabel("向" + model.sessionTitle(session) + "追加要求")
           }.font(.system(size: 11))
         }
-        Group {
-          if !island && session.snapshot.childCoverage != "owner-reported" {
-            Text("子任务信息待核 · " + Presentation.usage(session.snapshot).coverage).font(.system(size: 10))
-              .foregroundStyle(.secondary)
-          } else {
-            Color.clear
-          }
-        }.frame(height: island ? 0 : 14, alignment: .leading)
-      }.frame(minHeight: island ? 118 : 132, alignment: .top)
-    }.padding(island ? 13 : 12).background(
+      }.frame(height: island ? 110 : 76, alignment: .top)
+    }.padding(11).background(
       selected ? Color.accentColor.opacity(0.10) : Color(nsColor: .controlBackgroundColor),
-      in: RoundedRectangle(cornerRadius: 14)
-    ).overlay(
-      RoundedRectangle(cornerRadius: 14).stroke(
-        selected ? Color.accentColor.opacity(0.32) : .primary.opacity(island ? 0.08 : 0.05),
-        lineWidth: 1)
-    ).contentShape(RoundedRectangle(cornerRadius: 14))
-      .accessibilityElement(children: .contain)
+      in: RoundedRectangle(cornerRadius: 11)
+    ).overlay(RoundedRectangle(cornerRadius: 11).stroke(selected ? Color.accentColor.opacity(0.35) : .primary.opacity(0.06)))
+      .contentShape(RoundedRectangle(cornerRadius: 11)).accessibilityElement(children: .contain)
   }
   var metadata: String {
-    let s = session.snapshot
-    return [Presentation.project(s), s.display.branch, Presentation.shortModel(s)].compactMap { $0 }
-      .filter { !$0.isEmpty }.joined(separator: " · ")
+    [Presentation.project(session.snapshot), Presentation.shortModel(session.snapshot)].joined(separator: " · ")
+  }
+}
+
+struct SessionIdentityControls: View {
+  let session: SessionView
+  @EnvironmentObject var model: AppModel
+  @State private var renaming = false
+  @State private var draft = ""
+  @State private var issue = ""
+  var body: some View {
+    HStack(spacing: 8) {
+      Button { model.togglePin(session.snapshot.identity) } label: {
+        Image(systemName: model.isPinned(session.snapshot.identity) ? "pin.fill" : "pin")
+      }.help(model.isPinned(session.snapshot.identity) ? "取消置顶" : "置顶此会话")
+        .accessibilityLabel(model.isPinned(session.snapshot.identity) ? "取消置顶此会话" : "置顶此会话")
+      Button { draft = model.alias(session.snapshot.identity); issue = ""; renaming = true } label: {
+        Image(systemName: "square.and.pencil")
+      }.help("设置本机显示名称").accessibilityLabel("设置本机显示名称")
+        .popover(isPresented: $renaming) {
+          VStack(alignment: .leading, spacing: 12) {
+            Text("本机显示名称").font(.headline)
+            TextField("留空恢复原名称", text: $draft).textFieldStyle(.roundedBorder).onSubmit(save)
+            Text("只改变 Pi Desk 显示，不修改原会话或管理目标。").font(.caption).foregroundStyle(.secondary)
+            if !issue.isEmpty { Text(issue).font(.caption).foregroundStyle(.orange) }
+            HStack { Button("取消") { renaming = false }; Spacer(); Button("保存", action: save).buttonStyle(.borderedProminent) }
+          }.padding(18).frame(width: 300)
+        }
+    }.buttonStyle(.borderless)
+  }
+  private func save() {
+    if model.setAlias(draft, for: session.snapshot.identity) { renaming = false }
+    else { issue = "名称最多128字节、不可含控制字符；最多保留32个别名。" }
   }
 }
 struct MessageComposer: View {
@@ -218,7 +218,8 @@ struct SessionActions: View {
           model.openOriginal(identity: session.snapshot.identity)
         } label: {
           Label(model.originalRouteLabel(identity: session.snapshot.identity), systemImage: "arrow.up.right")
-        }.buttonStyle(.borderedProminent).disabled(!model.canOpenOriginal(identity: session.snapshot.identity))
+        }.buttonStyle(.borderedProminent).tint(model.canOpenOriginal(identity: session.snapshot.identity) ? Color.accentColor : .gray)
+          .disabled(!model.canOpenOriginal(identity: session.snapshot.identity)).help("只打开精确的原会话；不可用原因见定位诊断")
         Button("追加要求") { mode = "followUp" }.buttonStyle(.bordered).disabled(
           session.connection != .connected)
         Button("纠偏") { mode = "steer" }.buttonStyle(.bordered).disabled(
@@ -282,6 +283,9 @@ struct SessionDiagnostics: View {
         } else {
           line("用量采集器", "旧桥接未纳入持久时间统计；等待新Pi正常启动时自然加载，不强制重载当前工作")
         }
+        line("创建时间", Presentation.createdAbsolute(session.snapshot))
+        line("最后接收观测", Date(timeIntervalSince1970: session.snapshot.observedAt / 1000).formatted())
+        line("原始会话名称", session.snapshot.display.name)
         line("会话ID", session.snapshot.identity.nativeSessionId)
         line("运行代际", session.snapshot.identity.runtimeEpoch)
         line("原始状态", session.snapshot.execution.rawValue + " / " + session.connection.rawValue)
@@ -332,6 +336,17 @@ struct SessionDiagnostics: View {
     }
   }
 }
+private struct ExpiredSpotlightCard: View {
+  var body: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      Label("会话已更新", systemImage: "clock.arrow.circlepath").font(.subheadline.weight(.semibold))
+      Text("重新展开速览可查看当前对象").font(.caption).foregroundStyle(.secondary)
+      Text("此位置已停用，其他会话不会前移").font(.caption2).foregroundStyle(.secondary)
+    }.frame(maxWidth: .infinity, alignment: .leading).padding(11).frame(height: 132)
+      .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 11))
+      .accessibilityElement(children: .combine)
+  }
+}
 struct IslandView: View {
   @EnvironmentObject var model: AppModel
   @EnvironmentObject var island: IslandController
@@ -350,7 +365,8 @@ struct IslandView: View {
   }
   var compactSummary: String {
     if model.diagnostic.hasPrefix("连接不可用") { return "连接暂不可用" }
-    if model.activeCount > 0 { return "\(model.activeCount) 已确认执行" }
+    if model.attentionCount > 0 { return "\(model.attentionCount) 个需关注" }
+    if model.activeCount > 0 { return "\(model.activeCount) 个运行中" }
     if model.unknownExecutionCount > 0 { return "\(model.unknownExecutionCount) 执行状态待核" }
     if model.sessions.isEmpty { return "等待接入" }
     if model.connectedCount == 0 { return "已接入0 · 连接待恢复" }
@@ -410,7 +426,7 @@ struct IslandView: View {
         .top, island.geometry.topInset + 14
       ).padding(.bottom, 13)
       HStack(spacing: 17) {
-        Text("全部 \(model.sessions.count)")
+        Text("已接入 \(model.connectedCount)")
         Text("运行中 \(model.activeCount)")
         Text("需输入 \(model.inputCount)").foregroundStyle(
           model.inputCount > 0 ? StatusTone.amber.color : .secondary)
@@ -421,18 +437,19 @@ struct IslandView: View {
       ScrollViewReader { proxy in
         ScrollView {
           VStack(spacing: 9) {
-            if model.sessions.isEmpty {
+            if island.spotlightSlots.isEmpty {
               VStack(spacing: 10) {
                 Image(systemName: "rectangle.stack").font(.title2)
-                Text("尚无已接入会话").font(.headline)
-                Text("新 Pi 会话会按已安装入口自然接入，关闭这里不会停止 Pi。").font(.caption).foregroundStyle(.secondary)
+                Text("暂无在线会话").font(.headline)
+                Text("新 Pi 正常接入后会显示；断连记录可在管理窗口查看。").font(.caption).foregroundStyle(.secondary)
                   .multilineTextAlignment(.center)
               }.frame(maxWidth: .infinity).padding(.vertical, 28)
             }
-            ForEach(Array(model.sessions.prefix(4)), id: \.snapshot.identity) { s in
-              SessionCard(
-                session: s, island: true, onSelect: { island.openManager(s.snapshot.identity) },
-                append: { id, mode in island.compose(id, mode: mode) })
+            ForEach(island.spotlightSlots) { slot in
+              if let s = slot.session {
+                SessionCard(session: s, island: true, onSelect: { island.openManager(s.snapshot.identity) },
+                  append: { id, mode in island.compose(id, mode: mode) })
+              } else { ExpiredSpotlightCard() }
             }
             if let identity = island.composing {
               MessageComposer(
@@ -441,7 +458,7 @@ struct IslandView: View {
               ).id(identity).id("island-composer")
             }
             if model.sessions.count > 4 {
-              Button("另有 \(model.sessions.count-4) 个会话，打开管理窗口查看") { island.openManager() }.font(
+              Button("查看全部 \(model.sessions.count) 个会话") { island.openManager() }.font(
                 .caption
               ).buttonStyle(.plain).foregroundStyle(.secondary)
             }
@@ -463,8 +480,8 @@ struct IslandView: View {
       HStack {
         Label("Pi 独立运行", systemImage: "checkmark.shield")
         Spacer()
-        if !model.actionNote.isEmpty {
-          Text(model.actionNote).lineLimit(1)
+        if let identity = island.composing, let note = model.sessionNotes[identity] {
+          Text(note).lineLimit(1)
         } else {
           Text("Esc 收起 · 编辑时保留展开")
         }

@@ -8,6 +8,12 @@ struct PiSettingField: Identifiable {
   let choices: [String]
   let note: String
   var id: String { key }
+  func choiceLabel(_ value: String) -> String {
+    if key == "quietStartup" { return ["false": "显示完整启动信息", "header": "仅显示启动标题", "true": "隐藏启动信息"][value] ?? value }
+    if key == "defaultThinkingLevel" { return ["off": "关闭", "minimal": "最少", "low": "低", "medium": "中", "high": "高", "xhigh": "更高", "max": "最高"][value] ?? value }
+    return ["true": "开启", "false": "关闭", "system": "跟随系统", "dark": "深色", "light": "浅色",
+      "all": "一次递送全部", "one-at-a-time": "逐条递送", "regular": "普通", "fullscreen": "全屏"][value] ?? value
+  }
   static let fields: [PiSettingField] = [
     .init(key: "theme", title: "终端主题", choices: ["system", "dark", "light"], note: "下次会话生效；自定义主题原值保留"),
     .init(key: "defaultThinkingLevel", title: "默认思考档", choices: ["off", "minimal", "low", "medium", "high", "xhigh", "max"], note: "下次会话默认值；不改当前会话或模型专属覆盖"),

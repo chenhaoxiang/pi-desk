@@ -44,7 +44,7 @@ struct DeskSettings: Codable {
 @MainActor final class AppModel: ObservableObject {
   @Published var store = SessionStore()
   @Published var selected: String?
-  @Published var page = "会话"
+  @Published var page = "工作总览"
   @Published var diagnostic = "连接正在启动"
   @Published var actionNote = ""
   @Published var navigationNotice: String?

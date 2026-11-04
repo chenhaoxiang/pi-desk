@@ -35,6 +35,7 @@ import { projectMetadata } from "./metadata.ts";
 import { displayBudget } from "./budget.ts";
 import { captureTerminalRoute } from "./terminal-route.ts";
 import { MAX_CREATED_AT_MS } from "./protocol.ts";
+import { TodoObserver } from "./todo-projection.ts";
 export type TransportLike = Pick<
 	BridgeTransport,
 	"start" | "publish" | "reply" | "close" | "dropped"
@@ -87,6 +88,7 @@ export class DeskSession {
 	private settledObserved = false;
 	private observationDrops = 0;
 	private metadataLoaded = false;
+	private todo = new TodoObserver();
 	private bridgeSource: string;
 	private terminalRoute?: NonNullable<Snapshot["display"]["route"]>;
 	constructor(
@@ -147,6 +149,7 @@ export class DeskSession {
 			execution: initialExecution,
 			pending: null,
 			executionObservation: initialExecutionObservation,
+			todo: this.todo.read(),
 			childCoverage: "unknown",
 			tools: [],
 			runs: [],
@@ -448,7 +451,18 @@ export class DeskSession {
 		}
 		this.changed();
 	}
+	resetTodoScope(ctx: ExtensionContext) {
+		if (this.stopped) return;
+		this.todo.reset(); this.snapshot.todo = this.todo.read(); this.observe(ctx);
+	}
+	todoResult(id: string, result: unknown, failed: boolean) {
+		if (this.stopped) return;
+		if (this.todo.end(id, result, failed, this.now())) {
+			this.snapshot.todo = this.todo.read(); this.changed();
+		}
+	}
 	tool(start: boolean, id: string, name: string, ctx: ExtensionContext) {
+		if (start && name === "todo") { this.todo.start(id); this.snapshot.todo = this.todo.read(); }
 		this.observe(ctx);
 		this.noteActivity(start ? "tool-start" : "tool-end");
 		if (start) {
@@ -865,6 +879,7 @@ export class DeskSession {
 	close() {
 		if (this.stopped) return;
 		this.stopped = true;
+		this.todo.reset();
 		this.usageWriter?.close();
 		this.assistant.close();
 		this.ctx = undefined;

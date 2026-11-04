@@ -90,7 +90,7 @@ public struct UsageViewState: Codable, Equatable {
   public static let currentVersion = 1
   public static let maximumBytes = 128 * 1024
   public var version: Int = currentVersion
-  public var page: String = "会话"
+  public var page: String = "工作总览"
   public var sessionFilter: String = "在线"
   public var usagePreset: String = UsagePreset.today.rawValue
   public var usageMetric: String = UsageMetric.interaction.rawValue
@@ -113,7 +113,7 @@ public struct UsageViewState: Codable, Equatable {
   public init() {}
   public var migratedNavigation: UsageViewState {
     var result = self
-    if !["会话", "Token", "重要事项", "AI助手", "接入健康", "设置"].contains(result.page) { result.page = "会话" }
+    if !["工作总览", "会话", "Token", "重要事项", "AI助手", "接入健康", "设置"].contains(result.page) { result.page = "会话" }
     return result
   }
   public var valid: Bool {

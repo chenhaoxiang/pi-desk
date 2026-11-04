@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 public enum DeskNavigation {
-  public static let pages = ["会话", "Token", "重要事项", "AI助手", "接入健康", "设置"]
+  public static let pages = ["工作总览", "会话", "Token", "重要事项", "AI助手", "接入健康", "设置"]
 }
 
 public enum DeskModal: String, Identifiable {

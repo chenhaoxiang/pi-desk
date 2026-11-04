@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { displayBudget } from "../src/budget.ts";
 import { encode, type RecordV1 } from "../src/protocol.ts";
+import { TodoObserver } from "../src/todo-projection.ts";
 test("combined maximum DTOs fit one frame and omitted records remain explicit", async () => {
 	const fixture = JSON.parse(
 		await readFile(
@@ -35,6 +36,9 @@ test("combined maximum DTOs fit one frame and omitted records remain explicit", 
 		kind: "input",
 		startedAt: 100,
 	}));
+	const todo = new TodoObserver(); todo.start("maximum-todo");
+	todo.end("maximum-todo", { details: { action: "list", tasks: Array.from({ length: 512 }, (_, i) => ({ id: i + 1, subject: "工".repeat(100), activeForm: "步".repeat(100), owner: "人".repeat(50), status: "pending", blockedBy: Array.from({length:16}, (_, d) => d + 1) })) } }, false, 1000);
+	s.todo = todo.read();
 	const bounded = displayBudget(s);
 	const frame = encode({ ...fixture, snapshot: bounded });
 	assert.ok(frame.length <= 65537);

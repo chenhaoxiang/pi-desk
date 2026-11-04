@@ -182,6 +182,17 @@ import PiDeskCore
     fallbackClient.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: fallbackPackets[0].2, assistant: modelReply))
     precondition(!fallbackClient.loadingModels && fallbackClient.models.count == 2 && fallbackClient.provider == other.provider && fallbackClient.modelID == other.modelId && fallbackClient.thinking == "high")
     precondition(fallbackModel.store.requests.isEmpty && fallbackPackets.allSatisfy { $0.0.operation == "models" }, "directory fallback neither changes model choice nor resubmits an analysis")
+    if let old = fallbackModel.store.sessions[snapshot.identity.sessionKey] { fallbackModel.store.disconnect(old.connectionId) }
+    var directoryB = snapshot; directoryB.identity.nativeSessionId = "directory-b"
+    precondition(fallbackModel.store.apply(WireRecord(kind: "hello", identity: directoryB.identity, snapshot: directoryB), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    fallbackClient.refreshModels(force: false)
+    await waitUntil { fallbackPackets.count == 2 }
+    precondition(fallbackPackets.last!.1 == directoryB.identity)
+    fallbackClient.tick(now: Date().timeIntervalSince1970 * 1000 + 16000)
+    precondition(!fallbackClient.loadingModels)
+    fallbackClient.refreshModels(force: false)
+    await waitUntil { fallbackPackets.count == 3 }
+    precondition(fallbackPackets.last!.1 == directoryB.identity && fallbackPackets.allSatisfy { $0.0.operation == "models" }, "A's successful directory is not reused as B's after B times out")
     print("Assistant checks passed: shared DTO, exact registry/context routes, medium selection, sensitive-input preflight, explicit labeling, numeric-only usage, dedup/cache, cancel/timeout and runtime freshness.")
   }
 }

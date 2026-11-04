@@ -102,6 +102,7 @@ struct PreparedAssistantSource: Identifiable {
     guard let model, !busy, !loadingModels else { return }
     if !force, !models.isEmpty, let broker, brokerIsCurrent(broker),
       let catalogLoadedAt, Date().timeIntervalSince(catalogLoadedAt) < 60 { return }
+    catalogLoadedAt = nil // A new probe cannot borrow an old broker's successful timestamp.
     if model.isPreview {
       models = [AssistantModelOption(provider: AssistantDefaults.provider, modelId: AssistantDefaults.model, name: "合成模型预览", thinkingLevels: ["off", "low", "medium", "high", "max"]), AssistantModelOption(provider: "synthetic-other", modelId: "alternative", name: "另一注册模型（合成）", thinkingLevels: ["off", "high"])]; notice = "合成预览不会发起真实模型调用"; return
     }

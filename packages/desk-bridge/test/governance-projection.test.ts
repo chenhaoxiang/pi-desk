@@ -25,6 +25,8 @@ test("handoff/result payloads cannot smuggle write authority, paths or synthetic
   assert.equal(projectOwnerResult({ ...result, decision: "deliverable", outcome: "unknown" }), undefined);
   assert.equal(projectOwnerResult({ ...result, resultRef: "/private/owner.json" }), undefined);
   assert.equal(projectWorkHandoff({ ...handoff, executable: true }), undefined);
+  assert.deepEqual(projectWorkHandoff(handoff)?.acceptedFactRefs,["effect:a/1","CI 41910104247 green","已有验收引用"]);
+  assert.equal(projectWorkHandoff({...handoff,blockerRefs:["/Users/private"]}),undefined);
   const empty = emptyGovernance("not-applicable"); assert.ok(validGovernanceProjection(empty));
 });
 test("bounded projection omits complete owner observations and stays partial", () => {

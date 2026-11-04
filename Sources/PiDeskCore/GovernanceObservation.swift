@@ -6,6 +6,11 @@ private func reference(_ value: String, max: Int = 128) -> Bool {
   !value.isEmpty && value.utf8.count <= max && value != "." && value != ".."
     && value.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil
 }
+private func observationReference(_ value: String) -> Bool {
+  guard !value.isEmpty, value.utf16.count <= 256, !AssistantPrivacy.sensitive(value) else { return false }
+  let forbidden = [#"[\x00-\x1f\x7f-\x9f]"#, #"(?:^|[\\/])(?:Users|home|private|var|tmp|etc|opt|workspace|src)(?:[\\/]|$)|^[A-Za-z]:[\\/]"#, #"&&|\|\||[;`$<>]"#, #"://[^/\s:]+:[^@/\s]+@"#, #"(?i)(?:^|[^a-z0-9])(?:args?|argv|command|completion|content|cwd|directory|file(?:name|path)?|input|model|output|path|prompt|raw|request|response|secret|shell|stderr|stdin|stdout|token|credential|password)(?:$|[^a-z0-9])"#]
+  return forbidden.allSatisfy { value.range(of: $0, options: .regularExpression) == nil }
+}
 public struct PiWorkRef: Codable, Hashable, Sendable {
   public var owner: String
   public var kind: String
@@ -87,7 +92,7 @@ public struct PiWorkHandoff: Codable, Hashable, Sendable {
   public var executable: Bool
   public var readOnly: Bool
   public var valid: Bool {
-    guard (previous == nil || previous!.valid), (successor == nil || successor!.valid), ["handoff_observed", "reconcile_required"].contains(decision), reference(reasonCode), [acceptedFactRefs, unresolvedEffectRefs, blockerRefs].allSatisfy({ $0.count <= 64 && $0.allSatisfy { reference($0) } }), ["reconcile", "continue", "wait", "close", "handoff", "none"].contains(nextAction), sourceHeadRecheckRequired, currentVerification == "not_checked", authorization == "none", !executable, readOnly else { return false }
+    guard (previous == nil || previous!.valid), (successor == nil || successor!.valid), ["handoff_observed", "reconcile_required"].contains(decision), reference(reasonCode), [acceptedFactRefs, unresolvedEffectRefs, blockerRefs].allSatisfy({ $0.count <= 64 && $0.allSatisfy { observationReference($0) } }), ["reconcile", "continue", "wait", "close", "handoff", "none"].contains(nextAction), sourceHeadRecheckRequired, currentVerification == "not_checked", authorization == "none", !executable, readOnly else { return false }
     if decision == "handoff_observed" {
       guard let previous, let successor else { return false }
       return reasonCode == "handoff_observed" && previous.workRef == successor.workRef && previous.stageId == successor.stageId && previous.runId != successor.runId && previous.sessionId != successor.sessionId

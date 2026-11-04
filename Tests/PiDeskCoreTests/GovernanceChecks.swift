@@ -5,6 +5,7 @@ enum GovernanceChecks {
   static func run(_ base: Snapshot, root: URL) throws {
     let projection = try JSONDecoder().decode(GovernanceProjection.self, from: Data(contentsOf: root.appendingPathComponent("Fixtures/work-results-v1.json")))
     precondition(projection.valid)
+    precondition(projection.handoffs[0].observation.acceptedFactRefs == ["effect:a/1", "CI 41910104247 green", "已有验收引用"])
     precondition(projection.results[0].observation.statusTitle.contains("产物可用"))
     precondition(projection.results[0].observation.scopeNote.contains("不代表任务验收"))
     precondition(projection.results[1].observation.statusTitle == "待原 owner 对账")

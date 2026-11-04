@@ -85,7 +85,9 @@
         "decision": "handoff_observed",
         "reasonCode": "handoff_observed",
         "acceptedFactRefs": [
-          "existing-fact"
+          "effect:a/1",
+          "CI 41910104247 green",
+          "已有验收引用"
         ],
         "unresolvedEffectRefs": [
           "unknown-effect"

@@ -16,7 +16,7 @@ export type ObservedHandoff = { seq: number; observedAt: number; observation: Wo
 export type GovernanceProjection = {
   version: 1; source: "pi.vista";
   coverage: "not-observed" | "not-applicable" | "observed" | "partial" | "unavailable";
-  observerEpoch?: string; observerSeq?: number; observedAt?: number;
+  observerEpoch?: string; observerSeq?: number; observedAt?: number; stale?: boolean;
   results: ObservedResult[]; handoffs: ObservedHandoff[];
   /** Source window evictions, not a work/task count. */
   omittedObservations: number; omittedResults: number; omittedHandoffs: number;
@@ -66,6 +66,7 @@ export function validGovernanceProjection(value: unknown): value is GovernancePr
   if (!results || !handoffs || !uint(omitted) || !uint(omittedResults) || !uint(omittedHandoffs) || !results.every(r => projectOwnerResult(own(r, "observation"))) || !handoffs.every(h => projectWorkHandoff(own(h, "observation")))) return false;
   const entries = [...results, ...handoffs];
   if (!entries.every(r => uint(own(r, "seq")) && Number(own(r, "seq")) > 0 && Number(own(r, "seq")) <= Number(seq) && uint(own(r, "observedAt"), 7_258_118_400_000)) || new Set(entries.map(r => own(r, "seq"))).size !== entries.length) return false;
+  if (own(value, "stale") !== undefined && typeof own(value, "stale") !== "boolean") return false;
   if (epoch !== undefined && !safeReference(epoch)) return false;
   if (seq !== undefined && !uint(seq)) return false;
   if (at !== undefined && !uint(at, 7_258_118_400_000)) return false;

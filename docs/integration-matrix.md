@@ -56,6 +56,8 @@ verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift
 | 原会话定位 | Herdr精确pane；本轮补Terminal.app唯一TTY/TERM_SESSION_ID route，tmux仅在一次性client_tty可核对时转外层TTY | count非1/Automation拒绝/旧bridge缺route显示不可定位；不按cwd/名称猜，不对活跃session自动`pi --session`开第二writer |
 | Pi原生设置 | user `<agentDir>/settings.json`按Pi settings schema白名单读写；project `.pi/settings.json`只读来源提示 | PiSettingsStore兼容`.lock`、revision/hash CAS、owner-only backup、atomic rename/readback；auth/models/mcp/resources/proxy/trust/permissions/defaultModel/defaultTools排除 |
 
+每行result不是原reader返回的PiOwnerReadback，而是`readPiOwnerResult`完成消费后的`PiResultConsumption`：上游`packages/adapter-pi/src/result-consumption.ts`公开类型及`result()`固定保留`authorization:none/readOnly:true`。handoff是`PiWorkHandoffObservation`，上游`work-handoff.ts`固定`sourceHeadRecheckRequired:true/currentVerification:not_checked/authorization:none/executable:false/readOnly:true`。Desk按原合同校验，不能因混淆readback与consumption而补造缺省权限字段；未来扩展work.kind也需新合同，不放宽当前v1的issue/change/task/document集合。
+
 ## 3. 原生模式差异
 
 [Pi CLI Integration](https://github.com/chenhaoxiang/pi/blob/aabcd6e46d5d6f80338f41c41554d1dea5e7eea7/packages/coding-agent/docs/cli-integration.md)说明各CLI模式复用主能力，但TUI-only交互在RPC受限；[RPC Extension UI](https://github.com/chenhaoxiang/pi/blob/aabcd6e46d5d6f80338f41c41554d1dea5e7eea7/packages/coding-agent/docs/rpc-extension-ui.md)明确`custom()`不可按TUI使用。裸SDK的资源/default builtins也须单独配置。Pi Desk不靠统一迁移消除这些差异，而使用原宿主薄适配。

@@ -45,6 +45,14 @@ test("absent or wrong-address owner times out to unavailable without inventing a
   events.emit(WORK_REPLY+q.requestId,{version:1,requestId:q.requestId,snapshot:snapshot()}); assert.equal(client.read().coverage,"unavailable","expired reply is inert");
   client.close();
 });
+test("timeout preserves last observations as stale and a successful memory reread clears only staleness", async () => {
+  const events=bus(); let respond=true; const source=snapshot();
+  events.on(WORK_QUERY,q=>{ if(respond)events.emit(WORK_REPLY+q.requestId,{version:1,requestId:q.requestId,snapshot:source}); });
+  const client=new GovernanceClient(events,"host-a",()=>{},10); client.start(); await tick();
+  const original=structuredClone(client.read()); respond=false; client.refresh();
+  await new Promise(resolve=>setTimeout(resolve,25)); assert.equal(client.read().stale,true); assert.deepEqual(client.read().results,original.results);
+  respond=true; client.refresh(); assert.deepEqual(client.read(),original); client.close();
+});
 test("source protocol is metadata only, bounded, and keeps null binding unresolved", () => {
   const source=snapshot();
   assert.equal(projectWorkSnapshot({...source,authorization:"admitted"},"host-a"),undefined);

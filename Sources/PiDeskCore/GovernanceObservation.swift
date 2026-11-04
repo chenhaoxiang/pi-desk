@@ -117,6 +117,7 @@ public struct GovernanceProjection: Codable, Equatable, Sendable {
   public var observerEpoch: String?
   public var observerSeq: Int?
   public var observedAt: Double?
+  public var stale: Bool?
   public var results: [GovernanceObservedResult]
   public var handoffs: [GovernanceObservedHandoff]
   public var omittedObservations: Int
@@ -133,6 +134,7 @@ public struct GovernanceProjection: Codable, Equatable, Sendable {
     return results.isEmpty && handoffs.isEmpty && omittedObservations == 0 && omittedResults == 0 && omittedHandoffs == 0
   }
   public var coverageTitle: String {
+    if stale == true { return "保留最后owner观察 · 最近读取未确认" }
     switch coverage {
     case "observed": return "已收到原 owner 观察"
     case "partial": return "部分 owner 观察"
@@ -164,7 +166,7 @@ public enum WorkResultPortfolio {
         let observation = item.observation
         guard let binding = observation.binding else { continue }
         let ref = binding.workRef
-        let entry = WorkResultEntry(reporter: session.snapshot.identity, connected: session.connection == .connected, observedAt: item.observedAt, result: observation, id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + (projection.observerEpoch ?? "unknown") + ":" + String(item.seq))
+        let entry = WorkResultEntry(reporter: session.snapshot.identity, connected: session.connection == .connected && projection.stale != true, observedAt: item.observedAt, result: observation, id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + (projection.observerEpoch ?? "unknown") + ":" + String(item.seq))
         if let index = slots[ref] { result[index].entries.append(entry) }
         else { slots[ref] = result.count; result.append(WorkResultGroup(id: ref, entries: [entry])) }
       }

@@ -69,7 +69,7 @@ export class GovernanceClient {
   refresh(targetEpoch?: string) {
     if (this.closed || this.pending) return;
     const id = randomUUID(), serial = this.serial;
-    const timer = setTimeout(() => { if (this.pending?.id !== id) return; this.finish(); if (serial === this.serial) this.unavailable(); }, this.timeoutMs).unref();
+    const timer = setTimeout(() => { if (this.pending?.id !== id) return; this.finish(); if (serial === this.serial) this.unavailable(true); }, this.timeoutMs).unref();
     const off = this.events.on(WORK_REPLY + id, payload => {
       if (this.closed || this.pending?.id !== id || own(payload, "version") !== 1 || own(payload, "requestId") !== id) return;
       const raw = own(payload, "snapshot");
@@ -78,7 +78,7 @@ export class GovernanceClient {
     });
     this.pending = { id, off, timer, serial, targetEpoch };
     try { this.events.emit(WORK_QUERY, { version: 1, requestId: id, hostSessionId: this.hostSessionId }); }
-    catch { this.finish(); if (serial === this.serial) this.unavailable(); }
+    catch { this.finish(); if (serial === this.serial) this.unavailable(true); }
   }
   private accept(raw: unknown, fromQuery: boolean) {
     const projected = projectWorkSnapshot(raw, this.hostSessionId);
@@ -93,7 +93,9 @@ export class GovernanceClient {
     if (JSON.stringify(this.value) !== fingerprint) this.publish(projected);
   }
   private publish(value: GovernanceProjection) { this.value = value; try { this.onChange(); } catch { /* display callbacks cannot affect owner work */ } }
-  private unavailable() { this.publish(emptyGovernance()); }
+  private unavailable(preserve = false) {
+    this.publish(preserve && (this.value.results.length || this.value.handoffs.length) ? { ...this.value, stale: true } : emptyGovernance());
+  }
   private finish() { if (this.pending) { clearTimeout(this.pending.timer); this.pending.off(); this.pending = undefined; } }
   close() { this.closed = true; this.finish(); this.off?.(); this.off = undefined; this.queued = undefined; this.value = emptyGovernance(); }
 }

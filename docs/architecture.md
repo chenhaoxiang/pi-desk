@@ -221,7 +221,7 @@ AI页重入对成功模型目录复用60秒内存缓存（broker仍须准确且�
 
 W2保留Vista原生owner result/handoff语义：Snapshot中的可选governance只是有界消费副本，绑定、阶段、run/session/revision/head、result decision/outcome/reasonCode、交接引用和currentVerification原样受限展示。`deliverable`只称该stage原owner已接受；`subagent-output-available`不是任务验收，`source-shared-delivery`不是安装/运行/业务完成。工作引用只按显式owner/kind/key归组，不把reporter session、cwd、名称或Todo关联升级为产品事实。
 
-Vista owner冻结memory-only出口`pi-vista:work-observation:query:v1` / `reply:v1:<requestId>` / `changed:v1`：准确hostSessionId、observerEpoch、seq、16条session-recent-observations及累计omitted。Desk启动一次读取、随后消费completed-observation通知，用户可明确“读取现有观察”；新epoch须通过关联query对账，旧epoch/seq/过期request拒绝，不轮询。每条原观察seq/observedAt保留，查询不刷新时间、执行原件IO/验证/模型/持久化，不另实例化factory或再调readOwner。原binding.sessionId可不同reporter，不强制对齐或自动跳到另一runtime。冻结合同尚在Vista独立实现，旧来源无响应保持unavailable；跨包/安装资格单独核对。
+Vista owner冻结memory-only出口`pi-vista:work-observation:query:v1` / `reply:v1:<requestId>` / `changed:v1`：准确hostSessionId、observerEpoch、seq、16条session-recent-observations及累计omitted。Desk启动一次读取、随后消费completed-observation通知，用户可明确“读取现有观察”；新epoch须通过关联query对账，旧epoch/seq/过期request拒绝，不轮询。每条原观察seq/observedAt保留，查询不刷新时间、执行原件IO/验证/模型/持久化，不另实例化factory或再调readOwner。原binding.sessionId可不同reporter，不强制对齐或自动跳到另一runtime。用户显式刷新会话状态也会读取一次内存出口；超时保留最后观察并标stale，不让旧数据冒充当前读取成功。冻结合同尚在Vista独立实现，旧来源无响应保持unavailable；跨包/安装资格单独核对。
 
 消费规格`pi-work-observation`复用既有Snapshot可选todo字段，任务权威仍在原生Todo。读取成功TaskDetails白名单id/subject/activeForm/status/blockedBy/owner；不读params/description/metadata/工具正文，敏感值及本机路径有限预检隐藏，不是完整DLP。最多512条输入、32条输出、任务行7KiB，状态计数与omitted/partial准确；无快照RPC时只前向观察，不另import模块状态或读历史。scope隔离clear/tree/compact，开始捕获范围、晚到和重叠快照不覆盖；observerSeq仅传输观测顺序，不冒充原生revision。
 

@@ -55,6 +55,17 @@ import PiDeskCore
     base.identity.nativeSessionId = "perf-replacement"; base.seq += 1
     precondition(model.store.apply(WireRecord(kind: "hello", identity: base.identity, snapshot: base), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
     precondition(model.sessions.contains { $0.snapshot.identity == base.identity })
+    let work = try JSONDecoder().decode(GovernanceProjection.self, from: Data(contentsOf: root.appendingPathComponent("Fixtures/work-results-v1.json")))
+    let reporter = model.sessions.first!
+    var withWork = reporter.snapshot; withWork.seq += 1; withWork.governance = work
+    precondition(model.store.apply(WireRecord(kind: "snapshot", identity: withWork.identity, snapshot: withWork), connection: reporter.connectionId, now: Date().timeIntervalSince1970 * 1000))
+    precondition(model.workResults.count == 1)
+    let builds = model.workResultProjectionBuilds
+    for _ in 0..<120 { precondition(model.workResults.count == 1) }
+    precondition(model.workResultProjectionBuilds == builds, "warm work grouping stays cached")
+    withWork.seq += 1; withWork.governance = nil
+    precondition(model.store.apply(WireRecord(kind: "snapshot", identity: withWork.identity, snapshot: withWork), connection: reporter.connectionId, now: Date().timeIntervalSince1970 * 1000))
+    precondition(model.workResults.isEmpty, "same runtime owner reset clears the cached grouping")
     print(String(decoding: try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]), as: UTF8.self))
   }
 }

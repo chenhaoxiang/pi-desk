@@ -5,13 +5,18 @@ export function displayBudget(snapshot: Snapshot): Snapshot {
 		...snapshot,
 		omitted: { runs: 0, schedules: 0, inputs: 0, evidence: 0, usage: 0 },
 	};
-	for (const [key, budget] of [
+	// Preserve the original total display allowance when optional work metadata
+	// is present. Whole-row omission remains visible; no larger wire frame.
+	const reserve = snapshot.governance ? Buffer.byteLength(JSON.stringify(snapshot.governance)) : 0;
+	const ratio = Math.max(0, (52000 - reserve) / 52000);
+	for (const [key, baseBudget] of [
 		["runs", 14000],
 		["schedules", 15000],
 		["inputs", 6000],
 		["evidence", 7000],
 		["usage", 10000],
 	] as const) {
+		const budget = Math.floor(baseBudget * ratio);
 		let bytes = 0,
 			count = 0;
 		for (const row of snapshot[key]) {

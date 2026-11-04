@@ -33,6 +33,7 @@ verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift
 | 目标 | 已核实接口/事实 | Pi Desk设计及限制 |
 |---|---|---|
 | 生命周期 | `session_start/shutdown`、`agent_settled`、`model_select`、`tool_execution_start/end` | 需bridge；不从agent_end推断稳定结束，不用tool_call gate做观察；session header createdAt只投影标量，旧bridge缺失为unknown |
+| Pi治理工作结果 | Pi Vista `adapter-pi`公开`PiWorkBinding`/`PiResultConsumption`/`PiWorkHandoffObservation`；冻结出口合同为`pi-vista:work-observation:query:v1`与`pi-vista:work-observation:reply:v1:<requestId>`/`changed:v1`，snapshot含hostSessionId/observerEpoch/seq、16条观察窗口和omitted累计 | Desk只接完成观察的有界可选Snapshot副本；query只读owner内存，不重复readOwner/原件IO/验证/模型/持久化/执行。binding.sessionId可不同hostSessionId，保留子结果/交接原binding。出口当前仍在Vista独立树，未合入/安装前Desk显示not-observed/unavailable，不猜产品/goal/人工问题 |
 | 原生任务 | `todo`成功结果的`TaskDetails`，`create/update/get/list/delete/clear`返回当前全量tasks（list状态筛选只影响content），投影id/subject/activeForm/status/blockedBy/owner | 无公开当前snapshot RPC，只前向有界观察；clear/tree/compact/替换失效，未采集不当零，完成不当验收，owner标签不认证；隔离真实owner/Swift UDS验证，不import第二状态实例或扫描历史 |
 | 直接消息 | `pi.sendUserMessage(content,{deliverAs:'steer'|'followUp'})`返回void | 需bridge；提交不等于模型接收/任务完成，不承诺native durable requestId |
 | 中止当前回合 | `ctx.abort():void` | 只对当前身份/epoch；读后续生命周期，不等同清队列/停计划/停所有孩子 |
@@ -54,6 +55,8 @@ verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift
 | 现有服务控制台 | 用户显式配置的精确页面/受限API | 首版打开原管理页；不复制私有源码、机器地址、路径、scope或凭据进公开仓 |
 | 原会话定位 | Herdr精确pane；本轮补Terminal.app唯一TTY/TERM_SESSION_ID route，tmux仅在一次性client_tty可核对时转外层TTY | count非1/Automation拒绝/旧bridge缺route显示不可定位；不按cwd/名称猜，不对活跃session自动`pi --session`开第二writer |
 | Pi原生设置 | user `<agentDir>/settings.json`按Pi settings schema白名单读写；project `.pi/settings.json`只读来源提示 | PiSettingsStore兼容`.lock`、revision/hash CAS、owner-only backup、atomic rename/readback；auth/models/mcp/resources/proxy/trust/permissions/defaultModel/defaultTools排除 |
+
+每行result不是原reader返回的PiOwnerReadback，而是`readPiOwnerResult`完成消费后的`PiResultConsumption`：上游`packages/adapter-pi/src/result-consumption.ts`公开类型及`result()`固定保留`authorization:none/readOnly:true`。handoff是`PiWorkHandoffObservation`，上游`work-handoff.ts`固定`sourceHeadRecheckRequired:true/currentVerification:not_checked/authorization:none/executable:false/readOnly:true`。Desk按原合同校验，不能因混淆readback与consumption而补造缺省权限字段；未来扩展work.kind也需新合同，不放宽当前v1的issue/change/task/document集合。
 
 ## 3. 原生模式差异
 

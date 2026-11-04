@@ -18,6 +18,14 @@ Pi CLI/Runtime及原生owner保持任务/执行/验收事实与写入权威，De
 
 操作复用准确原会话打开、详情和follow-up/steer；不新增Todo mutation、默认Agent总结、审批或轮询。日后按已交付owner能力加入回答/优先级/工作绑定写入口，必须回原owner并读回，不在Desk乐观修改事实。
 
+## W2：原owner工作结果与交接
+
+复用Vista既有PiWorkBinding/PiResultConsumption/PiWorkHandoffObservation；Desk仅在Snapshot可选governance中保存有界消费副本，不产生验收、签名或执行许可。Vista owner维护同进程内存-only出口；Desk不另实例化工厂、不监听请求后重复调用readOwner。请求/回包按准确hostSessionId、requestId和本次consumer范围绑定，observerEpoch/seq隔离旧响应；查询不能刷新原结果的观察时间或把历史记录变成当前证明。
+
+结果只按显式owner/kind/key归组，完整stage/run/session/revision/head仍逐条显示；reporting session不是所有业务任务的owner。subagent-output-available仅“产物可用”，source-shared-delivery仅“源码阶段已交付”，其他stage保留原标签与限定范围。保留原交接accepted/unresolved/blocker引用与nextAction；wait/reconcile不自动变成用户审批。没有product/goal/人工问题producer就继续明确未提供。
+
+work结果与派生分组只有有界内存缓存，store替换即失效；不写用量库或外发AI。桥接中给治理投影预留至多6KiB并同步压缩原展示行预算，保留整体64KiB上限。为维持精确引用只省略整个结果，不裁断binding或改造owner结果。
+
 ## 后续与验收
 
 W1当前任务清单及coverage可用；W2消费已交付work/result/attention/问题引用，按显式映射归产品/工作项；W3一个低风险自然任务覆盖等待解除→续接→owner验收→交付→Desk同步；W4根据有限自然样本扩展自主升级/优化，保持原权限/预算/安全切换与回退。关闭Desk不停止Pi；消息送达/Todo完成/进程结束/源码安装等不能互相推导。

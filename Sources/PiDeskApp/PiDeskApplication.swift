@@ -382,6 +382,7 @@ struct SessionDetail: View {
         }
         }
         DeskCard { TodoObservationCard(session: session).id(snap.identity.runtimeEpoch + (snap.todo?.scope ?? "unavailable")) }
+        DeskCard { GovernanceSessionDetail(session: session) }
         OperationsSection(identity: snap.identity)
         DisclosureGroup("子任务 \(snap.runs.count) · " + Presentation.coverage(snap.childCoverage)) {
           RunsSection(session: session)

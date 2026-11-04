@@ -1,5 +1,33 @@
 ## ADDED Requirements
 
+### Requirement: Native owner result consumption
+Desk SHALL consume only the native Pi Vista owner’s bounded read-only export of already completed observations. Existing PiWorkBinding, PiResultConsumption and PiWorkHandoffObservation retain their original semantics and are not a second task database or acceptance authority.
+
+#### Scenario: Read existing observations
+- **WHEN** an exact enrolled runtime reads owner observation coverage or reconnects
+- **THEN** the query reads only owner memory and SHALL NOT invoke an owner reader, perform IO or verification, scan history, run a model, or replay an operation
+
+#### Scenario: Artifact and source acceptance are separate
+- **WHEN** an owner reports deliverable for subagent-output-available or source-shared-delivery
+- **THEN** Desk labels only that original stage and SHALL NOT infer business completion, installation, runtime loading, or acknowledgement
+
+#### Scenario: Explicit grouping only
+- **WHEN** multiple enrolled reporters provide the same explicit owner/kind/key
+- **THEN** their observations may be grouped while full stage/run/session/revision/head bindings remain separate, and other tasks in those sessions are not implicitly attached
+
+#### Scenario: Late observer scope or unavailable producer
+- **WHEN** a reply belongs to an expired request/scope, a retired owner epoch, or a different host session
+- **THEN** it cannot replace current observations; missing or unsupported producers remain unavailable/not-observed without fallback discovery
+
+#### Scenario: Preserved handoff is not renewed proof
+- **WHEN** a valid original handoff contains nextAction, blocker references and unresolved effects
+- **THEN** those references stay readable with currentVerification=not_checked and authorization=none; wait/reconcile are not automatically human-input alerts
+
+#### Scenario: Observation display exceeds frame budget
+- **WHEN** owner observations exceed Desk row or byte budgets
+- **THEN** complete observations are omitted with partial coverage and exact omission counts, without truncating identity or expanding the total wire limit
+
+
 ### Requirement: Pi-owned task observation
 Pi Desk SHALL consume bounded native Todo result metadata only through the enrolled Pi runtime, keep it read-only and non-authorizing, and never create a parallel task database or infer product/work ownership from names or paths.
 

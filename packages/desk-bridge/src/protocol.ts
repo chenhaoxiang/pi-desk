@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { validAssistant, type AssistantPayload } from "./assistant-protocol.ts";
 import { validTodoProjection, type TodoProjection } from "./todo-projection.ts";
+import { validGovernanceProjection, type GovernanceProjection } from "./governance-projection.ts";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
@@ -140,6 +141,8 @@ export type Snapshot = {
 	executionObservation?: ExecutionObservation;
 	activity?: SessionActivity;
 	todo?: TodoProjection;
+	/** Optional consumer projection; Pi Vista/owner remains authoritative. */
+	governance?: GovernanceProjection;
 	childCoverage: string;
 	tools: string[];
 	runs: Run[];
@@ -242,6 +245,7 @@ export function validate(v: unknown): asserts v is RecordV1 {
 		if (display.createdAtSource !== undefined && !["session-header", "unknown"].includes(String(display.createdAtSource)))
 			throw new Error("invalid-snapshot");
 		if (s.todo !== undefined && !validTodoProjection(s.todo)) throw new Error("invalid-todo");
+		if (s.governance !== undefined && !validGovernanceProjection(s.governance)) throw new Error("invalid-governance");
 		if (s.executionObservation !== undefined) {
 			const observation = s.executionObservation;
 			if (!object(observation) || observation.version !== 1 ||
@@ -316,6 +320,7 @@ export function validate(v: unknown): asserts v is RecordV1 {
 				"usage.refresh",
 				"schedules.refresh",
 				"operation.status",
+				"work.refresh",
 			].includes(String(v.query))
 		)
 			throw new Error("invalid-query");

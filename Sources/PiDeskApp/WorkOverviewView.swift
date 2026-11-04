@@ -29,6 +29,7 @@ struct WorkOverviewPage: View {
             Label("\(observed.count)/\(online.count) 在线任务已观察", systemImage: "checklist")
           }.font(.caption).foregroundStyle(.secondary)
         }
+        if filter == "全部" { WorkResultsSection() }
         Picker("查看工作", selection: $filter) {
           ForEach(["全部", "需要你", "依赖阻塞", "任务未采集"], id: \.self) { Text($0).tag($0) }
         }.pickerStyle(.segmented).labelsHidden()
@@ -38,7 +39,7 @@ struct WorkOverviewPage: View {
           Text("当前没有符合此条件的会话。依赖等待不等于需要你审批。").font(.callout).foregroundStyle(.secondary).padding(20)
         }
         ForEach(shown, id: \.snapshot.identity) { session in WorkSessionCard(session: session) }
-        Text("产品与跨会话工作项：原 owner 尚未提供明确绑定。本页不会把相同目录、名称或本机分组当成产品归属。").font(.caption).foregroundStyle(.secondary).padding(.vertical, 8)
+        Text("工作结果仅按原 owner 明确的工作引用归组，不代表整个会话或所有Todo归属此工作。产品/目标绑定未提供时不按目录、名称或本机分组猜测。").font(.caption).foregroundStyle(.secondary).padding(.vertical, 8)
       }.padding(22)
     }
   }
@@ -52,7 +53,7 @@ private struct WorkSessionCard: View {
         HStack(alignment: .top) {
           VStack(alignment: .leading, spacing: 5) {
             Text(model.nativeSessionTitle(session)).font(.headline).lineLimit(2)
-            Text("工作归属未绑定 · " + Presentation.project(session.snapshot) + " · " + String(session.snapshot.identity.nativeSessionId.suffix(6))).font(.caption).foregroundStyle(.secondary)
+            Text("会话 · " + Presentation.project(session.snapshot) + " · " + String(session.snapshot.identity.nativeSessionId.suffix(6))).font(.caption).foregroundStyle(.secondary)
           }
           Spacer(minLength: 10)
           StatusPill(status: Presentation.status(session))
@@ -63,6 +64,7 @@ private struct WorkSessionCard: View {
         }
         TodoObservationCard(session: session, compact: true)
         Text(WorkOverview.guidance(session)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        GovernanceCoverageLine(session: session)
         HStack(spacing: 12) {
           Button("查看任务与会话") { model.select(session.snapshot.identity); model.navigate(to: "会话") }
           Button(model.originalRouteLabel(identity: session.snapshot.identity)) { model.openOriginal(identity: session.snapshot.identity) }

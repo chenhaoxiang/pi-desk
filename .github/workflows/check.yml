@@ -15,7 +15,9 @@ jobs:
       - run: npm run check
       - run: npm run test:native-sdk
   native:
-    runs-on: macos-15
+    # Keep macOS 15 checks available during hosted arm64 capacity constraints.
+    # Local release validation also covers arm64; all native steps remain unchanged.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -347,6 +347,8 @@ export class DeskSession {
 		}
 	}
 	private record(kind: string): RecordV1 {
+		// Public in-memory /name scalar. Late naming/renaming must not require owner RPC or reload.
+		try { this.snapshot.display.name = text(this.pi.getSessionName()) ?? "Pi"; } catch {}
 		const observedAt = this.now();
 		this.reconcileExecution(observedAt);
 		this.snapshot.capabilities.actions = [

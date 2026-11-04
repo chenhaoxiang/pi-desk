@@ -53,6 +53,9 @@ try {
 		() => new Set(records().map((r) => r.identity.nativeSessionId)).size === 2,
 	);
 	const [a, b] = hosts;
+	a.session.setSessionName("Pi /name 合成明确标题");
+	await until(() => records().some(r => r.identity.nativeSessionId === a.session.sessionId && r.snapshot?.display.name === "Pi /name 合成明确标题"));
+	assert.equal(a.faux.state.callCount, 0, "native rename projection does not invoke a model");
 	const identity = records().find(
 		(r) => r.identity.nativeSessionId === a.session.sessionId,
 	).identity;
@@ -138,6 +141,7 @@ try {
 			dedup: true,
 			killReceiverPiContinues: true,
 			reconnectNoReplay: true,
+			nativeSessionNameUpdated: true,
 			assistantRegisteredModel: true,
 			assistantScopedContext: true,
 			assistantDoesNotEnterBusinessHistory: true,

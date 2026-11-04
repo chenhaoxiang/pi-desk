@@ -19,6 +19,7 @@ export function harness(id = "session-a") {
 		closed = 0,
 		aborts = 0;
 	const messages: unknown[] = [];
+	let sessionName = "合成会话";
 	const pi = new Proxy(
 		{
 			on: (name: string, handler: Function) => {
@@ -36,7 +37,7 @@ export function harness(id = "session-a") {
 					bus.emit(n, r);
 				},
 			},
-			getSessionName: () => "合成会话",
+			getSessionName: () => sessionName,
 			getThinkingLevel: () => "high",
 			sendUserMessage: (text: string, options: unknown) =>
 				messages.push({ text, options }),
@@ -82,6 +83,7 @@ export function harness(id = "session-a") {
 	});
 	return {
 		handlers,
+		setName: (name: string) => { sessionName = name; },
 		bus,
 		wires,
 		messages,
@@ -93,6 +95,17 @@ export function harness(id = "session-a") {
 		aborts: () => aborts,
 	};
 }
+test("native /name is present on first snapshot and session_info_changed refreshes it without owner RPC", async () => {
+  const h = harness("named-session");
+  h.setName("明确的 Pi /name 标题"); h.emit("session_start");
+  await wait();
+  assert.equal(h.wires.filter(r => r.snapshot).at(-1)?.snapshot?.display.name, "明确的 Pi /name 标题");
+  h.setName("改名后的标题"); h.emit("session_info_changed", { type: "session_info_changed", name: "ignored event text" });
+  await wait();
+  assert.equal(h.wires.filter(r => r.snapshot).at(-1)?.snapshot?.display.name, "改名后的标题");
+  assert.equal(h.messages.length, 0); assert.equal(h.aborts(), 0);
+  h.emit("session_shutdown");
+});
 test("factory starts no resources, observation never changes host loadout or blocks", async () => {
 	const h = harness();
 	assert.equal(h.started(), 0);
@@ -104,6 +117,7 @@ test("factory starts no resources, observation never changes host loadout or blo
 			"agent_start",
 			"agent_end",
 			"agent_settled",
+			"session_info_changed",
 			"model_select",
 			"tool_execution_start",
 			"tool_execution_end",

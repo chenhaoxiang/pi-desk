@@ -38,6 +38,9 @@ export function registerBridge(
 	pi.on("agent_settled", (e, ctx) => {
 		observe(() => session?.lifecycle("agent_settled", ctx, e.aborted));
 	});
+	pi.on("session_info_changed", (_e, ctx) => {
+		observe(() => session?.observe(ctx));
+	});
 	pi.on("model_select", (_e, ctx) => {
 		observe(() => session?.observe(ctx));
 	});

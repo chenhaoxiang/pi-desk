@@ -21,6 +21,14 @@ Pi Desk SHALL provide display modes, screen choice and bounded user work groups 
 ### Requirement: Optional registered-model analysis
 Pi Desk SHALL use the configured Pi registered model for explicit user analysis only, defaulting to codex-local-8319/gpt-6.1-sol at medium thinking, without modifying business model settings or creating a tool-enabled agent.
 
+#### Scenario: Registered model selection without a new bridge
+- **WHEN** local Pi SDK is installed but all enrolled sessions have older bridges
+- **THEN** its registered model and supported thinking choices remain selectable without starting or reloading business Pi, and unsupported recent text stays explicitly unavailable
+
+#### Scenario: Native session name
+- **WHEN** Pi provides or changes a session /name
+- **THEN** the AI source title uses that native name rather than a Desk alias or project hash, while the exact runtime remains its control identity
+
 #### Scenario: Provider unavailable
 - **WHEN** the selected model or thinking level is unavailable
 - **THEN** analysis fails clearly without silent fallback, retry, or impact on business Pi

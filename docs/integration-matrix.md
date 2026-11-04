@@ -82,7 +82,7 @@ Schedule在线管理seam位于该owner的本地 `249a8fa8529c4ac988f1b5a4845426c
 
 ## 7. 可选 AI 与交互接线
 
-本轮开发SDK固定为1.5.0。生产bridge仅通过上下文公开的`modelRegistry.getAvailable/streamSimple`复用注册模型及认证，凭据不会回App；没有独立Agent、工具注册、业务`prompt()`调用或模型切换。以`assistant`能力声明和运行时方法检测准入；旧host/bridge不支持时明确unavailable，基础功能不变，不强reload。
+本轮开发SDK固定为1.5.0。生产bridge仅通过上下文公开的`modelRegistry.getAvailable/streamSimple`复用注册模型及认证，凭据不会回App；没有独立Agent、工具注册、业务`prompt()`调用或模型切换。在线通道以`assistant`能力和运行时方法检测准入。本机App优先定位已安装Pi的公开SDK，以`ModelRuntime.create({allowModelNetwork:false,refreshOnCreate:true})`的无网络缓存目录恢复与ModelRegistry读取目录/按需分析；一次性Node进程只收有界JSON stdin并回结构化payload，不创建AgentSession/扩展/工具、不把凭据返回App，stdio和UI等待有界。本机目录探测明确失败后只对models有限降级到兼容在线入口，不重发unknown分析。分析终态和SDK进程退出分离；SDK1.5认证刷新可能在取消后继续保存，helper保留20秒安全窗口（SDK刷新上限15秒）并自然退出，不因终态/EOF/断stdout强制exit，Swift只发送正常SIGTERM请求，最多4个未收尾进程，业务Pi不受控。目录读取与分析分别显式操作；本机SDK不可用时保留在线通道，不静默改模型。旧bridge只影响近期文本能力，不强reload。
 
 `assistant-request/assistant-response`经现有私有UDS和双端UID校验，保持准确identity/epoch/requestId；模型列表与上下文读取不推理，分析才使用独立模型/思考档，取消只终止该AI的AbortSignal。`scripts/check-socket-host.mjs`已经用真实SDK注册faux模型跑过模型列表、当前分支文本和分析去重，验证业务history/model/thinking不变、断接收器业务继续及重连不重放。
 

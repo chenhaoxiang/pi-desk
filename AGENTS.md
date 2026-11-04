@@ -9,7 +9,7 @@ Pi Desk 是 Pi-only 的可视化与管理客户端。先读 `README.md` 与下�
 - 观察处理只取必要标量并入有界队列；不等待 socket/网络，不在主路径启动同步子进程，不返回修改输入/输出/continuation 的结果。
 - 管理请求通过具体 owner 公共接口；不能提供任意 shell、任意工具执行或内部状态文件修改接口。
 - 数据不完整保留 unknown/partial；已受理不等于完成，回合结束不等于任务/CI/部署验收。
-- 原生会话、子任务、计划、Token与治理状态各有owner，不复制业务状态库或规则体系。AI通过兼容在线Pi公开ModelRegistry按需旁路调用，无工具、不追加业务历史；默认codex-local-8319/gpt-6.1-sol、medium可改，不能静默换模/降档或重发未知结果，数值用量与业务统计分开。
+- 原生会话、子任务、计划、Token与治理状态各有owner，不复制业务状态库或规则体系。AI优先通过本机已安装Pi的公开SDK ModelRuntime/ModelRegistry按需旁路调用（一次性Node子进程，不创建AgentSession或加载扩展）；缺少本机SDK时仍可使用兼容在线Pi的ModelRegistry。近期文本继续只走所选运行的公开桥接，无工具、不追加业务历史；默认codex-local-8319/gpt-6.1-sol、medium可改，不能静默换模/降档或重发未知结果，数值用量与业务统计分开。
 - 测试使用合成数据与隔离会话。真实环境/账号/安装/部署按当次实际授权；不把规划文档当操作许可。
 
 ## 仓库与文件

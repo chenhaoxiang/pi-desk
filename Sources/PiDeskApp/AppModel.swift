@@ -64,7 +64,8 @@ struct DeskSettings: Codable {
   @Published var reviewedResultSequences: [String: Int] = [:]
   @Published var sessionGroups: [String: String] = [:]
   @Published var aiUsageCounters: [String: Int64] = [:]
-  let assistant = DeskAssistantClient()
+  let assistant: DeskAssistantClient
+  let localAssistant: LocalAssistantTransport
   @Published var groupFilter = ""
   @Published private(set) var sessionNotes: [Identity: String] = [:]
   static let sessionFilters = ["在线", "运行中", "需关注", "需输入", "已置顶", "全部", "断连"]
@@ -290,6 +291,17 @@ struct DeskSettings: Codable {
     rows.append(DeskHealthRow("ai", "AI 旁路能力", snapshot.capabilities.queries.contains("assistant") ? "此运行提供注册模型与有界近期文本接口；只有明确操作才调用模型。" : "此运行尚无 AI 接口；正常加载新版桥接后可用，不强制重载。", tone: snapshot.capabilities.queries.contains("assistant") ? .green : .muted))
     rows.append(DeskHealthRow("notifications", "系统通知", notificationStatus, tone: notificationsAuthorized ? .green : .muted))
     return rows
+  }
+  func refreshNativeSessionNames() {
+    // Explicit one-shot read for legacy bridges; uses their existing bounded read-only refresh.
+    guard !isPreview else { return }
+    for session in sessions.filter({ $0.connection == .connected }).prefix(64) { refresh(identity: session.snapshot.identity) }
+    assistant.notice = "已请求刷新 Pi 原生名称；旧桥接沿既有只读状态入口返回，不重载、不调用模型。"
+  }
+  func nativeSessionTitle(_ session: SessionView) -> String {
+    let name = session.snapshot.display.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !name.isEmpty && name.lowercased() != "pi" { return name }
+    return "尚未提供 /name · " + session.snapshot.identity.nativeSessionId.suffix(6)
   }
   func sessionTitle(_ session: SessionView) -> String {
     sessionAliases[UsageViewStateKey.hash(session.snapshot.identity.sessionKey)] ?? SessionExperience.title(session.snapshot)
@@ -688,7 +700,9 @@ struct DeskSettings: Codable {
   var activeCount: Int { sessions.filter { Presentation.isExecutionActive($0) }.count }
   var unknownExecutionCount: Int { sessions.filter { Presentation.needsExecutionReview($0) }.count }
   var inputCount: Int { sessions.filter { Presentation.needsInput($0) }.count }
-  init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil) {
+  init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil, localAssistant: LocalAssistantTransport? = nil, assistantClient: DeskAssistantClient? = nil) {
+    self.assistant = assistantClient ?? DeskAssistantClient()
+    self.localAssistant = localAssistant ?? LocalAssistantTransport()
     let home = FileManager.default.homeDirectoryForCurrentUser
     let args = CommandLine.arguments
     func argument(_ key: String) -> String? {
@@ -829,6 +843,12 @@ struct DeskSettings: Codable {
     case .diagnostic(let code): diagnostic = code == "socket-ready" ? "本机连接已就绪" : "连接不可用：" + code
     }
   }
+  func sendLocalAssistant(_ payload: AssistantPayload, identity: Identity, requestID: String) -> Bool {
+    guard !isPreview else { return false }
+    return localAssistant.send(payload, id: requestID) { [weak self] reply in
+      self?.assistant.receive(WireRecord(kind: "assistant-response", identity: identity, requestId: requestID, assistant: reply))
+    }
+  }
   func sendAssistant(_ payload: AssistantPayload, identity: Identity, requestID: String) -> Bool {
     guard !isPreview, let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity,
       session.connection == .connected, session.snapshot.capabilities.queries.contains("assistant") else { return false }
@@ -853,6 +873,7 @@ struct DeskSettings: Codable {
   }
   func stop() {
     assistant.stop()
+    localAssistant.stop()
     flushViewState()
     timer?.invalidate()
     server?.stop()

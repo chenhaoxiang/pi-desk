@@ -2,7 +2,11 @@ import Foundation
 import PiDeskCore
 
 @main enum AssistantChecks {
-  @MainActor static func main() throws {
+  @MainActor static func waitUntil(_ condition: () -> Bool) async {
+    for _ in 0..<5000 { if condition() { return }; try? await Task.sleep(nanoseconds: 2_000_000) }
+    precondition(condition(), "bounded local SDK response missing")
+  }
+  @MainActor static func main() async throws {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("Fixtures/assistant-v1.json"))) as! [String: Any]
     let request = try Wire.decode(JSONSerialization.data(withJSONObject: fixture["request"]!))
@@ -14,6 +18,7 @@ import PiDeskCore
     let model = AppModel(); defer { model.stop() }
     var snapshot = try Wire.decode(Data(contentsOf: root.appendingPathComponent("Fixtures/wire-v1.json"))).snapshot!
     snapshot.capabilities.queries.append("assistant")
+    snapshot.display.name = "Pi /name 的真实任务名"
     let connection = UUID()
     precondition(model.store.apply(WireRecord(kind: "hello", identity: snapshot.identity, snapshot: snapshot), connection: connection, now: Date().timeIntervalSince1970 * 1000))
     model.select(snapshot.identity)
@@ -23,7 +28,8 @@ import PiDeskCore
     client.refreshModels()
     precondition(sent.count == 1 && sent[0].0.operation == "models")
     let option = AssistantModelOption(provider: AssistantDefaults.provider, modelId: AssistantDefaults.model, name: "Synthetic model", thinkingLevels: ["off", "medium"])
-    var modelReply = AssistantPayload(operation: "models"); modelReply.status = "ok"; modelReply.models = [option]
+    let other = AssistantModelOption(provider: "registered-other", modelId: "other-model", name: "Other registered", thinkingLevels: ["low", "high"])
+    var modelReply = AssistantPayload(operation: "models"); modelReply.status = "ok"; modelReply.models = [option, other]
     client.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: sent[0].2, assistant: modelReply))
     precondition(!client.loadingModels && client.selectedModel?.id == option.id)
     client.choose(snapshot.identity.sessionKey, selected: true)
@@ -33,6 +39,18 @@ import PiDeskCore
     var contextReply = AssistantPayload(operation: "context"); contextReply.status = "ok"; contextReply.messages = [AssistantTextMessage(id: "fake-text", role: "user", text: "Explicit synthetic context")]
     client.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: contextRequest.2, assistant: contextReply))
     precondition(!client.preparing && client.prepared.count == 1 && client.canGenerate)
+    _ = model.setAlias("只在Desk的旧别名", for: snapshot.identity)
+    client.prepare()
+    client.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: sent.last!.2, assistant: contextReply))
+    precondition(client.prepared[0].source.title == snapshot.display.name && model.nativeSessionTitle(model.current!) == snapshot.display.name, "AI titles come from Pi /name, never a local alias or project hash")
+    client.selectModel(other.id)
+    precondition(client.provider == other.provider && client.modelID == other.modelId && client.thinking == "medium" && !client.canGenerate, "explicit model selection updates the pair without silently downgrading effort")
+    client.selectThinking("high")
+    precondition(client.canGenerate && client.thinking == "high")
+    client.selectThinking("max")
+    precondition(client.thinking == "high", "unsupported levels cannot be saved")
+    client.selectModel(option.id); client.selectThinking("medium")
+    precondition(client.canGenerate && client.selectedModel?.id == option.id)
     client.extra = "Synthetic extra"; precondition(client.hasUnsentExtra)
     let businessModelState = model.store.requests.count
     client.generate()
@@ -117,6 +135,47 @@ import PiDeskCore
     model.assistant.extra = "unsent assistant context"
     precondition(model.requiresDraftConfirmation, "AI extra participates in the same exit protection")
     model.assistant.extra = ""
+    model.stop()
+    // The real Node/SDK helper must expose choices with zero compatible online brokers.
+    let node = ProcessInfo.processInfo.environment["PI_DESK_TEST_NODE"]!
+    let sdkPath = root.appendingPathComponent("node_modules/@earendil-works/pi-coding-agent/dist/index.js").path
+    let helper = root.appendingPathComponent("Tests/PiDeskAppTests/LocalAssistantFixture.mjs").path
+    let local = LocalAssistantTransport(installation: .init(node: node, sdk: sdkPath, helper: helper))
+    let standalone = AppModel(localAssistant: local)
+    defer { standalone.stop() }
+    let localClient = standalone.assistant
+    localClient.refreshModels()
+    await waitUntil { !localClient.loadingModels }
+    precondition(localClient.models.count == 2 && standalone.sessions.isEmpty, "registered model choices do not depend on a new business Pi or bridge")
+    localClient.selectModel("desk-local-fixture/beta"); localClient.selectThinking("off")
+    precondition(localClient.modelID == "beta" && localClient.thinking == "off" && standalone.settings.aiProvider == "desk-local-fixture")
+    var legacySource = snapshot; legacySource.identity.nativeSessionId = "old-bridge-source"; legacySource.capabilities.queries.removeAll { $0 == "assistant" }
+    precondition(standalone.store.apply(WireRecord(kind: "hello", identity: legacySource.identity, snapshot: legacySource), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    localClient.choose(legacySource.identity.sessionKey, selected: true); localClient.prepare()
+    precondition(localClient.prepared.first?.source.messages.isEmpty == true && localClient.prepared.first?.note.contains("旧桥接") == true && localClient.canGenerate)
+    localClient.generate()
+    await waitUntil { !localClient.busy }
+    precondition(localClient.analysis?.overview == "Synthetic local summary" && standalone.store.requests.isEmpty, "tool-free local SDK analysis works with explicitly shown metadata-only old sources")
+    localClient.setExtra("SYNTHETIC_HOLD"); localClient.generate(force: true)
+    precondition(localClient.busy)
+    localClient.cancel()
+    await waitUntil { !localClient.busy }
+    precondition((standalone.aiUsageCounters["unconfirmed"] ?? 0) == 1 && standalone.store.requests.isEmpty, "cancel crosses real subprocess stdin and aborts only the isolated AI request")
+    standalone.stop()
+    var fallbackPackets: [(AssistantPayload, Identity, String)] = []
+    let fallbackClient = DeskAssistantClient(transport: { p, i, r in fallbackPackets.append((p, i, r)); return true })
+    let failedHelper = root.appendingPathComponent("Tests/PiDeskAppTests/LocalAssistantFailureFixture.mjs").path
+    let broken = LocalAssistantTransport(installation: .init(node: node, sdk: sdkPath, helper: failedHelper))
+    let fallbackModel = AppModel(localAssistant: broken, assistantClient: fallbackClient)
+    defer { fallbackModel.stop() }
+    precondition(fallbackModel.store.apply(WireRecord(kind: "hello", identity: snapshot.identity, snapshot: snapshot), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    fallbackModel.settings.aiProvider = other.provider; fallbackModel.settings.aiModel = other.modelId; fallbackModel.settings.aiThinking = "high"
+    fallbackClient.refreshModels()
+    await waitUntil { !fallbackPackets.isEmpty }
+    precondition(fallbackPackets.count == 1 && fallbackPackets[0].0.operation == "models" && fallbackPackets[0].1 == snapshot.identity, "failed SDK directory probe falls back once to the exact compatible online registry")
+    fallbackClient.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: fallbackPackets[0].2, assistant: modelReply))
+    precondition(!fallbackClient.loadingModels && fallbackClient.models.count == 2 && fallbackClient.provider == other.provider && fallbackClient.modelID == other.modelId && fallbackClient.thinking == "high")
+    precondition(fallbackModel.store.requests.isEmpty && fallbackPackets.allSatisfy { $0.0.operation == "models" }, "directory fallback neither changes model choice nor resubmits an analysis")
     print("Assistant checks passed: shared DTO, exact registry/context routes, medium selection, sensitive-input preflight, explicit labeling, numeric-only usage, dedup/cache, cancel/timeout and runtime freshness.")
   }
 }

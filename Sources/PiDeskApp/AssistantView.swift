@@ -18,6 +18,19 @@ private struct AssistantContextRow: View {
     }
   }
 }
+private struct AssistantSourceChoice: View {
+  let title: String
+  let detail: String
+  @Binding var selected: Bool
+  var body: some View {
+    Toggle(isOn: $selected) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title).fontWeight(.medium).lineLimit(2)
+        Text(detail).font(.caption).foregroundStyle(.secondary)
+      }
+    }.toggleStyle(.checkbox)
+  }
+}
 struct AssistantPage: View {
   @EnvironmentObject var model: AppModel
   @ObservedObject private var assistant: DeskAssistantClient
@@ -44,7 +57,7 @@ struct AssistantPage: View {
       }.padding(22)
     }.onAppear {
       assistant.refreshModels()
-      if model.isPreview { assistant.seedPreviewResult() }
+      if model.isPreview && !CommandLine.arguments.contains("--assistant-prepare-preview") { assistant.seedPreviewResult() }
       if assistant.analysis != nil { section = "结果" }
       if assistant.selectedKeys.isEmpty, let current = model.current, current.connection == .connected { assistant.choose(current.snapshot.identity.sessionKey, selected: true) }
     }.onChange(of: assistant.analysis != nil) { _, ready in if ready { section = "结果" } }
@@ -60,18 +73,16 @@ struct AssistantPage: View {
     DeskCard {
       VStack(alignment: .leading, spacing: 12) {
         HStack { Text("分析模型").font(.subheadline.weight(.semibold)); Spacer(); Button("刷新注册模型") { assistant.refreshModels() }.disabled(assistant.loadingModels || assistant.busy) }
-        HStack {
-          Picker("提供方", selection: Binding(get: { assistant.provider }, set: { model.settings.aiProvider = $0; model.persistAISettings() })) {
-            ForEach(Array(Set(assistant.models.map(\.provider) + [assistant.provider])).sorted(), id: \.self) { Text($0).tag($0) }
-          }.labelsHidden().frame(maxWidth: 190)
-          Picker("模型", selection: Binding(get: { assistant.modelID }, set: { model.settings.aiModel = $0; model.persistAISettings() })) {
-            ForEach(assistant.models.filter { $0.provider == assistant.provider }, id: \.id) { Text($0.name + " · " + $0.modelId).tag($0.modelId) }
-            if !assistant.models.contains(where: { $0.provider == assistant.provider && $0.modelId == assistant.modelID }) { Text(assistant.modelID + "（当前配置）").tag(assistant.modelID) }
-          }.labelsHidden().frame(maxWidth: .infinity)
-          Picker("思考", selection: Binding(get: { assistant.thinking }, set: { model.settings.aiThinking = $0; model.persistAISettings() })) {
-            ForEach(assistant.selectedModel?.thinkingLevels ?? [assistant.thinking], id: \.self) { Text(Presentation.effort($0)).tag($0) }
-            if let selected = assistant.selectedModel, !selected.thinkingLevels.contains(assistant.thinking) { Text(Presentation.effort(assistant.thinking) + "（不支持）").tag(assistant.thinking) }
-          }.labelsHidden().frame(width: 105)
+        VStack(alignment: .leading, spacing: 10) {
+          Picker("Pi 注册模型", selection: Binding(get: { assistant.provider + "/" + assistant.modelID }, set: assistant.selectModel)) {
+            ForEach(assistant.models) { option in Text(option.provider + " / " + option.modelId + " · " + option.name).tag(option.id) }
+            if assistant.selectedModel == nil { Text(assistant.provider + " / " + assistant.modelID + "（尚未从 Pi 读取）").tag(assistant.provider + "/" + assistant.modelID) }
+          }.pickerStyle(.menu).disabled(assistant.models.isEmpty || assistant.loadingModels)
+          Picker("思考强度", selection: Binding(get: { assistant.thinking }, set: assistant.selectThinking)) {
+            ForEach(assistant.selectedModel?.thinkingLevels ?? [assistant.thinking], id: \.self) { Text(Presentation.effort($0) + " · " + $0).tag($0) }
+            if let selected = assistant.selectedModel, !selected.thinkingLevels.contains(assistant.thinking) { Text(Presentation.effort(assistant.thinking) + "（此模型不支持，请重新选择）").tag(assistant.thinking) }
+          }.pickerStyle(.menu).disabled(assistant.selectedModel == nil)
+          if assistant.loadingModels { ProgressView("正在读取 Pi 注册模型…").controlSize(.small) }
         }.disabled(assistant.busy)
         Text("默认：\(AssistantDefaults.provider)/\(AssistantDefaults.model) · medium。修改只影响 Pi Desk AI 助手，不修改业务 Pi 的模型或思考档。").font(.caption2).foregroundStyle(.secondary)
         if !assistant.models.isEmpty { Text("注册入口：\(assistant.brokerTitle)").font(.caption2).foregroundStyle(.secondary) }
@@ -81,19 +92,24 @@ struct AssistantPage: View {
   private var selectionCard: some View {
     DeskCard {
       VStack(alignment: .leading, spacing: 12) {
-        HStack { Text("选择要分析的会话").font(.subheadline.weight(.semibold)); Spacer(); Text("\(assistant.selectedKeys.count)/8").font(.caption).foregroundStyle(.secondary) }
+        HStack { Text("选择要分析的会话").font(.subheadline.weight(.semibold)); Spacer(); Button("刷新名称") { model.refreshNativeSessionNames() }.disabled(assistant.busy || assistant.preparing); Text("\(assistant.selectedKeys.count)/8").font(.caption).foregroundStyle(.secondary) }
         ScrollView {
         LazyVStack(alignment: .leading, spacing: 10) {
         ForEach(model.sessions.filter { $0.connection == .connected }, id: \.snapshot.identity) { session in
-          Toggle(isOn: Binding(get: { assistant.selectedKeys.contains(session.snapshot.identity.sessionKey) }, set: { assistant.choose(session.snapshot.identity.sessionKey, selected: $0) })) {
-            VStack(alignment: .leading, spacing: 3) { Text(model.sessionTitle(session)); Text(Presentation.project(session.snapshot) + " · " + Presentation.status(session).title).font(.caption).foregroundStyle(.secondary) }
-          }.toggleStyle(.checkbox).disabled(assistant.busy || assistant.preparing)
+          sourceChoice(session).disabled(assistant.busy || assistant.preparing)
         }
         }
         }.frame(maxHeight: 220)
         HStack { Button("读取所选近期内容") { assistant.prepare() }.disabled(assistant.selectedKeys.isEmpty || assistant.busy || assistant.preparing); Button("分析") { assistant.generate(); if assistant.analysis != nil { section = "结果" } }.buttonStyle(.borderedProminent).disabled(!assistant.canGenerate) }
       }
     }
+  }
+  private func sourceChoice(_ session: SessionView) -> some View {
+    let key = session.snapshot.identity.sessionKey
+    let shortID = String(session.snapshot.identity.nativeSessionId.suffix(6))
+    let detail = [Presentation.project(session.snapshot), Presentation.status(session).title, shortID].joined(separator: " · ")
+    return AssistantSourceChoice(title: model.nativeSessionTitle(session), detail: detail,
+      selected: Binding(get: { assistant.selectedKeys.contains(key) }, set: { assistant.choose(key, selected: $0) }))
   }
   private var contextCard: some View {
     DeskCard {

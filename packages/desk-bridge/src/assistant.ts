@@ -59,7 +59,14 @@ export class DeskAssistant {
   private receipts = new Map<string, Receipt>();
   private active?: { id: string; controller: AbortController };
   private closed = false;
-  constructor(private context: () => ExtensionContext | undefined, private identity: Identity, private reply: (record: RecordV1) => void, private now = Date.now, private timeoutMs = 120_000) {}
+  private context: () => ExtensionContext | undefined;
+  private identity: Identity;
+  private reply: (record: RecordV1) => void;
+  private now: () => number;
+  private timeoutMs: number;
+  constructor(context: () => ExtensionContext | undefined, identity: Identity, reply: (record: RecordV1) => void, now = Date.now, timeoutMs = 120_000) {
+    this.context = context; this.identity = identity; this.reply = reply; this.now = now; this.timeoutMs = timeoutMs;
+  }
   handle(record: RecordV1) {
     if (this.closed || record.kind !== "assistant-request" || !sameIdentity(record.identity, this.identity) || !safeId(record.requestId) || !validAssistant(record.assistant) || record.assistant.status !== undefined) return;
     const id = record.requestId, request = record.assistant, digest = hash(JSON.stringify(request));

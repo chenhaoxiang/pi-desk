@@ -203,13 +203,13 @@ Pi设置首批只投影canonical user `<agentDir>/settings.json`的白名单字�
 
 ## 10. 可选 AI 辅助旁路
 
-Pi Desk AI不是Agent宿主、执行器、审批人或业务状态owner。它由用户主动进入AI助手后触发，借用准确在线Pi的公开 `ModelRegistry` 与请求时认证；基础观察、输入提醒、健康页、控制和用量采集不等待它、不因它不可用降级。默认模型为 `codex-local-8319/gpt-6.1-sol`、`medium`，配置存本机Pi Desk设置，可改但只影响Desk旁路；cphone/zooapi及非注册/不可用模型拒绝，SDK的pi-virtual别名也在列表和推理准入同时排除，避免别名路由改换实际模型/档位。不静默换渠道、换模型、降档或重发未知请求。
+Pi Desk AI不是Agent宿主、执行器、审批人或业务状态owner。它由用户主动进入AI助手后触发目录读取，明确分析后才推理。App优先按需调用本机已安装Pi的公开 `ModelRuntime/ModelRegistry` 与请求时认证：一次性Node子进程复用同一DeskAssistant校验器，只允许models/analyze/cancel，不创建AgentSession、不加载扩展/工具、不写Pi设置或会话。有界stdin传上下文，stdout只回协议payload，stderr不回App；EOF/取消/退出只影响该子进程的AI，目录查询无推理。缺少本机SDK时保留准确在线Pi的公开注册表通道；基础观察、输入提醒、健康页、控制和用量采集不等待它、不因它不可用降级。默认模型为 `codex-local-8319/gpt-6.1-sol`、`medium`，配置存本机Pi Desk设置，可改但只影响Desk旁路；cphone/zooapi及非注册/不可用模型拒绝，SDK的pi-virtual别名也在列表和推理准入同时排除，避免别名路由改换实际模型/档位。不静默换渠道、换模型、降档或重发未知请求。
 
 请求走独立 `assistant-request/assistant-response` UDS lane，客户端最多16个在途请求、bridge最多32个有界短期收据、每个客户端一次1个推理、请求有界超时与取消；Assistant回复不进入普通Pi快照，不在工具/生命周期回调里等待，不调用 `session.prompt`，Pi业务会话的model/thinking/tools/历史不变。回复仅有状态、结构化模型/上下文/分析和数值usage，文本上下文与AI正文不写日志/usage库（仅内存短缓存；用户明确采纳的有界分组标签作为私有显示偏好保存）；usage未确认时标unknown/possible，不伪造费用。非空成功结果的四桶全零没有独立结算证据，按SDK缺省值保守记为用量未确认，不推算Token。
 
 上下文必须由用户明确选择1–8个已接入准确runtime。bridge沿当前leaf通过公开 `SessionManager.getLeafId/getEntry` 有界回溯最多128个entry，每个来源取最多8条用户/assistant文本、每条2048字节，整个AI请求最多8个来源/32KiB；不走`getBranch`、不发现历史文件、不读取废弃分支、thinking、toolCall、toolResult或凭据。发送前UI显示消息并允许逐条移除；bridge与App双方做疑似密钥/令牌/密码预检，命中则拒绝发送（这是保守预检，不是完整DLP）。AI上下文来自当前runtime，旧bridge只给元数据/不可用，不强制reload。
 
-模型输出必须是有界结构化的overview、每个输入ref一条summary、可选不重叠分组建议；ref必须来自本次输入，来源/时间/runtime通过App绑定，结果过时不得改新runtime标签。内存缓存键包含准确broker和来源identities，命中后保留原来源，不能因文本相同改绑到替换运行；这些identity只用于本机缓存，不额外发给模型。采纳只写本机工作组标签，不发Pi管理请求；失败/取消/超时/未知不自动重试。合成和真实指定模型验真分开，CI默认faux provider，不携带真实凭据。
+模型输出必须是有界结构化的overview、每个输入ref一条summary、可选不重叠分组建议；ref必须来自本次输入，来源主标题取Pi原生/name而非本机别名，桥接在快照及session_info_changed时读取公开名称标量，无owner轮询/文件扫描。来源/时间/runtime通过App绑定，结果过时不得改新runtime标签。内存缓存键包含准确broker和来源identities，命中后保留原来源，不能因文本相同改绑到替换运行；这些identity只用于本机缓存，不额外发给模型。采纳只写本机工作组标签，不发Pi管理请求；失败/取消/超时/未知不自动重试。合成和真实指定模型验真分开，CI默认faux provider，不携带真实凭据。
 
 ## 11. 验证与退出策略
 

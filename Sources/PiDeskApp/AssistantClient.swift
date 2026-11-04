@@ -24,7 +24,23 @@ struct PreparedAssistantSource: Identifiable {
   private weak var model: AppModel?
   private let transport: ((AssistantPayload, Identity, String) -> Bool)?
   init(transport: ((AssistantPayload, Identity, String) -> Bool)? = nil) { self.transport = transport }
+  private let localBroker = Identity(localHostId: "pi-desk", nativeSessionId: "local-sdk", runtimeEpoch: UUID().uuidString)
   private var broker: Identity?
+  private func brokerIsCurrent(_ identity: Identity) -> Bool {
+    guard let model else { return false }
+    if identity == localBroker { return model.localAssistant.available }
+    return model.store.sessions[identity.sessionKey]?.snapshot.identity == identity && model.store.sessions[identity.sessionKey]?.connection == .connected
+  }
+  func selectModel(_ id: String) {
+    guard !busy, let choice = models.first(where: { $0.id == id }), let model else { return }
+    model.settings.aiProvider = choice.provider; model.settings.aiModel = choice.modelId
+    model.persistAISettings()
+    if !choice.thinkingLevels.contains(thinking) { notice = "此模型不支持当前思考强度，请从支持的档位中明确选择。" }
+  }
+  func selectThinking(_ level: String) {
+    guard !busy, selectedModel?.thinkingLevels.contains(level) == true, let model else { return }
+    model.settings.aiThinking = level; model.persistAISettings()
+  }
   private struct Pending { let identity: Identity; let operation: String; let ref: String?; let deadline: Double }
   private var pending: [String: Pending] = [:]
   private var generation: String?
@@ -42,14 +58,14 @@ struct PreparedAssistantSource: Identifiable {
   var selectedModel: AssistantModelOption? { models.first { $0.provider == provider && $0.modelId == modelID } }
   var brokerTitle: String {
     if model?.isPreview == true { return "合成入口，不发起推理" }
+    if broker == localBroker { return "本机 Pi SDK 注册表（不依赖旧会话重载）" }
     guard let model, let broker, let session = model.store.sessions[broker.sessionKey], session.snapshot.identity == broker else { return "尚无兼容模型入口" }
     return model.sessionTitle(session)
   }
   var canGenerate: Bool {
     guard !busy, !preparing, !prepared.isEmpty, let selectedModel, selectedModel.thinkingLevels.contains(thinking),
       Set(prepared.map { $0.identity.sessionKey }) == selectedKeys, extra.utf8.count <= 4096,
-      let model, let broker, model.store.sessions[broker.sessionKey]?.snapshot.identity == broker,
-      model.store.sessions[broker.sessionKey]?.connection == .connected else { return false }
+      let model, let broker, brokerIsCurrent(broker) else { return false }
     guard prepared.allSatisfy({ model.store.sessions[$0.identity.sessionKey]?.snapshot.identity == $0.identity }) else { return false }
     let sources = prepared.map(\.source)
     guard !AssistantPrivacy.sensitive(sources: sources, extra: extra), let size = try? JSONEncoder().encode(sources).count else { return false }
@@ -62,7 +78,7 @@ struct PreparedAssistantSource: Identifiable {
   var canApplyGroups: Bool { !busy && !(analysis?.groups.isEmpty ?? true) && resultIsCurrent }
   func seedPreviewResult() {
     guard let model, model.isPreview, let session = model.sessions.first else { return }
-    let source = AssistantSource(ref: "S1", title: model.sessionTitle(session), project: "synthetic", status: "合成状态", tools: [], messages: [AssistantTextMessage(id: "synthetic-preview", role: "user", text: "这是明确的合成预览，不读取真实会话。")])
+    let source = AssistantSource(ref: "S1", title: model.nativeSessionTitle(session), project: "synthetic", status: "合成状态", tools: [], messages: [AssistantTextMessage(id: "synthetic-preview", role: "user", text: "这是明确的合成预览，不读取真实会话。")])
     selectedKeys = [session.snapshot.identity.sessionKey]
     prepared = [PreparedAssistantSource(identity: session.snapshot.identity, source: source, note: "合成上下文")]
     resultSources = prepared
@@ -84,7 +100,13 @@ struct PreparedAssistantSource: Identifiable {
   func refreshModels() {
     guard let model, !busy, !loadingModels else { return }
     if model.isPreview {
-      models = [AssistantModelOption(provider: AssistantDefaults.provider, modelId: AssistantDefaults.model, name: "合成模型预览", thinkingLevels: ["off", "low", "medium", "high"])]; notice = "合成预览不会发起真实模型调用"; return
+      models = [AssistantModelOption(provider: AssistantDefaults.provider, modelId: AssistantDefaults.model, name: "合成模型预览", thinkingLevels: ["off", "low", "medium", "high", "max"]), AssistantModelOption(provider: "synthetic-other", modelId: "alternative", name: "另一注册模型（合成）", thinkingLevels: ["off", "high"])]; notice = "合成预览不会发起真实模型调用"; return
+    }
+    if model.localAssistant.available {
+      broker = localBroker; loadingModels = true
+      var payload = AssistantPayload(operation: "models"); payload.provider = provider; payload.modelId = modelID
+      if request(payload, identity: localBroker) == nil { loadingModels = false }
+      return
     }
     let candidates = model.sessions.filter { $0.connection == .connected && $0.snapshot.capabilities.queries.contains("assistant") }
     guard let entry = candidates.first(where: { $0.snapshot.identity == model.current?.snapshot.identity }) ?? candidates.first else {
@@ -99,7 +121,7 @@ struct PreparedAssistantSource: Identifiable {
     let selected = model.sessions.filter { selectedKeys.contains($0.snapshot.identity.sessionKey) && $0.connection == .connected }
     guard !selected.isEmpty, selected.count <= 8, selected.count == selectedKeys.count else { notice = "请明确选择1至8个已接入会话。"; return }
     prepared = selected.enumerated().map { index, session in
-      let source = AssistantSource(ref: "S\(index + 1)", title: AssistantPrivacy.bounded(model.sessionTitle(session), bytes: 128), project: AssistantPrivacy.bounded(Presentation.project(session.snapshot), bytes: 128), status: Presentation.status(session).title, tools: Array(session.snapshot.tools.prefix(3)))
+      let source = AssistantSource(ref: "S\(index + 1)", title: AssistantPrivacy.bounded(model.nativeSessionTitle(session), bytes: 128), project: AssistantPrivacy.bounded(Presentation.project(session.snapshot), bytes: 128), status: Presentation.status(session).title, tools: Array(session.snapshot.tools.prefix(3)))
       return PreparedAssistantSource(identity: session.snapshot.identity, source: source, note: "尚未读取近期文本")
     }
     analysis = nil; preparing = true
@@ -151,7 +173,8 @@ struct PreparedAssistantSource: Identifiable {
     guard let model, pending.count < 16 else { return nil }
     let id = UUID().uuidString
     pending[id] = Pending(identity: identity, operation: payload.operation, ref: ref, deadline: Date().timeIntervalSince1970 * 1000 + (payload.operation == "analyze" ? 135_000 : 15_000))
-    guard (transport?(payload, identity, id) ?? model.sendAssistant(payload, identity: identity, requestID: id)) else { pending.removeValue(forKey: id); notice = "目标或请求不可用，未自动重发。"; return nil }
+    let sent = identity == localBroker ? model.sendLocalAssistant(payload, identity: identity, requestID: id) : (transport?(payload, identity, id) ?? model.sendAssistant(payload, identity: identity, requestID: id))
+    guard sent else { pending.removeValue(forKey: id); notice = "目标或请求不可用，未自动重发。"; return nil }
     return id
   }
   func receive(_ record: WireRecord) {
@@ -161,7 +184,7 @@ struct PreparedAssistantSource: Identifiable {
     switch job.operation {
     case "models":
       loadingModels = false
-      if payload.status == "ok" { models = (payload.models ?? []).filter { !["cphone", "zooapi"].contains($0.provider.lowercased()) }; notice = "已读取 Pi 注册的可用模型；未发起推理调用。" }
+      if payload.status == "ok" { models = (payload.models ?? []).filter { !["cphone", "zooapi"].contains($0.provider.lowercased()) }; notice = "已读取 \(models.count) 个 Pi 注册可用模型，可选择模型及其支持的思考强度；未发起推理。" }
       else { models = []; notice = message(payload.code) }
     case "context":
       if let ref = job.ref {
@@ -192,7 +215,7 @@ struct PreparedAssistantSource: Identifiable {
     notice = model.assignGroups(changes) ? "已采纳为本机工作标签，未发送任何业务控制。" : "分组未应用：数量、名称或运行身份已变化。"
   }
   func tick(now: Double) {
-    for (id, job) in pending where now >= job.deadline || model?.store.sessions[job.identity.sessionKey]?.snapshot.identity != job.identity || model?.store.sessions[job.identity.sessionKey]?.connection != .connected {
+    for (id, job) in pending where now >= job.deadline || !brokerIsCurrent(job.identity) {
       pending.removeValue(forKey: id)
       if job.operation == "analyze" && generation == id {
         generation = nil; busy = false; notice = "AI 结果未确认，可能已有用量；未自动重发。"; model?.recordAssistantUsage(nil, unconfirmed: true)

@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "source": "pi.vista",
+  "coverage": "observed",
+  "observerEpoch": "vista-synthetic-epoch",
+  "observerSeq": 4,
+  "observedAt": 1730000000000,
+  "results": [
+    {
+      "seq": 1,
+      "observedAt": 1730000000000,
+      "observation": {
+        "binding": {
+          "workRef": {
+            "owner": "example/owner",
+            "kind": "task",
+            "key": "existing-work"
+          },
+          "stageId": "subagent-output-available",
+          "runId": "run-a",
+          "sessionId": "session-a",
+          "revision": 0
+        },
+        "resultRef": "existing-output",
+        "decision": "deliverable",
+        "outcome": "accepted",
+        "reasonCode": "owner_acceptance_confirmed",
+        "authorization": "none",
+        "readOnly": true
+      }
+    },
+    {
+      "seq": 2,
+      "observedAt": 1730000000000,
+      "observation": {
+        "binding": {
+          "workRef": {
+            "owner": "example/owner",
+            "kind": "task",
+            "key": "existing-work"
+          },
+          "stageId": "source-shared-delivery",
+          "runId": "run-b",
+          "sessionId": "session-a",
+          "revision": 1,
+          "headSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "resultRef": "existing-source",
+        "decision": "reconcile_required",
+        "outcome": "unknown",
+        "reasonCode": "required_effect_pending",
+        "authorization": "none",
+        "readOnly": true
+      }
+    }
+  ],
+  "handoffs": [
+    {
+      "seq": 3,
+      "observedAt": 1730000000000,
+      "observation": {
+        "previous": {
+          "workRef": {
+            "owner": "example/owner",
+            "kind": "task",
+            "key": "existing-work"
+          },
+          "stageId": "source-shared-delivery",
+          "runId": "run-b",
+          "sessionId": "session-a",
+          "revision": 1,
+          "headSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "successor": {
+          "workRef": {
+            "owner": "example/owner",
+            "kind": "task",
+            "key": "existing-work"
+          },
+          "stageId": "source-shared-delivery",
+          "runId": "run-c",
+          "sessionId": "session-b",
+          "revision": 0
+        },
+        "decision": "handoff_observed",
+        "reasonCode": "handoff_observed",
+        "acceptedFactRefs": [
+          "existing-fact"
+        ],
+        "unresolvedEffectRefs": [
+          "unknown-effect"
+        ],
+        "blockerRefs": [
+          "existing-blocker"
+        ],
+        "nextAction": "reconcile",
+        "sourceHeadRecheckRequired": true,
+        "currentVerification": "not_checked",
+        "authorization": "none",
+        "executable": false,
+        "readOnly": true
+      }
+    }
+  ],
+  "omittedResults": 0,
+  "omittedHandoffs": 0,
+  "omittedObservations": 0
+}

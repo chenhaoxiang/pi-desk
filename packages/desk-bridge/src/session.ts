@@ -36,6 +36,7 @@ import { displayBudget } from "./budget.ts";
 import { captureTerminalRoute } from "./terminal-route.ts";
 import { MAX_CREATED_AT_MS } from "./protocol.ts";
 import { TodoObserver } from "./todo-projection.ts";
+import { GovernanceClient } from "./governance-client.ts";
 export type TransportLike = Pick<
 	BridgeTransport,
 	"start" | "publish" | "reply" | "close" | "dropped"
@@ -89,6 +90,7 @@ export class DeskSession {
 	private observationDrops = 0;
 	private metadataLoaded = false;
 	private todo = new TodoObserver();
+	private governance: GovernanceClient;
 	private bridgeSource: string;
 	private terminalRoute?: NonNullable<Snapshot["display"]["route"]>;
 	constructor(
@@ -131,6 +133,7 @@ export class DeskSession {
 				actions: ["session.message", "session.abort-current"],
 				queries: [
 					"refresh",
+					"work.refresh",
 					"usage.refresh",
 					"schedules.refresh",
 					"operation.status",
@@ -174,6 +177,10 @@ export class DeskSession {
 			this.schedules,
 			this.now,
 		);
+		this.governance = new GovernanceClient(pi.events, identity.nativeSessionId, () => {
+			if (!this.stopped) { this.snapshot.governance = this.governance.read(); this.changed(); }
+		});
+		this.snapshot.governance = this.governance.read();
 		this.transport =
 			options.transport?.(
 				() => this.record("hello"),
@@ -276,6 +283,7 @@ export class DeskSession {
 			this.observe(ctx);
 			this.scheduleStartupReconcile();
 			this.transport.start();
+			this.governance.start();
 		} catch {
 			this.observationDrops++;
 		}
@@ -873,6 +881,8 @@ export class DeskSession {
 			sameIdentity(r.identity, this.snapshot.identity)
 		) {
 			this.changed();
+			if (r.query === "work.refresh" || r.query === "refresh") this.governance.refresh();
+			if (r.query === "work.refresh") return;
 			this.deferRefresh(r.query === "usage.refresh", true, r.target?.owner === "subagents" ? r.target.runId : undefined, r.query);
 		}
 	}
@@ -880,6 +890,7 @@ export class DeskSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.todo.reset();
+		this.governance.close();
 		this.usageWriter?.close();
 		this.assistant.close();
 		this.ctx = undefined;

@@ -192,6 +192,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var executionObservation: ExecutionObservation?
   public var activity: SessionActivity?
   public var todo: TodoProjection?
+  public var governance: GovernanceProjection?
   public var childCoverage: String
   public var tools: [String]
   public var runs: [Run]
@@ -210,6 +211,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
       && (executionObservation == nil || executionObservation!.valid)
       && (activity == nil || activity!.valid)
       && (todo == nil || todo!.valid)
+      && (governance == nil || governance!.valid)
       && (display.route == nil || display.route!.valid)
       && tools.count <= 32 && runs.count <= 64 && schedules.count <= 64 && inputs.count <= 32
       && usage.count <= 8 && evidence.count <= 32 && tools.allSatisfy { $0.utf8.count <= 128 }
@@ -298,7 +300,7 @@ public struct WireRecord: Codable, Sendable {
       else { throw WireError.invalidRecord }
     case "query":
       guard requestId != nil,
-        ["refresh", "usage.refresh", "schedules.refresh", "operation.status"].contains(query ?? "")
+        ["refresh", "usage.refresh", "schedules.refresh", "operation.status", "work.refresh"].contains(query ?? "")
       else { throw WireError.invalidRecord }
     case "action-result":
       guard requestId != nil, let r = result,

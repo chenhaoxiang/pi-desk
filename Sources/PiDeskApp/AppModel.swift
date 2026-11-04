@@ -160,13 +160,15 @@ struct DeskSettings: Codable {
   private var nextSessionOrder = 0
   private var orderedSessionKeys: [String]?
   private var sessionCache: [SessionView]?
+  private var workResultCache: [WorkResultGroup]?
+  private(set) var workResultProjectionBuilds = 0
   private var visibleSessionCache: [SessionView]?
   private var attentionSessionCache: [SessionView]?
   private var viewKeyHashes: [String: String] = [:]
   private(set) var sessionProjectionBuilds = 0
   private(set) var sessionProjectionSorts = 0
   private func invalidateSessionProjection(order: Bool = false) {
-    sessionCache = nil; visibleSessionCache = nil; attentionSessionCache = nil
+    sessionCache = nil; visibleSessionCache = nil; attentionSessionCache = nil; workResultCache = nil
     if order { orderedSessionKeys = nil }
   }
   private func viewKeyHash(_ key: String) -> String {
@@ -595,6 +597,11 @@ struct DeskSettings: Codable {
     let value = (orderedSessionKeys ?? []).compactMap { store.sessions[$0] }
     sessionCache = value; return value
   }
+  var workResults: [WorkResultGroup] {
+    if let workResultCache { return workResultCache }
+    workResultProjectionBuilds += 1
+    let value = WorkResultPortfolio.groups(sessions); workResultCache = value; return value
+  }
   var current: SessionView? { selected.flatMap { key in visibleSessions.first { $0.snapshot.identity.sessionKey == key } } }
   var visibleSessions: [SessionView] {
     if let cached = visibleSessionCache { return cached }
@@ -907,6 +914,14 @@ struct DeskSettings: Codable {
     flushViewState()
     timer?.invalidate()
     server?.stop()
+  }
+  func refreshWork(identity: Identity) {
+    guard !isPreview, let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity, session.connection == .connected, session.snapshot.capabilities.queries.contains("work.refresh") else { return }
+    let key = identity.runtimeEpoch + ":work", now = Date()
+    guard now.timeIntervalSince(ownerQueryTimes[key] ?? .distantPast) >= 2 else { return }
+    if ownerQueryTimes.count >= 128 { ownerQueryTimes.removeAll(keepingCapacity: true) }
+    ownerQueryTimes[key] = now
+    server.send(WireRecord(kind: "query", identity: identity, requestId: UUID().uuidString, query: "work.refresh"), to: session.connectionId)
   }
   func refresh(usage: Bool = false, identity: Identity? = nil, runId: String? = nil) {
     guard !isPreview, let s = identity.flatMap({ store.sessions[$0.sessionKey] }) ?? current,

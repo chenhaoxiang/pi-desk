@@ -140,7 +140,12 @@ public struct UsageViewState: Codable, Equatable {
 }
 public enum UsageViewStateKey {
   public static func hash(_ value: String) -> String {
-    SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+    let digits = Array("0123456789abcdef".utf8)
+    var bytes = [UInt8](); bytes.reserveCapacity(64)
+    for byte in SHA256.hash(data: Data(value.utf8)) {
+      bytes.append(digits[Int(byte >> 4)]); bytes.append(digits[Int(byte & 15)])
+    }
+    return String(decoding: bytes, as: UTF8.self)
   }
 }
 public enum UsageMetric: String, CaseIterable, Identifiable {

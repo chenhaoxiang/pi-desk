@@ -26,6 +26,7 @@ struct PreparedAssistantSource: Identifiable {
   init(transport: ((AssistantPayload, Identity, String) -> Bool)? = nil) { self.transport = transport }
   private let localBroker = Identity(localHostId: "pi-desk", nativeSessionId: "local-sdk", runtimeEpoch: UUID().uuidString)
   private var broker: Identity?
+  private var catalogLoadedAt: Date?
   private func brokerIsCurrent(_ identity: Identity) -> Bool {
     guard let model else { return false }
     if identity == localBroker { return model.localAssistant.available }
@@ -97,8 +98,11 @@ struct PreparedAssistantSource: Identifiable {
     else { selectedKeys.remove(key) }
     prepared = []; analysis = nil
   }
-  func refreshModels() {
+  func refreshModels(force: Bool = true) {
     guard let model, !busy, !loadingModels else { return }
+    if !force, !models.isEmpty, let broker, brokerIsCurrent(broker),
+      let catalogLoadedAt, Date().timeIntervalSince(catalogLoadedAt) < 60 { return }
+    catalogLoadedAt = nil // A new probe cannot borrow an old broker's successful timestamp.
     if model.isPreview {
       models = [AssistantModelOption(provider: AssistantDefaults.provider, modelId: AssistantDefaults.model, name: "合成模型预览", thinkingLevels: ["off", "low", "medium", "high", "max"]), AssistantModelOption(provider: "synthetic-other", modelId: "alternative", name: "另一注册模型（合成）", thinkingLevels: ["off", "high"])]; notice = "合成预览不会发起真实模型调用"; return
     }
@@ -192,7 +196,7 @@ struct PreparedAssistantSource: Identifiable {
         // Directory probing is read-only: one bounded online fallback is safe. Never retry analyze.
         refreshOnlineModels(); return
       }
-      if payload.status == "ok" { models = (payload.models ?? []).filter { !["cphone", "zooapi"].contains($0.provider.lowercased()) }; notice = "已读取 \(models.count) 个 Pi 注册可用模型，可选择模型及其支持的思考强度；未发起推理。" }
+      if payload.status == "ok" { catalogLoadedAt = Date(); models = (payload.models ?? []).filter { !["cphone", "zooapi"].contains($0.provider.lowercased()) }; notice = "已读取 \(models.count) 个 Pi 注册可用模型，可选择模型及其支持的思考强度；未发起推理。" }
       else { models = []; notice = message(payload.code) }
     case "context":
       if let ref = job.ref {

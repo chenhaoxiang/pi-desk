@@ -86,7 +86,7 @@ test("normal close drains every bounded batch and persists closed recorder state
   let state: { closed: boolean; pending: number; accepted: number } | undefined;
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
-    const names = await readdir(join(dir, "recorders")).catch(() => []);
+    const names = (await readdir(join(dir, "recorders")).catch(() => [])).filter(name => /^[a-f0-9]{64}\.json$/.test(name));
     if (names[0]) state = JSON.parse(await readFile(join(dir, "recorders", names[0]), "utf8"));
     if (state?.closed && state.pending === 0 && state.accepted === 100) break;
     await new Promise(resolve => setTimeout(resolve, 5));

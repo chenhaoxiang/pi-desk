@@ -292,6 +292,12 @@ struct DeskSettings: Codable {
     rows.append(DeskHealthRow("notifications", "系统通知", notificationStatus, tone: notificationsAuthorized ? .green : .muted))
     return rows
   }
+  func refreshNativeSessionNames() {
+    // Explicit one-shot read for legacy bridges; uses their existing bounded read-only refresh.
+    guard !isPreview else { return }
+    for session in sessions.filter({ $0.connection == .connected }).prefix(64) { refresh(identity: session.snapshot.identity) }
+    assistant.notice = "已请求刷新 Pi 原生名称；旧桥接沿既有只读状态入口返回，不重载、不调用模型。"
+  }
   func nativeSessionTitle(_ session: SessionView) -> String {
     let name = session.snapshot.display.name.trimmingCharacters(in: .whitespacesAndNewlines)
     if !name.isEmpty && name.lowercased() != "pi" { return name }

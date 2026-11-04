@@ -18,6 +18,19 @@ private struct AssistantContextRow: View {
     }
   }
 }
+private struct AssistantSourceChoice: View {
+  let title: String
+  let detail: String
+  @Binding var selected: Bool
+  var body: some View {
+    Toggle(isOn: $selected) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title).fontWeight(.medium).lineLimit(2)
+        Text(detail).font(.caption).foregroundStyle(.secondary)
+      }
+    }.toggleStyle(.checkbox)
+  }
+}
 struct AssistantPage: View {
   @EnvironmentObject var model: AppModel
   @ObservedObject private var assistant: DeskAssistantClient
@@ -79,19 +92,24 @@ struct AssistantPage: View {
   private var selectionCard: some View {
     DeskCard {
       VStack(alignment: .leading, spacing: 12) {
-        HStack { Text("选择要分析的会话").font(.subheadline.weight(.semibold)); Spacer(); Text("\(assistant.selectedKeys.count)/8").font(.caption).foregroundStyle(.secondary) }
+        HStack { Text("选择要分析的会话").font(.subheadline.weight(.semibold)); Spacer(); Button("刷新名称") { model.refreshNativeSessionNames() }.disabled(assistant.busy || assistant.preparing); Text("\(assistant.selectedKeys.count)/8").font(.caption).foregroundStyle(.secondary) }
         ScrollView {
         LazyVStack(alignment: .leading, spacing: 10) {
         ForEach(model.sessions.filter { $0.connection == .connected }, id: \.snapshot.identity) { session in
-          Toggle(isOn: Binding(get: { assistant.selectedKeys.contains(session.snapshot.identity.sessionKey) }, set: { assistant.choose(session.snapshot.identity.sessionKey, selected: $0) })) {
-            VStack(alignment: .leading, spacing: 3) { Text(model.nativeSessionTitle(session)).fontWeight(.medium).lineLimit(2); Text(Presentation.project(session.snapshot) + " · " + Presentation.status(session).title + " · " + session.snapshot.identity.nativeSessionId.suffix(6)).font(.caption).foregroundStyle(.secondary) }
-          }.toggleStyle(.checkbox).disabled(assistant.busy || assistant.preparing)
+          sourceChoice(session).disabled(assistant.busy || assistant.preparing)
         }
         }
         }.frame(maxHeight: 220)
         HStack { Button("读取所选近期内容") { assistant.prepare() }.disabled(assistant.selectedKeys.isEmpty || assistant.busy || assistant.preparing); Button("分析") { assistant.generate(); if assistant.analysis != nil { section = "结果" } }.buttonStyle(.borderedProminent).disabled(!assistant.canGenerate) }
       }
     }
+  }
+  private func sourceChoice(_ session: SessionView) -> some View {
+    let key = session.snapshot.identity.sessionKey
+    let shortID = String(session.snapshot.identity.nativeSessionId.suffix(6))
+    let detail = [Presentation.project(session.snapshot), Presentation.status(session).title, shortID].joined(separator: " · ")
+    return AssistantSourceChoice(title: model.nativeSessionTitle(session), detail: detail,
+      selected: Binding(get: { assistant.selectedKeys.contains(key) }, set: { assistant.choose(key, selected: $0) }))
   }
   private var contextCard: some View {
     DeskCard {

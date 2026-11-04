@@ -9,7 +9,7 @@
 - [x] 3.2 真实用户输入与依赖等待分开，准确跳转/管理，不猜产品/work绑定或完成状态。
 ## 4. 首批交付
 - [ ] 4.1 原生SDK/UDS/负例/性能与UI合成验收，独审、精确headCI、PR及本机更新。
-- [ ] 4.2 新加载隔离会话验证实际Todo与Desk同源；旧会话coverage保留，不强reload。
+- [x] 4.2 新加载隔离SDK会话验证真实Todo owner的create/get/list/update/delete/clear到Swift UDS同源；旧bridge缺字段保持未知，不强reload。此项不声称业务TUI或所有现存会话已加载。
 ## 5. 后续治理联合切片
 - [ ] 5.1 原owner交付work/result/attention/问题数据端口后，接显式跨会话工作/产品归属与nextAction。
 - [ ] 5.2 选一个原授权低风险自然工作项，验证等待续接/失败对账/owner验收/交付/Desk投影闭环。

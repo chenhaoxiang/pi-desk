@@ -93,6 +93,7 @@ struct TodoObservationCard: View {
               Label("#\(task.id) " + task.subject + " · 等待 " + task.unresolvedBy.map { "#\($0)" }.joined(separator: "、"), systemImage: "link")
                 .font(.caption).foregroundStyle(.orange).lineLimit(2)
             }
+            if todo.blocked.count > 2 { Text("另有 \(todo.blocked.count - 2) 项依赖卡点，见会话详情").font(.caption2).foregroundStyle(.secondary) }
           } else {
             ForEach(todo.tasks) { task in TodoTaskRow(task: task) }
           }
@@ -123,8 +124,8 @@ private struct TodoTaskRow: View {
       }
       if task.status == "in_progress", let form = task.activeForm { Text(form).font(.caption).foregroundStyle(.secondary) }
       if let owner = task.owner { Text("原任务负责人标签：" + owner).font(.caption2).foregroundStyle(.secondary) }
-      if task.blocked {
-        Text("未满足依赖：" + task.unresolvedBy.map { "#\($0)" }.joined(separator: "、") + (task.omittedDependencies > 0 ? " · 另有依赖未完整显示" : ""))
+      if task.blocked || task.omittedDependencies > 0 {
+        Text((task.blocked ? "未满足依赖：" : "依赖详情：") + task.unresolvedBy.map { "#\($0)" }.joined(separator: "、") + (task.omittedDependencies > 0 ? " · 另有依赖未完整显示" : ""))
           .font(.caption2).foregroundStyle(.orange)
       }
     }.padding(10).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))

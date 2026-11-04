@@ -16,7 +16,7 @@ public struct TodoRow: Codable, Equatable, Identifiable, Sendable {
       && Set(unresolvedBy).count == unresolvedBy.count && Set(unresolvedBy).isSubset(of: Set(blockedBy))
       && (0...512).contains(omittedDependencies)
   }
-  public var blocked: Bool { status != "completed" && (!unresolvedBy.isEmpty || omittedDependencies > 0) }
+  public var blocked: Bool { status != "completed" && !unresolvedBy.isEmpty }
   public var statusTitle: String { status == "completed" ? "原计划已记录完成" : blocked ? "等待前置任务" : status == "in_progress" ? "原计划进行中" : "尚未开始" }
 }
 public struct TodoCounts: Codable, Equatable, Sendable {
@@ -61,8 +61,12 @@ public struct TodoProjection: Codable, Equatable, Sendable {
 public enum WorkOverview {
   public static func currentTask(_ session: SessionView) -> String {
     guard session.connection == .connected else { return "连接不在当前状态，保留最后观测" }
-    guard let todo = session.snapshot.todo, let task = todo.active.first else {
-      return session.snapshot.todo?.counts?.total == 0 ? "Pi 已记录空任务清单" : "Pi 未报告进行中的任务"
+    guard let todo = session.snapshot.todo else { return "任务观测未接入" }
+    if todo.coverage == "not-observed" { return "当前范围任务尚未采集" }
+    if todo.coverage == "unavailable" { return "当前任务快照不可用" }
+    guard let task = todo.active.first else {
+      if todo.counts?.total == 0 { return "Pi 已记录空任务清单" }
+      return (todo.counts?.inProgress ?? 0) > 0 ? "进行中任务未在有界列表中显示" : "Pi 未报告进行中的任务"
     }
     return task.activeForm?.isEmpty == false ? task.activeForm! : task.subject
   }

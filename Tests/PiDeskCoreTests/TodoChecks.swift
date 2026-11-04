@@ -20,6 +20,14 @@ enum TodoChecks {
     snapshot.todo = nil; precondition(snapshot.valid)
     var stale = session; stale.connection = .disconnected
     precondition(WorkOverview.currentTask(stale).contains("保留") && WorkOverview.guidance(stale).contains("不重放"))
+    var omitted = projection.tasks[0]; omitted.omittedDependencies = 1
+    precondition(!omitted.blocked, "omitted satisfied dependencies cannot manufacture a blocker")
+    var missing = session; missing.snapshot.todo = nil
+    precondition(WorkOverview.currentTask(missing) == "任务观测未接入")
+    missing.snapshot.todo = projection; missing.snapshot.todo?.coverage = "not-observed"
+    precondition(WorkOverview.currentTask(missing) == "当前范围任务尚未采集")
+    missing.snapshot.todo?.coverage = "unavailable"
+    precondition(WorkOverview.currentTask(missing) == "当前任务快照不可用")
     precondition(base.todo == nil, "legacy fixtures stay valid without task observation")
     print("Todo checks passed: shared DTO, original-plan semantics, dependency-not-human, old bridge, stale and wire validation.")
   }

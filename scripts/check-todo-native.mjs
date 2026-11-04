@@ -49,12 +49,31 @@ try {
   assert.equal(todo.coverage, "observed");
   assert.ok(todo.tasks.some(t => t.subject === "合成当前工作"));
   assert.ok(!JSON.stringify(todo).includes("PRIVATE_TOOL_TEXT"));
-  if (nativeTodo) assert.equal(nativeTodo.getTodos()[0].subject, todo.tasks[0].subject, "same isolated owner instance is the original fact");
+  let exercisedOwnerActions = [call.action];
+  if (nativeTodo) {
+    assert.equal(nativeTodo.getTodos()[0].subject, todo.tasks[0].subject, "same isolated owner instance is the original fact");
+    for (const params of [{action:"create",subject:"第二项"}, {action:"get",id:1}, {action:"list",status:"completed"}, {action:"update",id:2,status:"in_progress",activeForm:"合成步骤"}, {action:"delete",id:1}, {action:"clear"}]) {
+      const previous = records.filter(r => r.snapshot?.todo?.counts).at(-1).snapshot.todo.observerSeq;
+      host.faux.setResponses([ai.fauxAssistantMessage(ai.fauxToolCall("todo", params), { stopReason: "toolUse" }), ai.fauxAssistantMessage("SYNTHETIC_DONE")]);
+      await host.session.prompt("synthetic native todo full-state contract");
+      await until(() => records.some(r => r.snapshot?.todo?.observerSeq > previous && r.snapshot.todo.counts));
+      const projected = records.filter(r => r.snapshot?.todo?.counts).at(-1).snapshot.todo;
+      const original = nativeTodo.getTodos().filter(t => t.status !== "deleted");
+      assert.equal(projected.counts.total, original.length);
+      assert.deepEqual(projected.tasks.map(t => [t.id,t.subject,t.status]).sort(), original.map(t => [t.id,t.subject,t.status]).sort(), params.action + " retains the full owner state, not a filtered subset");
+      if (params.action === "get" || params.action === "list") assert.equal(projected.counts.total, 2);
+      exercisedOwnerActions.push(params.action);
+    }
+  }
   assert.deepEqual({ model: host.session.model, effort: host.session.thinkingLevel, tools: host.session.getActiveToolNames(), prompt: host.session.systemPrompt }, before);
-  assert.equal(host.faux.state.callCount, 2); assert.deepEqual(host.errors, []);
-  console.log(JSON.stringify({ ok: true, nativeSDK: true, nativeTodoOwner: nativeTodo ? "explicit-owner-source" : "synthetic-TaskDetails-contract", firstResultProjected: true, realSwiftUDS: socket, loadoutUnchanged: true, addedModelCalls: 0, realProviderCalls: 0 }));
+  assert.equal(host.faux.state.callCount, exercisedOwnerActions.length * 2); assert.deepEqual(host.errors, []);
+  console.log(JSON.stringify({ ok: true, nativeSDK: true, nativeTodoOwner: nativeTodo ? "explicit-owner-source" : "synthetic-TaskDetails-contract", firstResultProjected: true, exercisedOwnerActions, realSwiftUDS: socket, loadoutUnchanged: true, addedModelCalls: 0, realProviderCalls: 0 }));
 } finally {
   await host.close();
-  if (server && server.exitCode === null) { const exited = new Promise(resolve => server.once("exit", resolve)); server.stdin.end(); await exited; }
+  if (server && server.exitCode === null) {
+    const exited = new Promise(resolve => server.once("exit", resolve));
+    const safety = setTimeout(() => server.kill(), 1000).unref();
+    server.stdin.end(); await exited; clearTimeout(safety);
+  }
   await rm(root, { recursive: true, force: true });
 }

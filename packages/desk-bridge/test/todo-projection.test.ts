@@ -50,6 +50,16 @@ test("malformed and oversized source is explicitly unavailable; metadata never e
   assert.equal(o.read().coverage, "unavailable"); assert.equal(o.read().counts, undefined);
   assert.ok(validTodoProjection(o.read()));
 });
+test("truncated dependencies prioritize genuinely unmet references, not omission as blocking", () => {
+  const o = new TodoObserver();
+  const prerequisites = Array.from({length:17}, (_,i) => ({id:i+1,subject:"prior",status:"completed"}));
+  const task = {id:18,subject:"next",status:"pending",blockedBy:prerequisites.map(t=>t.id)};
+  o.start("satisfied"); o.end("satisfied", result([...prerequisites,task]), false, 1000);
+  assert.equal(o.read().tasks[0].omittedDependencies, 1); assert.deepEqual(o.read().tasks[0].unresolvedBy, []);
+  prerequisites[16].status = "pending";
+  o.start("unmet"); o.end("unmet", result([...prerequisites,task]), false, 1001);
+  assert.deepEqual(o.read().tasks.find(t=>t.id===18)?.unresolvedBy,[17]);
+});
 test("absolute paths and sparse subjects never claim complete text coverage", () => {
   const o = new TodoObserver();
   for (const subject of ["/etc/private", "路径(/opt/private)", "C:\\fixture\\private", undefined]) {

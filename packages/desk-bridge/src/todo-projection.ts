@@ -106,7 +106,9 @@ export class TodoObserver {
       const rawDeps = own(row, "blockedBy"), deps = rawDeps === undefined ? [] : array(rawDeps, 512);
       if (!deps || !deps.every(positive) || new Set(deps).size !== deps.length) { this.seq++; this.snapshot = this.empty("unavailable"); return true; }
       const subject = safeText(own(row, "subject"), 160), form = safeText(own(row, "activeForm"), 160), owner = safeText(own(row, "owner"), 80);
-      const blockedBy = (deps as number[]).slice(0, 16), omittedDependencies = deps.length - blockedBy.length;
+      const unmet = (deps as number[]).filter(d => statuses.get(d) !== "completed");
+      const satisfied = (deps as number[]).filter(d => statuses.get(d) === "completed");
+      const blockedBy = [...unmet, ...satisfied].slice(0, 16), omittedDependencies = deps.length - blockedBy.length;
       partial ||= !subject.text || subject.partial || form.partial || owner.partial || omittedDependencies > 0;
       projected.push({ id: rowId, subject: subject.text || "未提供任务标题", ...(form.text ? { activeForm: form.text } : {}), ...(owner.text ? { owner: owner.text } : {}), status: status as TodoStatus, blockedBy, unresolvedBy: blockedBy.filter(d => statuses.get(d) !== "completed"), omittedDependencies });
     }

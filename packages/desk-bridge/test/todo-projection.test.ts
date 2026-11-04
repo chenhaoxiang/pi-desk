@@ -50,6 +50,13 @@ test("malformed and oversized source is explicitly unavailable; metadata never e
   assert.equal(o.read().coverage, "unavailable"); assert.equal(o.read().counts, undefined);
   assert.ok(validTodoProjection(o.read()));
 });
+test("absolute paths and sparse subjects never claim complete text coverage", () => {
+  const o = new TodoObserver();
+  for (const subject of ["/etc/private", "路径(/opt/private)", "C:\\fixture\\private", undefined]) {
+    o.start("private"); o.end("private", result([{id: 1, status: "pending", subject}]), false, 1000);
+    assert.equal(o.read().coverage, "partial"); assert.ok(!JSON.stringify(o.read()).includes("private"));
+  }
+});
 test("task rows/text/frame budget are bounded and sensitive labels withheld", () => {
   const o = new TodoObserver();
   const many = Array.from({ length: 512 }, (_, i) => ({ id: i + 1, subject: "任务".repeat(100), activeForm: "进行".repeat(100), status: i === 511 ? "in_progress" : "pending", owner: "owner" }));

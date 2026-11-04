@@ -69,11 +69,10 @@ public enum WorkOverview {
   public static func guidance(_ session: SessionView) -> String {
     if session.connection != .connected { return "先等待原会话重新接入；不把断线当失败，不重放动作。" }
     if Presentation.needsInput(session) { return "原会话正在等待输入，打开原入口处理；问题正文未接入，不猜答案。" }
-    if let todo = session.snapshot.todo, let blocked = todo.blocked.first {
-      let refs = blocked.unresolvedBy.map { "#\($0)" }.joined(separator: "、")
-      return "依赖提示：#\(blocked.id) 尚依赖 " + (refs.isEmpty ? "未完整提供的前置任务" : refs) + "；不是用户审批或CI失败。"
+    if session.snapshot.todo?.blocked.isEmpty == false {
+      return "依赖提示：先完成上面的前置任务；不等于需要你审批，owner下一步尚未接入。"
     }
-    if Presentation.isExecutionActive(session) { return "Pi 正在独立推进；这里不新增确认或自动催促。" }
+    if Presentation.isExecutionActive(session) { return "原会话报告本轮仍在运行；这里不新增确认或自动催促。" }
     return "owner 尚未提供下一步／交付结果。Todo状态不等于验收，必要时打开原会话。"
   }
 }

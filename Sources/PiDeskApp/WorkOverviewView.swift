@@ -21,7 +21,7 @@ struct WorkOverviewPage: View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 16) {
         VStack(alignment: .leading, spacing: 8) {
-          Text("看清工作，而不是只看会话在线").font(.title3.weight(.semibold))
+          Text("当前工作").font(.title3.weight(.semibold))
           Text("Pi 是唯一事实来源；任务清单来自原生 Todo。完成记录不代表测试、交付或业务验收通过。").font(.caption).foregroundStyle(.secondary)
           HStack(spacing: 20) {
             Label("\(needingInput.count) 个会话需要输入", systemImage: "person.crop.circle.badge.questionmark")
@@ -61,9 +61,6 @@ private struct WorkSessionCard: View {
           Text("计划当前步骤").font(.caption).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
           Text(WorkOverview.currentTask(session)).font(.system(size: 14, weight: .medium)).fixedSize(horizontal: false, vertical: true)
         }
-        if Presentation.needsInput(session) {
-          Label("原会话正在等待输入；具体问题请回原入口查看。", systemImage: "questionmark.circle.fill").font(.caption).foregroundStyle(.orange)
-        }
         TodoObservationCard(session: session, compact: true)
         Text(WorkOverview.guidance(session)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         HStack(spacing: 12) {
@@ -92,14 +89,16 @@ struct TodoObservationCard: View {
           Text("原计划：\(counts.completed) 项记录完成 · \(counts.inProgress) 项进行中 · \(counts.pending) 项未开始").font(.caption)
           if counts.total == 0 { Text("Pi 当前成功返回了空任务清单。").font(.caption).foregroundStyle(.secondary) }
           if compact {
-            ForEach(Array(todo.tasks.filter { $0.status != "completed" }.prefix(3))) { task in TodoTaskRow(task: task) }
-            if todo.tasks.count > 3 { Text("更多任务在会话详情中查看").font(.caption2).foregroundStyle(.secondary) }
+            ForEach(Array(todo.blocked.prefix(2))) { task in
+              Label("#\(task.id) " + task.subject + " · 等待 " + task.unresolvedBy.map { "#\($0)" }.joined(separator: "、"), systemImage: "link")
+                .font(.caption).foregroundStyle(.orange).lineLimit(2)
+            }
           } else {
             ForEach(todo.tasks) { task in TodoTaskRow(task: task) }
           }
           if todo.omitted > 0 { Text("受显示预算限制，另有 \(todo.omitted) 项未展开；不是零任务或任务丢失。").font(.caption2).foregroundStyle(.orange) }
           if todo.coverage == "partial" { Text("任务信息存在省略、截断或安全隐藏，显示的关系可能不完整。").font(.caption2).foregroundStyle(.orange) }
-          if let at = todo.observedAt { Text("来源：Pi Todo · " + Date(timeIntervalSince1970: at / 1000).formatted() + " · 观测序号 \(todo.observerSeq)").font(.caption2).foregroundStyle(.secondary) }
+          if let at = todo.observedAt { Text("来源：Pi Todo · " + Date(timeIntervalSince1970: at / 1000).formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
         } else {
           Text(todo.coverage == "unavailable" ? "当前原生任务快照不可投影；没有用旧清单替代当前事实。" : "尚未收到本运行当前范围的 Todo 结果，不代表没有任务。原会话下一次使用 Todo 后会更新；不触发模型或扫描历史补齐。").font(.caption).foregroundStyle(.secondary)
         }

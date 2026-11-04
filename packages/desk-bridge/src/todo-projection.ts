@@ -30,7 +30,7 @@ function safeText(value: unknown, bytes: number): { text?: string; partial: bool
   if (value === undefined) return { partial: false };
   if (typeof value !== "string") return { text: "内容未提供", partial: true };
   // Scan only a bounded prefix. Oversized source is withheld, not partially leaked.
-  if (value.length > 2048 || sensitiveText(value) || /(?:^|\s)(?:\/(?:Users|home|private|tmp)\/|[A-Za-z]:\\|file:\/\/)/.test(value)) return { text: "内容已隐藏", partial: true };
+  if (value.length > 2048 || sensitiveText(value) || /(?:^|[\s("'=:])(?:\/(?!\/)\S|~\/|[A-Za-z]:[\\/]|file:\/\/)/.test(value)) return { text: "内容已隐藏", partial: true };
   let output = "", size = 0;
   for (const c of value) {
     const cp = c.codePointAt(0)!;
@@ -93,16 +93,21 @@ export class TodoObserver {
     }
     let partial = false;
     const counts = { pending: 0, inProgress: 0, completed: 0, total: 0 };
-    const projected: TodoRow[] = [];
-    for (const row of rows) {
-      const rowId = Number(own(row, "id")), status = statuses.get(rowId)!;
+    for (const status of statuses.values()) {
       if (status === "deleted") continue;
       counts.total++; if (status === "pending") counts.pending++; else if (status === "in_progress") counts.inProgress++; else counts.completed++;
+    }
+    // Project text/dependencies only for at most 32 rows, not all 512 owner records.
+    const phase = (row: unknown) => own(row, "status") === "in_progress" ? 0 : own(row, "status") === "pending" ? 1 : 2;
+    const selected = rows.filter(row => own(row, "status") !== "deleted").sort((a, b) => phase(a) - phase(b) || Number(own(a, "id")) - Number(own(b, "id"))).slice(0, 32);
+    const projected: TodoRow[] = [];
+    for (const row of selected) {
+      const rowId = Number(own(row, "id")), status = statuses.get(rowId)!;
       const rawDeps = own(row, "blockedBy"), deps = rawDeps === undefined ? [] : array(rawDeps, 512);
       if (!deps || !deps.every(positive) || new Set(deps).size !== deps.length) { this.seq++; this.snapshot = this.empty("unavailable"); return true; }
       const subject = safeText(own(row, "subject"), 160), form = safeText(own(row, "activeForm"), 160), owner = safeText(own(row, "owner"), 80);
       const blockedBy = (deps as number[]).slice(0, 16), omittedDependencies = deps.length - blockedBy.length;
-      partial ||= subject.partial || form.partial || owner.partial || omittedDependencies > 0;
+      partial ||= !subject.text || subject.partial || form.partial || owner.partial || omittedDependencies > 0;
       projected.push({ id: rowId, subject: subject.text || "未提供任务标题", ...(form.text ? { activeForm: form.text } : {}), ...(owner.text ? { owner: owner.text } : {}), status: status as TodoStatus, blockedBy, unresolvedBy: blockedBy.filter(d => statuses.get(d) !== "completed"), omittedDependencies });
     }
     const rank = (r: TodoRow) => r.status === "in_progress" ? 0 : r.status === "pending" && r.unresolvedBy.length ? 1 : r.status === "pending" ? 2 : 3;

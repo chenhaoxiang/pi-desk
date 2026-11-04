@@ -27,5 +27,6 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: bash scripts/check-native.sh
       - run: node --import tsx scripts/check-socket-host.mjs
+      - run: node --import tsx scripts/check-todo-native.mjs --socket
       - run: swift build -c release --jobs 2
 # No deployment, model provider, credential, global extension install or main bootstrap.

@@ -8,7 +8,7 @@ status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-11-05
-verification_scope: 新增用户批准的Pi同源工作台路线与owner接口核对；历史验证沿原日期范围，本轮实现/安装/自然闭环尚未完成
+verification_scope: W1实现、79项Node与Swift原生回归、隔离Pi SDK及真实Todo owner到Swift UDS已通过；审查/远端CI/安装未完成，自然闭环未宣称
 ---
 
 # 分阶段实施方案
@@ -27,6 +27,8 @@ verification_scope: 新增用户批准的Pi同源工作台路线与owner接口�
 W1采用已有Snapshot的可选Todo投影，不新增中心数据schema。先观察当前成功todo结果的id/subject/activeForm/status/blockedBy/owner；不读params/description/metadata/正文。当前没有公开snapshot RPC，初次加载及branch切换后显示未采集，等待原生事件；不能另import getTodos产生第二模块实例。仅真实输入生命周期算需要用户，pending/blockedBy不推断等待CI或授权。Todo.owner只展示，不认证职责。产品映射和owner nextAction未接通前明确未提供。
 
 本轮消费Change：`openspec/changes/pi-work-observation/`。源码、合成SDK/UDS、实际新加载会话、本机安装与远端CI分别记录；新交付必须包含此前已安装的性能优化，不用旧主线构建覆盖较新的本机行为。长线成效看验收交付率、催促数、等待恢复时延、重复副作用/误报完成及返工成本，不按Agent/事件/文档数量计成绩。阶段是依赖，不是每步新增审批。
+
+W1本地候选已通过79项Node、Swift原生全套、隔离SDK与Swift UDS；真实Todo owner在隔离新SDK会话成功投影，不是扫描运行中会话或替换事实。既有性能修复作为祖先保留，合成64行投影p95约0.117ms；512项Todo极限fixture通过只处理最多32行正文将观察p95从2.417ms降至0.534ms（报告值，非真实滚动帧率保证）。工作总览已合成渲染，后台AX仍不能精确绑定，不冒称键鼠/VoiceOver新控件验收。本批不调用真实业务模型；独立审查模型探测与业务推理分开。
 
 ## 1. 当前交付与下一次实施起点
 

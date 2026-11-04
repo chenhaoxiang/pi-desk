@@ -40,6 +40,7 @@ import PiDeskCore
 
 private final class LocalAssistantCall: @unchecked Sendable {
   private let queue = DispatchQueue(label: "pi-desk.local-assistant", qos: .utility)
+  private let writer = DispatchQueue(label: "pi-desk.local-assistant.stdin", qos: .utility)
   private let process = Process(), input = Pipe(), output = Pipe()
   private let installation: LocalAssistantTransport.Installation
   private let payload: AssistantPayload, id: String
@@ -63,7 +64,7 @@ private final class LocalAssistantCall: @unchecked Sendable {
         try process.run()
         struct Packet: Encodable { let id: String; let payload: AssistantPayload }
         var packet = try JSONEncoder().encode(Packet(id: id, payload: payload)); packet.append(10)
-        try input.fileHandleForWriting.write(contentsOf: packet)
+        write(packet)
         queue.asyncAfter(deadline: .now() + (payload.operation == "analyze" ? 135 : 20)) { [weak self] in self?.finishUnknown() }
       } catch { finishUnknown() }
     }
@@ -74,7 +75,14 @@ private final class LocalAssistantCall: @unchecked Sendable {
       guard !finished else { return }
       var cancel = AssistantPayload(operation: "cancel"); cancel.cancelID = id
       struct Packet: Encodable { let id: String; let payload: AssistantPayload }
-      if var bytes = try? JSONEncoder().encode(Packet(id: "cancel-" + id, payload: cancel)) { bytes.append(10); try? input.fileHandleForWriting.write(contentsOf: bytes) }
+      if var bytes = try? JSONEncoder().encode(Packet(id: "cancel-" + id, payload: cancel)) { bytes.append(10); write(bytes) }
+    }
+  }
+  private func write(_ bytes: Data) {
+    // Pipe backpressure must never block the state/deadline/termination queue.
+    writer.async { [self] in
+      do { try input.fileHandleForWriting.write(contentsOf: bytes) }
+      catch { queue.async { [self] in finishUnknown() } }
     }
   }
   private func receive(_ chunk: Data) {
@@ -97,8 +105,8 @@ private final class LocalAssistantCall: @unchecked Sendable {
   private func finish(_ result: AssistantPayload) {
     guard !finished else { return }; finished = true
     output.fileHandleForReading.readabilityHandler = nil
-    try? input.fileHandleForWriting.close()
     if process.isRunning { process.terminate() }
+    try? input.fileHandleForWriting.close()
     completion(result)
   }
 }

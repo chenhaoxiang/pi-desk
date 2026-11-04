@@ -32,6 +32,12 @@ import PiDeskCore
     var modelReply = AssistantPayload(operation: "models"); modelReply.status = "ok"; modelReply.models = [option, other]
     client.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: sent[0].2, assistant: modelReply))
     precondition(!client.loadingModels && client.selectedModel?.id == option.id)
+    let beforeReentry = sent.count
+    client.refreshModels(force: false)
+    precondition(sent.count == beforeReentry, "returning to AI within the short cache window must not restart SDK/catalog loading")
+    client.refreshModels()
+    precondition(sent.count == beforeReentry + 1 && sent.last!.0.operation == "models", "explicit registry refresh always bypasses the UI cache")
+    client.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: sent.last!.2, assistant: modelReply))
     client.choose(snapshot.identity.sessionKey, selected: true)
     client.prepare()
     let contextRequest = sent.last!

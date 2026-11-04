@@ -33,7 +33,13 @@ public struct NotificationTarget: Codable, Equatable, Sendable {
   public var sessionHash: String
   public var runtimeHash: String
   public var inputHash: String?
-  public static func hash(_ value: String) -> String { SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined() }
+  public static func hash(_ value: String) -> String {
+    let digits = Array("0123456789abcdef".utf8)
+    let digest = SHA256.hash(data: Data(value.utf8))
+    var bytes = [UInt8](); bytes.reserveCapacity(64)
+    for byte in digest { bytes.append(digits[Int(byte >> 4)]); bytes.append(digits[Int(byte & 15)]) }
+    return String(decoding: bytes, as: UTF8.self)
+  }
   public init(identity: Identity, inputID: String? = nil) {
     sessionHash = Self.hash(identity.sessionKey)
     runtimeHash = Self.hash(identity.sessionKey + ":" + identity.runtimeEpoch)

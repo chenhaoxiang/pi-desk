@@ -56,7 +56,7 @@ struct AssistantPage: View {
         }
       }.padding(22)
     }.onAppear {
-      assistant.refreshModels()
+      assistant.refreshModels(force: false)
       if model.isPreview && !CommandLine.arguments.contains("--assistant-prepare-preview") { assistant.seedPreviewResult() }
       if assistant.analysis != nil { section = "结果" }
       if assistant.selectedKeys.isEmpty, let current = model.current, current.connection == .connected { assistant.choose(current.snapshot.identity.sessionKey, selected: true) }

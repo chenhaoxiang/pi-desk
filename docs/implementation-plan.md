@@ -7,11 +7,28 @@ release_scope: 首版本地源码与旁路候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-10-30
-verification_scope: 本地Swift/Node、隔离SDK/owner/GUI、用户确认的通知与VoiceOver现场结果及本机安装；非Herdr正向实机或正式发行
+verified: 2026-11-05
+verification_scope: W1实现、80项Node与Swift原生回归、隔离Pi SDK及真实Todo owner到Swift UDS已通过；审查/远端CI/安装未完成，自然闭环未宣称
 ---
 
 # 分阶段实施方案
+
+## 0. Pi同源CEO工作台与自主推进路线（2026-11-05）
+
+用户已批准“规划并推进”：以Pi CLI/Runtime及原生owner为唯一事实和写入标准；Desk是可视化与管理客户端，不再建立产品/任务权威库或执行器。Pi治理负责人负责producer、工作/结果/交接/恢复合同，Desk负责有界消费、UI和准确管理请求。治理SSOT位于pi-vista的`docs/pi-continuum.md`、`openspec/changes/pi-operational-rollout/work-result-continuity-design.md`及`docs/adapters/pi.md`；不在本仓重定义work_ref或GovernanceReceipt。
+
+| 切片 | 交付内容 | 验收及边界 |
+|---|---|---|
+| W1（当前实施） | 已接入Pi的当前Todo/步骤/依赖与覆盖；工作总览、原生名称和精确会话下钻 | 成功TaskDetails白名单、只读内存投影；未采集不当零，完成不当验收，branch/clear/晚到隔离，旧bridge不强reload |
+| W2 | 按已交付owner合同接work_ref/结果/问题与等待/nextAction，显式产品与跨session归属 | 不接候选字段、不按cwd/名字猜；没有producer明确缺省；管理写入仍回Pi原owner |
+| W3 | 一件原授权低风险自然工作从任务到执行、外部等待解除、恢复、owner验收、交付与Desk同步 | 以不催促续接、无重复副作用、真实原件与用户需要处理事项验证；关闭Desk不停止Pi |
+| W4 | 按真实问题扩展优化和受控升级 | 原验收/预算/权限不由执行AI自改；隔离候选、安全切换和回退；不是当前授权下开启全局24×7或任意升级 |
+
+W1采用已有Snapshot的可选Todo投影，不新增中心数据schema。先观察当前成功todo结果的id/subject/activeForm/status/blockedBy/owner；不读params/description/metadata/正文。当前没有公开snapshot RPC，初次加载及branch切换后显示未采集，等待原生事件；不能另import getTodos产生第二模块实例。仅真实输入生命周期算需要用户，pending/blockedBy不推断等待CI或授权。Todo.owner只展示，不认证职责。产品映射和owner nextAction未接通前明确未提供。
+
+本轮消费Change：`openspec/changes/pi-work-observation/`。源码、合成SDK/UDS、实际新加载会话、本机安装与远端CI分别记录；新交付必须包含此前已安装的性能优化，不用旧主线构建覆盖较新的本机行为。长线成效看验收交付率、催促数、等待恢复时延、重复副作用/误报完成及返工成本，不按Agent/事件/文档数量计成绩。阶段是依赖，不是每步新增审批。
+
+W1本地候选已通过80项Node、Swift原生全套、隔离SDK与Swift UDS；真实Todo owner在隔离新SDK会话成功投影，不是扫描运行中会话或替换事实。既有性能修复作为祖先保留，合成64行投影p95约0.117ms；512项Todo极限fixture通过只处理最多32行正文将观察p95从2.417ms降至0.534ms（报告值，非真实滚动帧率保证）。工作总览已合成渲染，后台AX仍不能精确绑定，不冒称键鼠/VoiceOver新控件验收。本批不调用真实业务模型；独立审查模型探测与业务推理分开。
 
 ## 1. 当前交付与下一次实施起点
 

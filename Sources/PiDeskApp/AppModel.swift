@@ -42,9 +42,11 @@ struct DeskSettings: Codable {
   var screenPolicy: String { islandScreen ?? "follow" }
 }
 @MainActor final class AppModel: ObservableObject {
-  @Published var store = SessionStore()
+  @Published var store = SessionStore() {
+    didSet { invalidateSessionProjection(order: Set(oldValue.sessions.keys) != Set(store.sessions.keys)) }
+  }
   @Published var selected: String?
-  @Published var page = "会话"
+  @Published var page = "工作总览"
   @Published var diagnostic = "连接正在启动"
   @Published var actionNote = ""
   @Published var navigationNotice: String?
@@ -55,18 +57,18 @@ struct DeskSettings: Codable {
   @Published var muted = false
   @Published var drafts: [Identity: String] = [:]
   @Published var modal: DeskModal?
-  @Published var search = ""
+  @Published var search = "" { didSet { visibleSessionCache = nil } }
   @Published var searchFocusRequest = 0
-  @Published var sessionFilter = "在线"
-  @Published var hiddenSessions: Set<String> = []
-  @Published var pinnedKeyHashes: Set<String> = []
-  @Published var sessionAliases: [String: String] = [:]
-  @Published var reviewedResultSequences: [String: Int] = [:]
-  @Published var sessionGroups: [String: String] = [:]
+  @Published var sessionFilter = "在线" { didSet { visibleSessionCache = nil } }
+  @Published var hiddenSessions: Set<String> = [] { didSet { visibleSessionCache = nil } }
+  @Published var pinnedKeyHashes: Set<String> = [] { didSet { invalidateSessionProjection(order: true) } }
+  @Published var sessionAliases: [String: String] = [:] { didSet { visibleSessionCache = nil } }
+  @Published var reviewedResultSequences: [String: Int] = [:] { didSet { visibleSessionCache = nil; attentionSessionCache = nil } }
+  @Published var sessionGroups: [String: String] = [:] { didSet { visibleSessionCache = nil } }
   @Published var aiUsageCounters: [String: Int64] = [:]
   let assistant: DeskAssistantClient
   let localAssistant: LocalAssistantTransport
-  @Published var groupFilter = ""
+  @Published var groupFilter = "" { didSet { visibleSessionCache = nil } }
   @Published private(set) var sessionNotes: [Identity: String] = [:]
   static let sessionFilters = ["在线", "运行中", "需关注", "需输入", "已置顶", "全部", "断连"]
   @Published var usagePreset: UsagePreset = .today
@@ -156,6 +158,22 @@ struct DeskSettings: Codable {
   private var ownerQueryTimes: [String: Date] = [:]
   private var sessionOrder: [String: Int] = [:]
   private var nextSessionOrder = 0
+  private var orderedSessionKeys: [String]?
+  private var sessionCache: [SessionView]?
+  private var visibleSessionCache: [SessionView]?
+  private var attentionSessionCache: [SessionView]?
+  private var viewKeyHashes: [String: String] = [:]
+  private(set) var sessionProjectionBuilds = 0
+  private(set) var sessionProjectionSorts = 0
+  private func invalidateSessionProjection(order: Bool = false) {
+    sessionCache = nil; visibleSessionCache = nil; attentionSessionCache = nil
+    if order { orderedSessionKeys = nil }
+  }
+  private func viewKeyHash(_ key: String) -> String {
+    if let value = viewKeyHashes[key] { return value }
+    if viewKeyHashes.count >= 2048 { viewKeyHashes.removeAll(keepingCapacity: true) }
+    let value = UsageViewStateKey.hash(key); viewKeyHashes[key] = value; return value
+  }
   let isPreview: Bool
   var showManager: () -> Void = {}
   var showIsland: () -> Void = {}
@@ -179,7 +197,7 @@ struct DeskSettings: Codable {
   }
   var workGroups: [String] { Array(Set(sessionGroups.values)).sorted() }
   var groupFilterTitle: String { groupFilter.isEmpty ? "全部分组" : groupFilter == "__none__" ? "未分组" : groupFilter }
-  func workGroup(_ identity: Identity) -> String? { sessionGroups[UsageViewStateKey.hash(identity.sessionKey)] }
+  func workGroup(_ identity: Identity) -> String? { sessionGroups[viewKeyHash(identity.sessionKey)] }
   @discardableResult func assignGroups(_ changes: [(Identity, String)]) -> Bool {
     var proposed = sessionGroups, explicit: [String: String] = [:]
     for (identity, raw) in changes {
@@ -187,7 +205,7 @@ struct DeskSettings: Codable {
       let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
       guard name.utf8.count <= 64, !["全部分组", "未分组", "__none__"].contains(name),
         !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else { return false }
-      let key = UsageViewStateKey.hash(identity.sessionKey)
+      let key = viewKeyHash(identity.sessionKey)
       proposed[key] = name.isEmpty ? nil : name; explicit[key] = name
     }
     guard proposed.count <= 64, Set(proposed.values).count <= 16 else { return false }
@@ -304,19 +322,19 @@ struct DeskSettings: Codable {
     return "尚未提供 /name · " + session.snapshot.identity.nativeSessionId.suffix(6)
   }
   func sessionTitle(_ session: SessionView) -> String {
-    sessionAliases[UsageViewStateKey.hash(session.snapshot.identity.sessionKey)] ?? SessionExperience.title(session.snapshot)
+    sessionAliases[viewKeyHash(session.snapshot.identity.sessionKey)] ?? SessionExperience.title(session.snapshot)
   }
-  func isPinned(_ identity: Identity) -> Bool { pinnedKeyHashes.contains(UsageViewStateKey.hash(identity.sessionKey)) }
+  func isPinned(_ identity: Identity) -> Bool { pinnedKeyHashes.contains(viewKeyHash(identity.sessionKey)) }
   func togglePin(_ identity: Identity) {
-    let key = UsageViewStateKey.hash(identity.sessionKey)
+    let key = viewKeyHash(identity.sessionKey)
     if pinnedKeyHashes.contains(key) { pinnedKeyHashes.remove(key) }
     else if pinnedKeyHashes.count < 64 { pinnedKeyHashes.insert(key) }
     persistViewState()
   }
-  func alias(_ identity: Identity) -> String { sessionAliases[UsageViewStateKey.hash(identity.sessionKey)] ?? "" }
+  func alias(_ identity: Identity) -> String { sessionAliases[viewKeyHash(identity.sessionKey)] ?? "" }
   @discardableResult func setAlias(_ text: String, for identity: Identity) -> Bool {
     let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    let key = UsageViewStateKey.hash(identity.sessionKey)
+    let key = viewKeyHash(identity.sessionKey)
     guard value.utf8.count <= 128, !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }),
       value.isEmpty || sessionAliases[key] != nil || sessionAliases.count < 32 else { return false }
     sessionAliases[key] = value.isEmpty ? nil : value
@@ -328,7 +346,7 @@ struct DeskSettings: Codable {
       pinned: Set(sessions.filter { isPinned($0.snapshot.identity) }.map { $0.snapshot.identity.sessionKey }),
       unread: Set(sessions.filter(hasUnreadResult).map { $0.snapshot.identity.sessionKey }))
   }
-  private func resultKey(_ identity: Identity) -> String { UsageViewStateKey.hash(identity.sessionKey + ":" + identity.runtimeEpoch) }
+  private func resultKey(_ identity: Identity) -> String { viewKeyHash(identity.sessionKey + ":" + identity.runtimeEpoch) }
   func hasUnreadResult(_ session: SessionView) -> Bool {
     guard session.connection == .connected, Presentation.hasExecutionEvidence(session), session.snapshot.pending != true, !Presentation.needsInput(session),
       [.settled, .failed, .aborted].contains(Presentation.executionState(session)),
@@ -357,10 +375,12 @@ struct DeskSettings: Codable {
     session.connection == .connected && (Presentation.needsInput(session) || Presentation.executionState(session) == .failed || hasUnreadResult(session))
   }
   var attentionSessions: [SessionView] {
-    sessions.enumerated().filter { needsAttention($0.element) }.sorted { a, b in
+    if let cached = attentionSessionCache { return cached }
+    let value = sessions.enumerated().filter { needsAttention($0.element) }.sorted { a, b in
       let x = Presentation.priority(a.element), y = Presentation.priority(b.element)
       return x == y ? a.offset < b.offset : x < y
     }.map(\.element)
+    attentionSessionCache = value; return value
   }
   var attentionCount: Int { attentionSessions.count }
   var unreadResultCount: Int { sessions.filter(hasUnreadResult).count }
@@ -390,13 +410,13 @@ struct DeskSettings: Codable {
     selected = identity.sessionKey
     markVisibleResultViewed(identity)
     selectionPinned = true
-    pendingSelectionHash = UsageViewStateKey.hash(identity.sessionKey)
+    pendingSelectionHash = viewKeyHash(identity.sessionKey)
     persistViewState()
     if refreshOwner { refresh(identity: identity) }
   }
   private func preferredSessionKey() -> String? {
     if let pendingSelectionHash,
-      let restored = sessions.first(where: { UsageViewStateKey.hash($0.snapshot.identity.sessionKey) == pendingSelectionHash }) {
+      let restored = sessions.first(where: { viewKeyHash($0.snapshot.identity.sessionKey) == pendingSelectionHash }) {
       return restored.snapshot.identity.sessionKey
     }
     let connected = sessions.filter { $0.connection == .connected }
@@ -410,7 +430,7 @@ struct DeskSettings: Codable {
     if selected != key { selected = key }
   }
   private func restoreHidden(_ identity: Identity, connection: ConnectionState) {
-    guard connection != .connected, pendingHiddenHashes.contains(UsageViewStateKey.hash(identity.sessionKey)) else { return }
+    guard connection != .connected, pendingHiddenHashes.contains(viewKeyHash(identity.sessionKey)) else { return }
     hiddenSessions.insert(identity.sessionKey)
   }
   private func applyViewState(_ state: UsageViewState?) {
@@ -434,7 +454,7 @@ struct DeskSettings: Codable {
     pendingSelectionHash = state.selectedKeyHash
     pendingHiddenHashes = Set(state.hiddenKeyHashes)
     pendingDismissedHashes = Set(state.dismissedKeyHashes)
-    for session in sessions where session.connection != .connected && pendingHiddenHashes.contains(UsageViewStateKey.hash(session.snapshot.identity.sessionKey)) {
+    for session in sessions where session.connection != .connected && pendingHiddenHashes.contains(viewKeyHash(session.snapshot.identity.sessionKey)) {
       hiddenSessions.insert(session.snapshot.identity.sessionKey)
     }
   }
@@ -470,9 +490,9 @@ struct DeskSettings: Codable {
     state.usageOrigin = usageOrigin.rawValue; state.usageModel = usageModel
     state.customStartMS = Int64(usageCustomStart.timeIntervalSince1970 * 1000)
     state.customEndMS = Int64(usageCustomEnd.timeIntervalSince1970 * 1000)
-    state.selectedKeyHash = selectionPinned ? selected.map { UsageViewStateKey.hash($0) } : pendingSelectionHash
-    state.hiddenKeyHashes = Array(pendingHiddenHashes.union(hiddenSessions.map { UsageViewStateKey.hash($0) })).sorted().prefix(64).map { $0 }
-    state.dismissedKeyHashes = Array(pendingDismissedHashes.union(dismissed.map { UsageViewStateKey.hash($0) })).sorted().prefix(1024).map { $0 }
+    state.selectedKeyHash = selectionPinned ? selected.map { viewKeyHash($0) } : pendingSelectionHash
+    state.hiddenKeyHashes = Array(pendingHiddenHashes.union(hiddenSessions.map { viewKeyHash($0) })).sorted().prefix(64).map { $0 }
+    state.dismissedKeyHashes = Array(pendingDismissedHashes.union(dismissed.map { viewKeyHash($0) })).sorted().prefix(1024).map { $0 }
     return state
   }
   func persistViewState() {
@@ -549,9 +569,14 @@ struct DeskSettings: Codable {
     guard sessionOrder[identity.sessionKey] == nil else { return }
     sessionOrder[identity.sessionKey] = nextSessionOrder
     nextSessionOrder += 1
+    invalidateSessionProjection(order: true)
   }
   var sessions: [SessionView] {
-    store.sessions.values.sorted {
+    if let cached = sessionCache { return cached }
+    sessionProjectionBuilds += 1
+    if orderedSessionKeys == nil {
+      sessionProjectionSorts += 1
+      orderedSessionKeys = store.sessions.values.sorted {
       let pinnedA = isPinned($0.snapshot.identity), pinnedB = isPinned($1.snapshot.identity)
       if pinnedA != pinnedB { return pinnedA }
       let a = sessionOrder[$0.snapshot.identity.sessionKey] ?? Int.max
@@ -565,17 +590,22 @@ struct DeskSettings: Codable {
       return nameA == nameB
         ? $0.snapshot.identity.sessionKey < $1.snapshot.identity.sessionKey
         : nameA < nameB
+      }.map { $0.snapshot.identity.sessionKey }
     }
+    let value = (orderedSessionKeys ?? []).compactMap { store.sessions[$0] }
+    sessionCache = value; return value
   }
   var current: SessionView? { selected.flatMap { key in visibleSessions.first { $0.snapshot.identity.sessionKey == key } } }
   var visibleSessions: [SessionView] {
-    sessions.filter { s in
+    if let cached = visibleSessionCache { return cached }
+    let value = sessions.filter { s in
       let snap = s.snapshot
       let matchesSearch = search.isEmpty || [sessionTitle(s), workGroup(snap.identity) ?? "", snap.display.name, Presentation.project(snap), snap.display.branch ?? "", snap.display.model ?? ""].joined(separator: " ").localizedCaseInsensitiveContains(search)
       let matchesState = sessionFilter == "在线" ? s.connection == .connected : sessionFilter == "全部" || (sessionFilter == "运行中" && Presentation.isExecutionActive(s)) || (sessionFilter == "需输入" && Presentation.needsInput(s)) || (sessionFilter == "需关注" && needsAttention(s)) || (sessionFilter == "已置顶" && isPinned(snap.identity)) || (sessionFilter == "断连" && s.connection != .connected)
       let matchesGroup = groupFilter.isEmpty || (groupFilter == "__none__" ? workGroup(snap.identity) == nil : workGroup(snap.identity) == groupFilter)
       return matchesSearch && matchesState && matchesGroup && (!hiddenSessions.contains(snap.identity.sessionKey) || s.connection == .connected)
     }
+    visibleSessionCache = value; return value
   }
   func hideDisconnected(_ identity: Identity) {
     guard let s = store.sessions[identity.sessionKey], s.snapshot.identity == identity, s.connection != .connected else { return }
@@ -1045,7 +1075,7 @@ struct DeskSettings: Codable {
   }
   func isRead(_ input: InputNotice, session: Identity) -> Bool {
     let key = session.runtimeEpoch + ":" + input.id
-    return dismissed.contains(key) || pendingDismissedHashes.contains(UsageViewStateKey.hash(key))
+    return dismissed.contains(key) || pendingDismissedHashes.contains(viewKeyHash(key))
   }
   private func notify() {
     guard !muted else { return }

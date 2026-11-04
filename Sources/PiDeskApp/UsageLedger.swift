@@ -90,7 +90,7 @@ public struct UsageViewState: Codable, Equatable {
   public static let currentVersion = 1
   public static let maximumBytes = 128 * 1024
   public var version: Int = currentVersion
-  public var page: String = "会话"
+  public var page: String = "工作总览"
   public var sessionFilter: String = "在线"
   public var usagePreset: String = UsagePreset.today.rawValue
   public var usageMetric: String = UsageMetric.interaction.rawValue
@@ -113,7 +113,7 @@ public struct UsageViewState: Codable, Equatable {
   public init() {}
   public var migratedNavigation: UsageViewState {
     var result = self
-    if !["会话", "Token", "重要事项", "AI助手", "接入健康", "设置"].contains(result.page) { result.page = "会话" }
+    if !["工作总览", "会话", "Token", "重要事项", "AI助手", "接入健康", "设置"].contains(result.page) { result.page = "会话" }
     return result
   }
   public var valid: Bool {
@@ -140,7 +140,12 @@ public struct UsageViewState: Codable, Equatable {
 }
 public enum UsageViewStateKey {
   public static func hash(_ value: String) -> String {
-    SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+    let digits = Array("0123456789abcdef".utf8)
+    var bytes = [UInt8](); bytes.reserveCapacity(64)
+    for byte in SHA256.hash(data: Data(value.utf8)) {
+      bytes.append(digits[Int(byte >> 4)]); bytes.append(digits[Int(byte & 15)])
+    }
+    return String(decoding: bytes, as: UTF8.self)
   }
 }
 public enum UsageMetric: String, CaseIterable, Identifiable {

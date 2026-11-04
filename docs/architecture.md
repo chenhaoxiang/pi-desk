@@ -211,7 +211,19 @@ Pi Desk AI不是Agent宿主、执行器、审批人或业务状态owner。它由
 
 模型输出必须是有界结构化的overview、每个输入ref一条summary、可选不重叠分组建议；ref必须来自本次输入，来源主标题取Pi原生/name而非本机别名，桥接在快照及session_info_changed时读取公开名称标量，无owner轮询/文件扫描。来源/时间/runtime通过App绑定，结果过时不得改新runtime标签。内存缓存键包含准确broker和来源identities，命中后保留原来源，不能因文本相同改绑到替换运行；这些identity只用于本机缓存，不额外发给模型。采纳只写本机工作组标签，不发Pi管理请求；失败/取消/超时/未知不自动重试。合成和真实指定模型验真分开，CI默认faux provider，不携带真实凭据。
 
-## 11. 验证与退出策略
+### UI 热路径与短缓存
+
+流畅度修复保持原始快照/诊断/管理语义：AppModel只对派生会话列表做内存缓存，store变化失效行投影，成员/主动置顶/接入顺序变化才重排；搜索/组/隐藏/别名/已查看等对应偏好独立失效可见或关注投影。名称/执行状态更新仍取新快照、保持已接入行顺序；控制始终重新核准确identity，不把缓存变成控制权威。偏好SHA256键最多缓存2048个，不持久化正文；摘要编码仍为相同小写64位hex，使用字节表代替每字节Foundation格式化，旧数据库/通知键不迁移。
+
+AI页重入对成功模型目录复用60秒内存缓存（broker仍须准确且可用），显式“刷新注册模型”绕过缓存；不缓存未知分析或新增推理。合成64行相同checksum的页面模型投影基准仅报告计算耗时，不冒充真实滚动帧率；定向回归检查warm读取不重复排序、偏好与同key快照均正确失效。
+
+## 11. Pi同源任务观测与CEO工作台
+
+消费规格`pi-work-observation`复用既有Snapshot可选todo字段，任务权威仍在原生Todo。读取成功TaskDetails白名单id/subject/activeForm/status/blockedBy/owner；不读params/description/metadata/工具正文，敏感值及本机路径有限预检隐藏，不是完整DLP。最多512条输入、32条输出、任务行7KiB，状态计数与omitted/partial准确；无快照RPC时只前向观察，不另import模块状态或读历史。scope隔离clear/tree/compact，开始捕获范围、晚到和重叠快照不覆盖；observerSeq仅传输观测顺序，不冒充原生revision。
+
+工作总览呈现原计划当前步骤、已记录完成数、真实输入提示与依赖卡点，已完成不等于verified/delivered，Todo.owner只是标签。无原owner work_ref/产品/nextAction/问题正文时明确未提供；本机分组不升级为产品事实，不按cwd/name猜。所有任务只内存展示，不入usage库或默认外发AI。查看/追加沿原生准确身份管理，关闭Desk不影响Pi；治理producer/结果/交接由pi-vista既有合同维护。
+
+## 12. 验证与退出策略
 
 取消正常退出时保留连接和定时维护，teardown只在applicationWillTerminate执行；冷入口命令先建立管理窗宿主再呈现sheet。启动恢复将AI累计/分组与导航偏好分开：早期导航不跳过持久数据，早期AI数值按饱和加法合并增量，分组只覆盖明确编辑的键（含删除）；合并超容量时保留旧分组并提示重新设置，不默认清空。
 

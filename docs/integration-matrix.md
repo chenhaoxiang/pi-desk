@@ -7,7 +7,7 @@ release_scope: 接口基线快照与本地实现接线；非全模式认证
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-04
+verified: 2026-11-05
 verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift UDS合成接线、指定模型合成请求；旧owner组合沿原日期范围，非全局热加载/业务正文验收
 ---
 
@@ -33,6 +33,7 @@ verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift
 | 目标 | 已核实接口/事实 | Pi Desk设计及限制 |
 |---|---|---|
 | 生命周期 | `session_start/shutdown`、`agent_settled`、`model_select`、`tool_execution_start/end` | 需bridge；不从agent_end推断稳定结束，不用tool_call gate做观察；session header createdAt只投影标量，旧bridge缺失为unknown |
+| 原生任务 | `todo`成功结果的`TaskDetails`，`create/update/get/list/delete/clear`返回当前全量tasks（list状态筛选只影响content），投影id/subject/activeForm/status/blockedBy/owner | 无公开当前snapshot RPC，只前向有界观察；clear/tree/compact/替换失效，未采集不当零，完成不当验收，owner标签不认证；隔离真实owner/Swift UDS验证，不import第二状态实例或扫描历史 |
 | 直接消息 | `pi.sendUserMessage(content,{deliverAs:'steer'|'followUp'})`返回void | 需bridge；提交不等于模型接收/任务完成，不承诺native durable requestId |
 | 中止当前回合 | `ctx.abort():void` | 只对当前身份/epoch；读后续生命周期，不等同清队列/停计划/停所有孩子 |
 | 独立RPC宿主 | `get_state`、`get_session_stats`、`prompt`、`abort`等 | 只能复用已有owner宿主，不把所有TUI迁成RPC，不新开同session竞争writer |

@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { validAssistant, type AssistantPayload } from "./assistant-protocol.ts";
+import { validTodoProjection, type TodoProjection } from "./todo-projection.ts";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
@@ -138,6 +139,7 @@ export type Snapshot = {
 	pending: boolean | null;
 	executionObservation?: ExecutionObservation;
 	activity?: SessionActivity;
+	todo?: TodoProjection;
 	childCoverage: string;
 	tools: string[];
 	runs: Run[];
@@ -239,6 +241,7 @@ export function validate(v: unknown): asserts v is RecordV1 {
 			throw new Error("invalid-snapshot");
 		if (display.createdAtSource !== undefined && !["session-header", "unknown"].includes(String(display.createdAtSource)))
 			throw new Error("invalid-snapshot");
+		if (s.todo !== undefined && !validTodoProjection(s.todo)) throw new Error("invalid-todo");
 		if (s.executionObservation !== undefined) {
 			const observation = s.executionObservation;
 			if (!object(observation) || observation.version !== 1 ||

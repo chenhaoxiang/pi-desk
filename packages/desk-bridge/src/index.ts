@@ -29,6 +29,8 @@ export function registerBridge(
 		session?.close();
 		session = undefined;
 	});
+	pi.on("session_tree", (_e, ctx) => { observe(() => session?.resetTodoScope(ctx)); });
+	pi.on("session_compact", (_e, ctx) => { observe(() => session?.resetTodoScope(ctx)); });
 	pi.on("agent_start", (_e, ctx) => {
 		observe(() => session?.lifecycle("agent_start", ctx));
 	});
@@ -48,7 +50,10 @@ export function registerBridge(
 		observe(() => session?.tool(true, e.toolCallId, e.toolName, ctx));
 	});
 	pi.on("tool_execution_end", (e, ctx) => {
-		observe(() => session?.tool(false, e.toolCallId, e.toolName, ctx));
+		observe(() => {
+			if (e.toolName === "todo") session?.todoResult(e.toolCallId, e.result, e.isError);
+			session?.tool(false, e.toolCallId, e.toolName, ctx);
+		});
 	});
 	pi.on("turn_end", (e, ctx) => {
 		observe(() => session?.turn(e, ctx));

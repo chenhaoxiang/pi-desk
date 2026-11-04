@@ -106,6 +106,20 @@ test("native /name is present on first snapshot and session_info_changed refresh
   assert.equal(h.messages.length, 0); assert.equal(h.aborts(), 0);
   h.emit("session_shutdown");
 });
+test("bridge observes native Todo but invalidates scope on tree and compact without host scans", async () => {
+  const h = harness("todo-live"); h.emit("session_start"); await wait();
+  assert.equal(h.wires.filter(r => r.snapshot).at(-1)?.snapshot?.todo?.coverage, "not-observed");
+  h.emit("tool_execution_start", { toolName: "todo", toolCallId: "native-todo" });
+  h.emit("tool_execution_end", { toolName: "todo", toolCallId: "native-todo", isError: false, result: { details: { action: "list", tasks: [{ id: 1, subject: "当前工作", status: "in_progress" }] } } });
+  await wait();
+  assert.equal(h.wires.filter(r => r.snapshot).at(-1)?.snapshot?.todo?.tasks[0].subject, "当前工作");
+  h.emit("tool_execution_start", { toolName: "todo", toolCallId: "late" }); h.emit("session_tree");
+  h.emit("tool_execution_end", { toolName: "todo", toolCallId: "late", isError: false, result: { details: { action: "list", tasks: [{ id: 1, subject: "旧分支", status: "completed" }] } } });
+  await wait();
+  assert.equal(h.wires.filter(r => r.snapshot).at(-1)?.snapshot?.todo?.coverage, "not-observed");
+  h.emit("session_compact"); await wait();
+  assert.equal(h.messages.length, 0); assert.equal(h.aborts(), 0); h.emit("session_shutdown");
+});
 test("factory starts no resources, observation never changes host loadout or blocks", async () => {
 	const h = harness();
 	assert.equal(h.started(), 0);
@@ -114,6 +128,8 @@ test("factory starts no resources, observation never changes host loadout or blo
 		[
 			"session_start",
 			"session_shutdown",
+			"session_tree",
+			"session_compact",
 			"agent_start",
 			"agent_end",
 			"agent_settled",

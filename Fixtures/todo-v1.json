@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "source": "pi.todo",
+  "scope": "synthetic-scope",
+  "observerSeq": 3,
+  "coverage": "observed",
+  "observedAt": 1730000000000,
+  "sourceCall": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "counts": { "pending": 1, "inProgress": 1, "completed": 1, "total": 3 },
+  "omitted": 0,
+  "tasks": [
+    { "id": 2, "subject": "接入原生任务观测", "activeForm": "核对当前任务与依赖", "owner": "原任务负责人标签", "status": "in_progress", "blockedBy": [1], "unresolvedBy": [], "omittedDependencies": 0 },
+    { "id": 3, "subject": "验证工作总览", "status": "pending", "blockedBy": [2], "unresolvedBy": [2], "omittedDependencies": 0 },
+    { "id": 1, "subject": "明确同源边界", "status": "completed", "blockedBy": [], "unresolvedBy": [], "omittedDependencies": 0 }
+  ]
+}

@@ -98,6 +98,7 @@ import SwiftUI
           Button("未发送草稿") { delegate.model.presentModal(.drafts) }
         }
         CommandMenu("导航") {
+          Button("工作总览") { delegate.model.navigate(to: "工作总览") }.keyboardShortcut("6", modifiers: .command)
           Button("会话") { delegate.model.navigate(to: "会话") }.keyboardShortcut("1", modifiers: .command)
           Button("Token") { delegate.model.navigate(to: "Token") }.keyboardShortcut("2", modifiers: .command)
           Button("重要事项") { delegate.model.navigate(to: "重要事项") }.keyboardShortcut("3", modifiers: .command)
@@ -179,7 +180,9 @@ struct DeskWindow: View {
           }.padding(14).foregroundStyle(.secondary)
           Divider()
         }
-        if model.page == "AI助手" {
+        if model.page == "工作总览" {
+          WorkOverviewPage()
+        } else if model.page == "AI助手" {
           AssistantPage(model: model)
         } else if model.page == "接入健康" {
           HealthPage()
@@ -209,7 +212,7 @@ struct DeskWindow: View {
   var header: some View {
     HStack {
       VStack(alignment: .leading, spacing: 5) {
-        Text(model.page == "会话" ? "工作概览" : (model.page == "Token" ? "用量总览" : model.page)).font(.system(size: model.page == "Token" ? 19 : 21, weight: .semibold))
+        Text(model.page == "会话" ? "会话现场" : (model.page == "Token" ? "用量总览" : model.page)).font(.system(size: model.page == "Token" ? 19 : 21, weight: .semibold))
         if model.page != "Token" { Text("\(model.connectedCount) 个已接入 · \(model.attentionCount) 个需关注").font(.caption).foregroundStyle(.secondary) }
       }
       Spacer()
@@ -239,7 +242,7 @@ struct DeskWindow: View {
   }
   func icon(_ p: String) -> String {
     [
-      "会话": "rectangle.stack", "Token": "chart.bar", "重要事项": "bell", "设置": "gearshape",
+      "工作总览": "checklist", "会话": "rectangle.stack", "Token": "chart.bar", "重要事项": "bell", "设置": "gearshape",
       "AI助手": "sparkles", "接入健康": "heart.text.square",
     ][p] ?? "circle"
   }
@@ -378,6 +381,7 @@ struct SessionDetail: View {
           }
         }
         }
+        DeskCard { TodoObservationCard(session: session).id(snap.identity.runtimeEpoch + (snap.todo?.scope ?? "unavailable")) }
         OperationsSection(identity: snap.identity)
         DisclosureGroup("子任务 \(snap.runs.count) · " + Presentation.coverage(snap.childCoverage)) {
           RunsSection(session: session)

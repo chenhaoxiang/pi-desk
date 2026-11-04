@@ -191,6 +191,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var pending: Bool?
   public var executionObservation: ExecutionObservation?
   public var activity: SessionActivity?
+  public var todo: TodoProjection?
   public var childCoverage: String
   public var tools: [String]
   public var runs: [Run]
@@ -208,6 +209,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
       && (display.createdAtSource == nil || ["session-header", "unknown"].contains(display.createdAtSource!))
       && (executionObservation == nil || executionObservation!.valid)
       && (activity == nil || activity!.valid)
+      && (todo == nil || todo!.valid)
       && (display.route == nil || display.route!.valid)
       && tools.count <= 32 && runs.count <= 64 && schedules.count <= 64 && inputs.count <= 32
       && usage.count <= 8 && evidence.count <= 32 && tools.allSatisfy { $0.utf8.count <= 128 }

@@ -64,7 +64,7 @@ struct DeskSettings: Codable {
   @Published var reviewedResultSequences: [String: Int] = [:]
   @Published var sessionGroups: [String: String] = [:]
   @Published var aiUsageCounters: [String: Int64] = [:]
-  let assistant = DeskAssistantClient()
+  let assistant: DeskAssistantClient
   let localAssistant: LocalAssistantTransport
   @Published var groupFilter = ""
   @Published private(set) var sessionNotes: [Identity: String] = [:]
@@ -700,7 +700,8 @@ struct DeskSettings: Codable {
   var activeCount: Int { sessions.filter { Presentation.isExecutionActive($0) }.count }
   var unknownExecutionCount: Int { sessions.filter { Presentation.needsExecutionReview($0) }.count }
   var inputCount: Int { sessions.filter { Presentation.needsInput($0) }.count }
-  init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil, localAssistant: LocalAssistantTransport? = nil) {
+  init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil, localAssistant: LocalAssistantTransport? = nil, assistantClient: DeskAssistantClient? = nil) {
+    self.assistant = assistantClient ?? DeskAssistantClient()
     self.localAssistant = localAssistant ?? LocalAssistantTransport()
     let home = FileManager.default.homeDirectoryForCurrentUser
     let args = CommandLine.arguments

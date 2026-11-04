@@ -203,7 +203,7 @@ Pi设置首批只投影canonical user `<agentDir>/settings.json`的白名单字�
 
 ## 10. 可选 AI 辅助旁路
 
-Pi Desk AI不是Agent宿主、执行器、审批人或业务状态owner。它由用户主动进入AI助手后触发目录读取，明确分析后才推理。App优先按需调用本机已安装Pi的公开 `ModelRuntime/ModelRegistry` 与请求时认证：一次性Node子进程复用同一DeskAssistant校验器，只允许models/analyze/cancel，不创建AgentSession、不加载扩展/工具、不写Pi设置或会话。有界stdin传上下文，stdout只回协议payload，stderr不回App；EOF/取消/退出只影响该子进程的AI，目录查询无推理。缺少本机SDK时保留准确在线Pi的公开注册表通道；基础观察、输入提醒、健康页、控制和用量采集不等待它、不因它不可用降级。默认模型为 `codex-local-8319/gpt-6.1-sol`、`medium`，配置存本机Pi Desk设置，可改但只影响Desk旁路；cphone/zooapi及非注册/不可用模型拒绝，SDK的pi-virtual别名也在列表和推理准入同时排除，避免别名路由改换实际模型/档位。不静默换渠道、换模型、降档或重发未知请求。
+Pi Desk AI不是Agent宿主、执行器、审批人或业务状态owner。它由用户主动进入AI助手后触发目录读取，明确分析后才推理。App优先按需调用本机已安装Pi的公开 `ModelRuntime/ModelRegistry` 与请求时认证：一次性Node子进程复用同一DeskAssistant校验器，只允许models/analyze/cancel，不创建AgentSession、不加载扩展/工具、不写Pi设置或会话。有界stdin传上下文，stdout只回协议payload，stderr不回App；EOF/取消/退出只取消该AI，不杀断SDK认证事务：UI可以及时返回unknown，helper以SDK1.5刷新15秒上限之外的20秒安全窗口等待后自然退出，保留尚未结束的IO/锁释放；无process.exit/SIGKILL，收到终态不terminate，Swift超时/停止仅发正常SIGTERM，由SDK初始化前安装的handler处理。最多4个未退出子进程，安全收尾不无限派生。目录使用无网络初始refresh恢复已保存新增/能力/个性化缓存，目录探测失败只有限降级到在线models，不重发unknown analyze。目录查询无推理。缺少本机SDK时保留准确在线Pi的公开注册表通道；基础观察、输入提醒、健康页、控制和用量采集不等待它、不因它不可用降级。默认模型为 `codex-local-8319/gpt-6.1-sol`、`medium`，配置存本机Pi Desk设置，可改但只影响Desk旁路；cphone/zooapi及非注册/不可用模型拒绝，SDK的pi-virtual别名也在列表和推理准入同时排除，避免别名路由改换实际模型/档位。不静默换渠道、换模型、降档或重发未知请求。
 
 请求走独立 `assistant-request/assistant-response` UDS lane，客户端最多16个在途请求、bridge最多32个有界短期收据、每个客户端一次1个推理、请求有界超时与取消；Assistant回复不进入普通Pi快照，不在工具/生命周期回调里等待，不调用 `session.prompt`，Pi业务会话的model/thinking/tools/历史不变。回复仅有状态、结构化模型/上下文/分析和数值usage，文本上下文与AI正文不写日志/usage库（仅内存短缓存；用户明确采纳的有界分组标签作为私有显示偏好保存）；usage未确认时标unknown/possible，不伪造费用。非空成功结果的四桶全零没有独立结算证据，按SDK缺省值保守记为用量未确认，不推算Token。
 

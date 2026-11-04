@@ -161,6 +161,21 @@ import PiDeskCore
     localClient.cancel()
     await waitUntil { !localClient.busy }
     precondition((standalone.aiUsageCounters["unconfirmed"] ?? 0) == 1 && standalone.store.requests.isEmpty, "cancel crosses real subprocess stdin and aborts only the isolated AI request")
+    standalone.stop()
+    var fallbackPackets: [(AssistantPayload, Identity, String)] = []
+    let fallbackClient = DeskAssistantClient(transport: { p, i, r in fallbackPackets.append((p, i, r)); return true })
+    let failedHelper = root.appendingPathComponent("Tests/PiDeskAppTests/LocalAssistantFailureFixture.mjs").path
+    let broken = LocalAssistantTransport(installation: .init(node: node, sdk: sdkPath, helper: failedHelper))
+    let fallbackModel = AppModel(localAssistant: broken, assistantClient: fallbackClient)
+    defer { fallbackModel.stop() }
+    precondition(fallbackModel.store.apply(WireRecord(kind: "hello", identity: snapshot.identity, snapshot: snapshot), connection: UUID(), now: Date().timeIntervalSince1970 * 1000))
+    fallbackModel.settings.aiProvider = other.provider; fallbackModel.settings.aiModel = other.modelId; fallbackModel.settings.aiThinking = "high"
+    fallbackClient.refreshModels()
+    await waitUntil { !fallbackPackets.isEmpty }
+    precondition(fallbackPackets.count == 1 && fallbackPackets[0].0.operation == "models" && fallbackPackets[0].1 == snapshot.identity, "failed SDK directory probe falls back once to the exact compatible online registry")
+    fallbackClient.receive(WireRecord(kind: "assistant-response", identity: snapshot.identity, requestId: fallbackPackets[0].2, assistant: modelReply))
+    precondition(!fallbackClient.loadingModels && fallbackClient.models.count == 2 && fallbackClient.provider == other.provider && fallbackClient.modelID == other.modelId && fallbackClient.thinking == "high")
+    precondition(fallbackModel.store.requests.isEmpty && fallbackPackets.allSatisfy { $0.0.operation == "models" }, "directory fallback neither changes model choice nor resubmits an analysis")
     print("Assistant checks passed: shared DTO, exact registry/context routes, medium selection, sensitive-input preflight, explicit labeling, numeric-only usage, dedup/cache, cancel/timeout and runtime freshness.")
   }
 }

@@ -30,10 +30,10 @@ import PiDeskCore
     if payload.operation == "cancel", let target = payload.cancelID, let call = calls[target] {
       call.cancel(); var reply = AssistantPayload(operation: "cancel"); reply.status = "ok"; reply.code = "cancel-requested"; completion(reply); return true
     }
-    guard let installation, calls.count < 2, ["models", "analyze"].contains(payload.operation) else { return false }
-    let call = LocalAssistantCall(installation: installation, payload: payload, id: id) { [weak self] result in
-      Task { @MainActor in self?.calls.removeValue(forKey: id); completion(result) }
-    }
+    guard let installation, calls.count < 4, ["models", "analyze"].contains(payload.operation) else { return false }
+    let call = LocalAssistantCall(installation: installation, payload: payload, id: id, completion: { result in
+      Task { @MainActor in completion(result) }
+    }, exited: { [weak self] in Task { @MainActor in self?.calls.removeValue(forKey: id) } })
     calls[id] = call; call.start(); return true
   }
 }
@@ -44,10 +44,11 @@ private final class LocalAssistantCall: @unchecked Sendable {
   private let process = Process(), input = Pipe(), output = Pipe()
   private let installation: LocalAssistantTransport.Installation
   private let payload: AssistantPayload, id: String
-  private var data = Data(), finished = false
+  private var data = Data(), finished = false, exited = false
   private let completion: (AssistantPayload) -> Void
-  init(installation: LocalAssistantTransport.Installation, payload: AssistantPayload, id: String, completion: @escaping (AssistantPayload) -> Void) {
-    self.installation = installation; self.payload = payload; self.id = id; self.completion = completion
+  private let onExit: () -> Void
+  init(installation: LocalAssistantTransport.Installation, payload: AssistantPayload, id: String, completion: @escaping (AssistantPayload) -> Void, exited: @escaping () -> Void) {
+    self.installation = installation; self.payload = payload; self.id = id; self.completion = completion; self.onExit = exited
   }
   func start() {
     queue.async { [self] in
@@ -60,13 +61,13 @@ private final class LocalAssistantCall: @unchecked Sendable {
           let chunk = handle.availableData
           self?.queue.async { [weak self] in self?.receive(chunk) }
         }
-        process.terminationHandler = { [weak self] _ in self?.queue.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.finishUnknown() } }
+        process.terminationHandler = { [weak self] _ in self?.queue.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.didExit() } }
         try process.run()
         struct Packet: Encodable { let id: String; let payload: AssistantPayload }
         var packet = try JSONEncoder().encode(Packet(id: id, payload: payload)); packet.append(10)
         write(packet)
         queue.asyncAfter(deadline: .now() + (payload.operation == "analyze" ? 135 : 20)) { [weak self] in self?.finishUnknown() }
-      } catch { finishUnknown() }
+      } catch { finishUnknown(); didExit() }
     }
   }
   func stop() { queue.async { [self] in finishUnknown() } }
@@ -76,6 +77,7 @@ private final class LocalAssistantCall: @unchecked Sendable {
       var cancel = AssistantPayload(operation: "cancel"); cancel.cancelID = id
       struct Packet: Encodable { let id: String; let payload: AssistantPayload }
       if var bytes = try? JSONEncoder().encode(Packet(id: "cancel-" + id, payload: cancel)) { bytes.append(10); write(bytes) }
+      finishUnknown() // Return promptly; SIGTERM is graceful and SDK auth cleanup remains alive.
     }
   }
   private func write(_ bytes: Data) {
@@ -100,13 +102,20 @@ private final class LocalAssistantCall: @unchecked Sendable {
     result.status = payload.operation == "analyze" ? "unknown" : "error"
     result.code = payload.operation == "analyze" ? "cancel-or-timeout" : "registry-unavailable"
     result.possibleUsage = payload.operation == "analyze"
-    finish(result)
+    finish(result, requestStop: true)
   }
-  private func finish(_ result: AssistantPayload) {
+  private func finish(_ result: AssistantPayload, requestStop: Bool = false) {
     guard !finished else { return }; finished = true
-    output.fileHandleForReading.readabilityHandler = nil
-    if process.isRunning { process.terminate() }
-    try? input.fileHandleForWriting.close()
+    if requestStop && process.isRunning { process.terminate() }
+    // Do not kill on a terminal payload. The SDK may still be saving rotated OAuth credentials.
+    writer.async { [self] in try? input.fileHandleForWriting.close() }
     completion(result)
+  }
+  private func didExit() {
+    guard !exited else { return }; exited = true
+    finishUnknown()
+    output.fileHandleForReading.readabilityHandler = nil
+    try? output.fileHandleForReading.close()
+    onExit()
   }
 }

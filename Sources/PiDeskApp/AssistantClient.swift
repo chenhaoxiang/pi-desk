@@ -105,12 +105,16 @@ struct PreparedAssistantSource: Identifiable {
     if model.localAssistant.available {
       broker = localBroker; loadingModels = true
       var payload = AssistantPayload(operation: "models"); payload.provider = provider; payload.modelId = modelID
-      if request(payload, identity: localBroker) == nil { loadingModels = false }
+      if request(payload, identity: localBroker) == nil { loadingModels = false; refreshOnlineModels() }
       return
     }
+    refreshOnlineModels()
+  }
+  private func refreshOnlineModels() {
+    guard let model else { return }
     let candidates = model.sessions.filter { $0.connection == .connected && $0.snapshot.capabilities.queries.contains("assistant") }
     guard let entry = candidates.first(where: { $0.snapshot.identity == model.current?.snapshot.identity }) ?? candidates.first else {
-      models = []; broker = nil; notice = "尚无支持 AI 的 Pi 接入。正常新会话加载新版桥接后可用，不会强制重载已有工作。"; return
+      models = []; broker = nil; notice = "本机 Pi SDK 不可用，且尚无兼容在线模型入口。未调用模型或重载原会话。"; return
     }
     broker = entry.snapshot.identity; loadingModels = true
     var payload = AssistantPayload(operation: "models"); payload.provider = provider; payload.modelId = modelID
@@ -184,6 +188,10 @@ struct PreparedAssistantSource: Identifiable {
     switch job.operation {
     case "models":
       loadingModels = false
+      if job.identity == localBroker, payload.status != "ok" || (payload.models ?? []).isEmpty {
+        // Directory probing is read-only: one bounded online fallback is safe. Never retry analyze.
+        refreshOnlineModels(); return
+      }
       if payload.status == "ok" { models = (payload.models ?? []).filter { !["cphone", "zooapi"].contains($0.provider.lowercased()) }; notice = "已读取 \(models.count) 个 Pi 注册可用模型，可选择模型及其支持的思考强度；未发起推理。" }
       else { models = []; notice = message(payload.code) }
     case "context":
@@ -220,7 +228,11 @@ struct PreparedAssistantSource: Identifiable {
       if job.operation == "analyze" && generation == id {
         generation = nil; busy = false; notice = "AI 结果未确认，可能已有用量；未自动重发。"; model?.recordAssistantUsage(nil, unconfirmed: true)
       }
-      if job.operation == "models" { loadingModels = false; notice = "模型入口未返回，请检查接入健康。" }
+      if job.operation == "models" {
+        loadingModels = false
+        if job.identity == localBroker { refreshOnlineModels() }
+        else { notice = "模型入口未返回，请检查接入健康。" }
+      }
       if job.operation == "context", let ref = job.ref { updateContext(ref: ref, messages: [], note: "当前运行文本未返回") }
     }
     preparing = pending.values.contains { $0.operation == "context" }

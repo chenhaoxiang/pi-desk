@@ -1,34 +1,49 @@
 import { pathToFileURL } from "node:url";
 import { realpath } from "node:fs/promises";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { CreateModelRuntimeOptions, ExtensionContext, ModelRuntime, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { DeskAssistant } from "./assistant.ts";
 import { validAssistant, type AssistantPayload } from "./assistant-protocol.ts";
 import { safeId, type RecordV1 } from "./protocol.ts";
 
-// A bounded, tool-free SDK call, not a Pi/AgentSession or extension loader.
-// No session files, prompts, tools, settings writes or credential values cross stdout.
+// SDK 1.5 OAuth refresh may continue after an aborted caller, under its storage lock.
+// Never force-exit this process: keep a 20s safety window beyond the SDK's 15s
+// refresh bound, then let outstanding IO/lock releases drain naturally.
+export function assistantLifecycle(graceMs = 20000) {
+  const controller = new AbortController();
+  let stopping = false, onStop = () => {};
+  const stop = () => {
+    if (stopping) return;
+    stopping = true; controller.abort(); onStop();
+    process.stdin.pause(); process.stdin.destroy();
+    setTimeout(() => { process.exitCode ??= 0; }, graceMs);
+  };
+  process.on("SIGTERM", stop);
+  process.stdout.on("error", stop);
+  return { signal: controller.signal, get stopping() { return stopping; }, stop, bind(handler: () => void) { onStop = handler; if (stopping) handler(); } };
+}
+export async function createLocalRegistry(sdk: { ModelRuntime: typeof ModelRuntime; ModelRegistry: typeof ModelRegistry }, options: CreateModelRuntimeOptions = {}) {
+  // Restore stored remote/personalized catalogs without making catalog network requests.
+  const runtime = await sdk.ModelRuntime.create({ ...options, allowModelNetwork: false, refreshOnCreate: true });
+  return new sdk.ModelRegistry(runtime);
+}
 export function localAssistantContext(registry: ExtensionContext["modelRegistry"]): ExtensionContext {
   return { modelRegistry: registry } as ExtensionContext;
 }
-export function serveLocalAssistant(registry: ExtensionContext["modelRegistry"]) {
+// Bounded, tool-free SDK call; never an AgentSession, extension loader or session file.
+export function serveLocalAssistant(registry: ExtensionContext["modelRegistry"], lifecycle = assistantLifecycle()) {
   const identity = { localHostId: "pi-desk", nativeSessionId: "local-sdk", runtimeEpoch: "one-shot" };
   let initial: { id: string; operation: string } | undefined;
   let closed = false, carry = "";
   const finish = (payload: AssistantPayload) => {
-    if (closed) return; closed = true;
-    service.close(); process.stdin.pause();
-    process.stdout.write(JSON.stringify(payload) + "\n", () => process.exit(0));
+    if (closed || lifecycle.stopping) return; closed = true;
+    try { process.stdout.write(JSON.stringify(payload) + "\n"); } catch {}
+    lifecycle.stop();
   };
   const service = new DeskAssistant(() => localAssistantContext(registry), identity, (record: RecordV1) => {
     if (record.requestId === initial?.id && record.assistant?.status !== "pending" && record.assistant) finish(record.assistant);
   });
-  const cancel = () => {
-    if (initial?.operation === "analyze") service.handle({ version: 1, kind: "assistant-request", identity, requestId: "cancel-" + initial.id, issuedAt: Date.now(), assistant: { operation: "cancel", cancelID: initial.id } });
-  };
-  process.stdout.on("error", () => process.exit(0));
-  process.on("SIGTERM", () => { cancel(); setTimeout(() => process.exit(0), 2000).unref(); });
   const timer = setTimeout(() => finish({ operation: initial?.operation ?? "models", status: "unknown", code: "cancel-or-timeout", possibleUsage: initial?.operation === "analyze" }), 125000);
-  timer.unref();
+  lifecycle.bind(() => { closed = true; clearTimeout(timer); service.close(); });
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk: string) => {
     if (closed) return;
@@ -40,7 +55,9 @@ export function serveLocalAssistant(registry: ExtensionContext["modelRegistry"])
         const packet = JSON.parse(line);
         if (!safeId(packet.id) || !validAssistant(packet.payload) || packet.payload.status !== undefined) throw Error();
         if (initial) {
-          if (packet.payload.operation === "cancel" && packet.payload.cancelID === initial.id) cancel();
+          if (packet.payload.operation === "cancel" && packet.payload.cancelID === initial.id) {
+            service.handle({ version: 1, kind: "assistant-request", identity, requestId: packet.id, issuedAt: Date.now(), assistant: packet.payload });
+          }
           continue;
         }
         if (!["models", "analyze"].includes(packet.payload.operation)) throw Error();
@@ -49,23 +66,22 @@ export function serveLocalAssistant(registry: ExtensionContext["modelRegistry"])
       } catch { finish({ operation: initial?.operation ?? "models", status: "error", code: "assistant-unavailable" }); }
     }
   });
-  process.stdin.on("end", () => {
-    if (!initial) finish({ operation: "models", status: "error", code: "assistant-unavailable" });
-    else if (!closed) { cancel(); setTimeout(() => process.exit(0), 2000).unref(); }
-  });
+  process.stdin.on("end", lifecycle.stop);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.argv[1])).href) {
+  const lifecycle = assistantLifecycle(); // Install signal handling BEFORE SDK/auth initialization.
   try {
     const index = process.argv[2];
     if (!index?.endsWith("/dist/index.js")) throw Error();
     const sdk = await import(pathToFileURL(index).href);
-    const runtime = await sdk.ModelRuntime.create({ allowModelNetwork: false, refreshOnCreate: false });
-    // Populate the public synchronous facade from a fresh, global availability snapshot.
-    await runtime.getAvailable();
-    serveLocalAssistant(new sdk.ModelRegistry(runtime));
+    const registry = await createLocalRegistry(sdk, { signal: lifecycle.signal });
+    if (!lifecycle.stopping) serveLocalAssistant(registry, lifecycle);
   } catch {
-    process.stdout.write(JSON.stringify({ operation: "models", status: "error", code: "registry-unavailable" }) + "\n");
-    process.exitCode = 1;
+    if (!lifecycle.stopping) {
+      process.stdout.write(JSON.stringify({ operation: "models", status: "error", code: "registry-unavailable" }) + "\n");
+      process.exitCode = 1;
+    }
+    lifecycle.stop();
   }
 }

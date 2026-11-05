@@ -6,10 +6,13 @@ private func reference(_ value: String, max: Int = 128) -> Bool {
   !value.isEmpty && value.utf8.count <= max && value != "." && value != ".."
     && value.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil
 }
+private let observationReferencePatterns: [NSRegularExpression] = [
+  #"[\x00-\x1f\x7f-\x9f]"#, #"(?:^|[\\/])(?:Users|home|private|var|tmp|etc|opt|workspace|src)(?:[\\/]|$)|^[A-Za-z]:[\\/]"#, #"&&|\|\||[;`$<>]"#, #"://[^/\s:]+:[^@/\s]+@"#, #"(?i)(?:^|[^a-z0-9])(?:args?|argv|command|completion|content|cwd|directory|file(?:name|path)?|input|model|output|path|prompt|raw|request|response|secret|shell|stderr|stdin|stdout|token|credential|password)(?:$|[^a-z0-9])"#
+].map { try! NSRegularExpression(pattern: $0) }
 private func observationReference(_ value: String) -> Bool {
   guard !value.isEmpty, value.utf16.count <= 256, !AssistantPrivacy.sensitive(value) else { return false }
-  let forbidden = [#"[\x00-\x1f\x7f-\x9f]"#, #"(?:^|[\\/])(?:Users|home|private|var|tmp|etc|opt|workspace|src)(?:[\\/]|$)|^[A-Za-z]:[\\/]"#, #"&&|\|\||[;`$<>]"#, #"://[^/\s:]+:[^@/\s]+@"#, #"(?i)(?:^|[^a-z0-9])(?:args?|argv|command|completion|content|cwd|directory|file(?:name|path)?|input|model|output|path|prompt|raw|request|response|secret|shell|stderr|stdin|stdout|token|credential|password)(?:$|[^a-z0-9])"#]
-  return forbidden.allSatisfy { value.range(of: $0, options: .regularExpression) == nil }
+  let range = NSRange(value.startIndex..<value.endIndex, in: value)
+  return observationReferencePatterns.allSatisfy { $0.firstMatch(in: value, range: range) == nil }
 }
 public struct PiWorkRef: Codable, Hashable, Sendable {
   public var owner: String

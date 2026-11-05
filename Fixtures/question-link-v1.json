@@ -1,0 +1,15 @@
+{
+  "id": "question-synthetic-call",
+  "source": "pi:input-required",
+  "kind": "question",
+  "startedAt": 1730000000000,
+  "question": {
+    "version": 1,
+    "binding": "declared",
+    "workRef": {"owner": "example/product", "kind": "change", "key": "existing-change"},
+    "workPhase": "design-choice",
+    "ownerEpoch": "synthetic-owner-epoch",
+    "sequence": 1,
+    "observedAt": 1730000000000
+  }
+}

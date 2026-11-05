@@ -8,7 +8,7 @@ status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-11-05
-verification_scope: W1已在690e7f8合入、合后CI41910104247和build69安装通过；W2消费实现中，原owner出口由Vista负责，自然闭环未宣称
+verification_scope: W1/W2已交付并完成最终Vista跨包；PR11/build75引用校验优化已交付。当前仅原问题可选工作关联首切片实现/候选SDK验真，完整问题与自然恢复闭环未宣称
 ---
 
 # 分阶段实施方案
@@ -20,7 +20,7 @@ verification_scope: W1已在690e7f8合入、合后CI41910104247和build69安装�
 | 切片 | 交付内容 | 验收及边界 |
 |---|---|---|
 | W1（已交付） | 已接入Pi的当前Todo/步骤/依赖与覆盖；工作总览、原生名称和精确会话下钻 | 成功TaskDetails白名单、只读内存投影；未采集不当零，完成不当验收，branch/clear/晚到隔离，旧bridge不强reload |
-| W2（当前实施） | 按已交付owner合同接work_ref/结果/问题与等待/nextAction，显式产品与跨session归属 | 不接候选字段、不按cwd/名字猜；没有producer明确缺省；管理写入仍回Pi原owner |
+| W2（结果/交接已交付，问题关联首片实施中） | 按已交付owner合同接work_ref/结果/问题与等待/nextAction，显式产品与跨session归属 | 不接候选字段、不按cwd/名字猜；没有producer明确缺省；管理写入仍回Pi原owner |
 | W3 | 一件原授权低风险自然工作从任务到执行、外部等待解除、恢复、owner验收、交付与Desk同步 | 以不催促续接、无重复副作用、真实原件与用户需要处理事项验证；关闭Desk不停止Pi |
 | W4 | 按真实问题扩展优化和受控升级 | 原验收/预算/权限不由执行AI自改；隔离候选、安全切换和回退；不是当前授权下开启全局24×7或任意升级 |
 
@@ -30,7 +30,7 @@ W1采用已有Snapshot的可选Todo投影，不新增中心数据schema。先观
 
 W1本地候选已通过80项Node、Swift原生全套、隔离SDK与Swift UDS；真实Todo owner在隔离新SDK会话成功投影，不是扫描运行中会话或替换事实。既有性能修复作为祖先保留，合成64行投影p95约0.117ms；512项Todo极限fixture通过只处理最多32行正文将观察p95从2.417ms降至0.534ms（报告值，非真实滚动帧率保证）。工作总览已合成渲染，后台AX仍不能精确绑定，不冒称键鼠/VoiceOver新控件验收。本批不调用真实业务模型；独立审查模型探测与业务推理分开。
 
-W1最终经PR9合入`690e7f8`，精确head双端CI及合后CI`41910104247`通过，build69的安装/摘要/新SDK自动发现已回读。当前W2由Vista owner补现有观察器的同进程内存只读出口，Desk只投影原结果及交接，不重复验收/查询原件；product/goal/人工问题缺producer的部分不补造。用户明确测试期后续不再开第二个预览App，按必要验证直接覆盖唯一安装版；正常退出保护、源码/安装/loaded区分和旧业务Pi不强reload保持。
+W1最终经PR9合入`690e7f8`，精确head双端CI及合后CI`41910104247`通过，build69的安装/摘要/新SDK自动发现已回读。W2结果/交接已随PR10及Vista PR71固定安装完成跨包验真；Desk只投影原结果及交接，不重复验收/查询原件。当前原提问owner冻结`pi:work-question:v1`首片，Desk在原InputNotice附可选caller-declared工作/阶段；无正文/答案/回答API。product/goal与完整replace/revoke/late/partial/fresh-owner仍不补造。用户明确测试期后续不再开第二个预览App，按必要验证直接覆盖唯一安装版；正常退出保护、源码/安装/loaded区分和旧业务Pi不强reload保持。
 
 ## 1. 当前交付与下一次实施起点
 

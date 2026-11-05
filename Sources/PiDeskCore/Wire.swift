@@ -152,6 +152,7 @@ public struct InputNotice: Codable, Equatable, Identifiable, Sendable {
   public var source: String
   public var kind: String
   public var startedAt: Double
+  public var question: QuestionWorkLink? = nil
 }
 public struct ExecutionObservation: Codable, Equatable, Sendable {
   public var version: Int
@@ -219,6 +220,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
       && Set(runs.map(\.key)).count == runs.count
       && Set(schedules.map(\.id)).count == schedules.count
       && Set(inputs.map(\.id)).count == inputs.count
+      && inputs.allSatisfy { $0.question == nil || $0.question!.valid }
   }
 }
 public struct Target: Codable, Equatable, Sendable {

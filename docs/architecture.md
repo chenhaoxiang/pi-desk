@@ -229,6 +229,12 @@ Vista owner冻结memory-only出口`pi-vista:work-observation:query:v1` / `reply:
 
 工作总览呈现原计划当前步骤、已记录完成数、真实输入提示与依赖卡点，已完成不等于verified/delivered，Todo.owner只是标签。无原owner work_ref/产品/nextAction/问题正文时明确未提供；本机分组不升级为产品事实，不按cwd/name猜。所有任务只内存展示，不入usage库或默认外发AI。查看/追加沿原生准确身份管理，关闭Desk不影响Pi；治理producer/结果/交接由pi-vista既有合同维护。
 
+### 原生问题的可选关联
+
+在既有InputNotice附加可选question元数据：caller-declared的PiWorkRef/stage与原owner epoch/seq/time，不复制问题、选项或答案。source来自原问题工具的`pi:work-question:v1`，legacy `pi:input-required`不变。两条事件共用完整toolCallId散列后的输入ID；新关联只更新同一行，不再提醒/重置已读。工作声明不认证归属，缺/坏关联明确unbound/unavailable，仍回原入口作答。
+
+原owner的opened/answer-received/closed只影响输入生命周期，收到答案不等于决定已应用或业务完成；Legacy end依旧能关闭输入，不把可选关联变成原流程前置。新事件按准确session/epoch/seq拒绝不适用数据，但无epoch的旧事件不具备该证明，完整replace/revoke/partial/跨负责人问题仍未完成。观察只在有界内存，输入列表预算和既有64KiB帧上限不扩大，无历史读取/模型/回答写口。
+
 ## 12. 验证与退出策略
 
 取消正常退出时保留连接和定时维护，teardown只在applicationWillTerminate执行；冷入口命令先建立管理窗宿主再呈现sheet。启动恢复将AI累计/分组与导航偏好分开：早期导航不跳过持久数据，早期AI数值按饱和加法合并增量，分组只覆盖明确编辑的键（含删除）；合并超容量时保留旧分组并提示重新设置，不默认清空。

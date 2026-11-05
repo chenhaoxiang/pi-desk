@@ -34,12 +34,16 @@ export function dense(value: unknown, max: number): unknown[] | undefined {
   for (let i = 0; i < value.length; i++) { const d = Object.getOwnPropertyDescriptor(value, String(i)); if (!d || !("value" in d)) return; result.push(d.value); }
   return result;
 }
-export function projectWorkBinding(value: unknown): WorkBinding | undefined {
-  const ref = own(value, "workRef"), owner = own(ref, "owner"), kind = own(ref, "kind"), key = own(ref, "key");
+export function projectWorkRef(value: unknown): WorkRef | undefined {
+  const owner = own(value, "owner"), kind = own(value, "kind"), key = own(value, "key");
   if (typeof owner !== "string" || owner.length > 256 || !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)?$/.test(owner) || !owner.split("/").every(x => safeReference(x, 256)) || !["issue", "change", "task", "document"].some(x => kind === x) || !safeReference(key)) return;
+  return { owner, kind: kind as WorkRef["kind"], key };
+}
+export function projectWorkBinding(value: unknown): WorkBinding | undefined {
+  const workRef = projectWorkRef(own(value, "workRef"));
   const stageId = own(value, "stageId"), runId = own(value, "runId"), sessionId = own(value, "sessionId"), revision = own(value, "revision"), headSha = own(value, "headSha");
-  if (!safeReference(stageId) || !safeReference(runId) || !safeReference(sessionId) || !uint(revision) || (headSha !== undefined && (typeof headSha !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(headSha)))) return;
-  return { workRef: { owner, kind: kind as WorkRef["kind"], key }, stageId, runId, sessionId, revision, ...(typeof headSha === "string" ? { headSha } : {}) };
+  if (!workRef || !safeReference(stageId) || !safeReference(runId) || !safeReference(sessionId) || !uint(revision) || (headSha !== undefined && (typeof headSha !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(headSha)))) return;
+  return { workRef, stageId, runId, sessionId, revision, ...(typeof headSha === "string" ? { headSha } : {}) };
 }
 function nullableBinding(value: unknown): WorkBinding | null | undefined { return value === null ? null : projectWorkBinding(value); }
 export function projectOwnerResult(value: unknown): OwnerResult | undefined {

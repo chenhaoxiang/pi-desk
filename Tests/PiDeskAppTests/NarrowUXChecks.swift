@@ -360,6 +360,26 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 2 }
     precondition(model.action(.message, target: Target(owner: "pi"), parameters: Parameters(text: model.drafts[quitLive.identity], mode: "followUp"), identity: quitLive.identity), "after keeping drafts the same live connection can still accept the original input")
     model.setDraft("", for: quitLive.identity)
+    // The same native question gets an optional work link, not a second input.
+    let linkedQuestion = try JSONDecoder().decode(InputNotice.self, from: Data(contentsOf: repo.appendingPathComponent("Fixtures/question-link-v1.json")))
+    var plainQuestion = linkedQuestion; plainQuestion.question = nil
+    let mixedQuestions = Array(repeating: plainQuestion, count: 5) + [linkedQuestion]
+    precondition(QuestionWorkPresentation.linkedInputs(mixedQuestions) == [linkedQuestion], "unlinked questions cannot consume the four work-link display slots or inflate their omitted count")
+    fake.permission = .authorized; fake.deliveryError = nil; model.settings.notifications = true; model.muted = false
+    let beforeQuestionPosts = fake.posts, beforeQuestionActions = model.store.requests.count
+    quitLive.seq = 3; quitLive.inputs = [plainQuestion]
+    try peer.write(contentsOf: Wire.encode(WireRecord(kind: "snapshot", identity: quitLive.identity, snapshot: quitLive)))
+    await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 3 && fake.posts == beforeQuestionPosts + 1 }
+    model.markRead(plainQuestion, session: quitLive.identity)
+    quitLive.seq = 4; quitLive.inputs = [linkedQuestion]
+    try peer.write(contentsOf: Wire.encode(WireRecord(kind: "snapshot", identity: quitLive.identity, snapshot: quitLive)))
+    await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 4 }
+    precondition(fake.posts == beforeQuestionPosts + 1 && model.isRead(linkedQuestion, session: quitLive.identity), "attaching work metadata neither repeats notifications nor resets read state")
+    precondition(model.store.requests.count == beforeQuestionActions && Presentation.needsInput(model.store.sessions[quitLive.identity.sessionKey]!), "read remains a local display marker, not an answer")
+    quitLive.seq = 5; quitLive.inputs = []
+    try peer.write(contentsOf: Wire.encode(WireRecord(kind: "snapshot", identity: quitLive.identity, snapshot: quitLive)))
+    await spin { model.store.sessions[quitLive.identity.sessionKey]?.snapshot.seq == 5 }
+    precondition(!Presentation.needsInput(model.store.sessions[quitLive.identity.sessionKey]!))
     try peer.close()
     var modalHosts = 0
     model.showManager = { modalHosts += 1 }

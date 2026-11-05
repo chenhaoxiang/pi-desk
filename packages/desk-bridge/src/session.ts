@@ -37,6 +37,7 @@ import { captureTerminalRoute } from "./terminal-route.ts";
 import { MAX_CREATED_AT_MS } from "./protocol.ts";
 import { TodoObserver } from "./todo-projection.ts";
 import { GovernanceClient } from "./governance-client.ts";
+import { QuestionObserver, WORK_QUESTION_EVENT } from "./question-observer.ts";
 export type TransportLike = Pick<
 	BridgeTransport,
 	"start" | "publish" | "reply" | "close" | "dropped"
@@ -91,6 +92,7 @@ export class DeskSession {
 	private metadataLoaded = false;
 	private todo = new TodoObserver();
 	private governance: GovernanceClient;
+	private questions: QuestionObserver;
 	private bridgeSource: string;
 	private terminalRoute?: NonNullable<Snapshot["display"]["route"]>;
 	constructor(
@@ -113,6 +115,7 @@ export class DeskSession {
 			runtimeEpoch: randomUUID(),
 		};
 		if (!safeId(identity.nativeSessionId)) throw Error("invalid-session-id");
+		this.questions = new QuestionObserver(identity.nativeSessionId, this.inputs, this.now);
 		this.usage = new AttachmentUsage(identity.runtimeEpoch, this.now());
 		const header = typeof ctx.sessionManager.getHeader === "function" ? ctx.sessionManager.getHeader() : null;
 		const created = sessionCreatedAt(header?.timestamp);
@@ -268,6 +271,9 @@ export class DeskSession {
 				} catch {}
 			}),
 		);
+		this.off.push(pi.events.on(WORK_QUESTION_EVENT, raw => {
+			try { if (this.questions.observe(raw)) { this.snapshot.inputs = [...this.inputs.values()]; this.changed(); } } catch { /* optional input link cannot affect the original question */ }
+		}));
 		// Optional safe summary seam. This does not claim a real Gate/CI producer exists.
 		this.off.push(pi.events.on("pi-desk:evidence:v1", (r) => this.evidence(r)));
 		const sessionFile = typeof ctx.sessionManager.getSessionFile === "function" ? ctx.sessionManager.getSessionFile() : undefined;
@@ -547,25 +553,7 @@ export class DeskSession {
 		this.changed();
 	}
 	private question(raw: unknown) {
-		if (
-			!object(raw) ||
-			raw.version !== 1 ||
-			raw.source !== "ask_user_question" ||
-			!safeId(raw.id)
-		)
-			return;
-		// This public producer is process-local on the current session event bus.
-		const id = "question-" + raw.id;
-		if (raw.phase === "start" && this.inputs.size < 32)
-			this.inputs.set(id, {
-				id,
-				source: "pi:input-required",
-				kind: "question",
-				startedAt: this.now(),
-			});
-		if (raw.phase === "end") this.inputs.delete(id);
-		this.snapshot.inputs = [...this.inputs.values()];
-		this.changed();
+		if (this.questions.legacy(raw)) { this.snapshot.inputs = [...this.inputs.values()]; this.changed(); }
 	}
 	private evidence(raw: unknown) {
 		if (
@@ -891,6 +879,7 @@ export class DeskSession {
 		this.stopped = true;
 		this.todo.reset();
 		this.governance.close();
+		this.questions.close();
 		this.usageWriter?.close();
 		this.assistant.close();
 		this.ctx = undefined;

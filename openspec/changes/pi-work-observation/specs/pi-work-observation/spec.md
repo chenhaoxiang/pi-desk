@@ -1,5 +1,29 @@
 ## ADDED Requirements
 
+### Requirement: Original question work association
+Desk SHALL retain existing input UI and consume only the original question owner’s content-free optional work association. A caller-declared work reference SHALL NOT be treated as authenticated ownership, an applied decision, execution authorization or business completion.
+
+#### Scenario: Legacy and work-aware events describe the same question
+- **WHEN** the owner emits pi:input-required v1 and pi:work-question:v1 for the same original native toolCallId
+- **THEN** Desk keeps one input identity and one reminder, attaches only bounded workRef/stage metadata, and does not read question text, options or answers
+
+#### Scenario: Missing or invalid association
+- **WHEN** the owner reports unbound or unavailable work metadata
+- **THEN** the original input remains usable with explicit coverage and no inferred product/work mapping or extra approval
+
+#### Scenario: Answer received or input closed
+- **WHEN** the original owner reports answer-received or closed
+- **THEN** that input stops waiting without marking a decision applied, all questions answered, work complete or permission granted; legacy end remains functional if optional metadata fails
+
+#### Scenario: Inapplicable linked event
+- **WHEN** a work-question event has a wrong native session, retired owner epoch or non-increasing sequence
+- **THEN** its association cannot overwrite current input metadata; Desk does not claim that epoch-less legacy events establish the missing provenance
+
+#### Scenario: Original route and unread state
+- **WHEN** work metadata arrives for an existing input or the user marks it read
+- **THEN** its existing exact-runtime route and unread key stay stable, no second notification or answer request is sent
+
+
 ### Requirement: Native owner result consumption
 Desk SHALL consume only the native Pi Vista owner’s bounded read-only export of already completed observations. Existing PiWorkBinding, PiResultConsumption and PiWorkHandoffObservation retain their original semantics and are not a second task database or acceptance authority.
 

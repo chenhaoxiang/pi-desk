@@ -26,6 +26,7 @@ import PiDeskCore
     try StateChecks.run(record.snapshot!)
     try TodoChecks.run(record.snapshot!, root: root)
     try GovernanceChecks.run(record.snapshot!, root: root)
+    try QuestionLinkChecks.run(record.snapshot!, root: root)
     print(
       "Core checks passed: shared wire, invalid/version/limits, identity, state, usage, requests.")
   }

@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { validAssistant, type AssistantPayload } from "./assistant-protocol.ts";
 import { validTodoProjection, type TodoProjection } from "./todo-projection.ts";
 import { validGovernanceProjection, type GovernanceProjection } from "./governance-projection.ts";
+import { validQuestionWorkLink, type QuestionWorkLink } from "./question-projection.ts";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
@@ -82,6 +83,7 @@ export type InputNotice = {
 	source: string;
 	kind: string;
 	startedAt: number;
+	question?: QuestionWorkLink;
 };
 export type ExecutionObservation = {
 	version: 1;
@@ -281,6 +283,7 @@ export function validate(v: unknown): asserts v is RecordV1 {
 		] as const)
 			if (!Array.isArray(s[key]) || s[key].length > max)
 				throw new Error("invalid-snapshot");
+		if ((s.inputs as unknown[]).some(input => !object(input) || (input.question !== undefined && !validQuestionWorkLink(input.question)))) throw new Error("invalid-question-link");
 		const runs = s.runs as unknown[];
 		if (runs.some((run) => {
 			if (!object(run)) return true;

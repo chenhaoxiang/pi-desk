@@ -62,6 +62,7 @@ private struct WorkSessionCard: View {
           Text("计划当前步骤").font(.caption).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
           Text(WorkOverview.currentTask(session)).font(.system(size: 14, weight: .medium)).fixedSize(horizontal: false, vertical: true)
         }
+        if Presentation.needsInput(session) { QuestionWorkContextView(inputs: session.snapshot.inputs, omitted: session.snapshot.omitted?["inputs"] ?? 0) }
         TodoObservationCard(session: session, compact: true)
         Text(WorkOverview.guidance(session)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         GovernanceCoverageLine(session: session)

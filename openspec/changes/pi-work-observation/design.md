@@ -26,6 +26,14 @@ Pi CLI/Runtime及原生owner保持任务/执行/验收事实与写入权威，De
 
 work结果与派生分组只有有界内存缓存，store替换即失效；不写用量库或外发AI。桥接中给治理投影预留至多6KiB并同步压缩原展示行预算，保留整体64KiB上限。为维持精确引用只省略整个结果，不裁断binding或改造owner结果。
 
+## 原生问题工作关联首切片
+
+不重做问题UI、不新建问题库、不增加回答API。rpiv-ask-user-question owner保留pi:input-required v1，并在实际custom UI opened/answer-received/closed时可选发布pi:work-question:v1；Desk只附InputNotice.question（declared/unbound/unavailable、PiWorkRef、stage、owner epoch/seq/time）。声明不是认证，未知关联不阻止原生提问。任何正文/选项/答案/私有路径都不进入该投影或用量存储。
+
+v1的id与新事件toolCallId原字符串对应；Desk将完整opaque id散列为单一输入标识，兼容native组合/编号而不截断，附关联不改已读key、不重复提醒。新事件核原session/epoch/seq，terminal不会创建新输入；原v1 end继续关闭等待，避免可选元数据故障留下假等待。v1本身无epoch，不能据此宣称已解决跨实例同ID重用/replace/revoke/partial/fresh-owner全部问题；这部分仍由原owner后续合同负责。
+
+首片只在旧输入卡片/详情/工作总览显示原声明的关联，具体问题仍回准确原入口处理。“已读”仍只改本机提醒，answer-received不是应用决定或授予权限。原owner源码与最终安装件分层验真，不把候选SDK fixture成功写成全活跃会话已加载。
+
 ## 后续与验收
 
 W1当前任务清单及coverage可用；W2消费已交付work/result/attention/问题引用，按显式映射归产品/工作项；W3一个低风险自然任务覆盖等待解除→续接→owner验收→交付→Desk同步；W4根据有限自然样本扩展自主升级/优化，保持原权限/预算/安全切换与回退。关闭Desk不停止Pi；消息送达/Todo完成/进程结束/源码安装等不能互相推导。

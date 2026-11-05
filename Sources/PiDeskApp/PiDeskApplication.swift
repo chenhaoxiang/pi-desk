@@ -359,6 +359,7 @@ struct SessionDetail: View {
                 .foregroundStyle(StatusTone.amber.ink(dark: scheme == .dark))
               Text(SessionExperience.timing(session)).font(.caption).foregroundStyle(.secondary)
               Text("请到原会话处理。已读只改变提醒表现，不会代答。").font(.caption).foregroundStyle(.secondary)
+              QuestionWorkContextView(inputs: snap.inputs, omitted: snap.omitted?["inputs"] ?? 0)
               let read = snap.inputs.allSatisfy { model.isRead($0, session: snap.identity) }
               Button(read ? "已读 · 仍待输入" : "标为已读") {
                 for input in snap.inputs { model.markRead(input, session: snap.identity) }
@@ -645,6 +646,7 @@ private struct AttentionSessionCard: View {
         HStack { Text(model.sessionTitle(session)).font(.headline).lineLimit(2); Spacer(); StatusPill(status: Presentation.status(session)) }
         Text(Presentation.activity(session)).font(.subheadline)
         Text(SessionExperience.timing(session)).font(.caption).foregroundStyle(.secondary)
+        if Presentation.needsInput(session) { QuestionWorkContextView(inputs: session.snapshot.inputs, omitted: session.snapshot.omitted?["inputs"] ?? 0) }
         actions
       }
     }

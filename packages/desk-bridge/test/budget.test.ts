@@ -36,6 +36,7 @@ test("combined maximum DTOs fit one frame and omitted records remain explicit", 
 		source: "pi.ui_prompt",
 		kind: "input",
 		startedAt: 100,
+		question: { version: 1 as const, binding: "declared" as const, ownerEpoch:"epoch", sequence:1, observedAt:100, workRef:{owner:"o".repeat(256),kind:"task" as const,key:"k".repeat(128)},workPhase:"p".repeat(128) },
 	}));
 	const todo = new TodoObserver(); todo.start("maximum-todo");
 	todo.end("maximum-todo", { details: { action: "list", tasks: Array.from({ length: 512 }, (_, i) => ({ id: i + 1, subject: "工".repeat(100), activeForm: "步".repeat(100), owner: "人".repeat(50), status: "pending", blockedBy: Array.from({length:16}, (_, d) => d + 1) })) } }, false, 1000);

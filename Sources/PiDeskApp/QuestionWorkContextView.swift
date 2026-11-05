@@ -5,7 +5,7 @@ struct QuestionWorkContextView: View {
   let inputs: [InputNotice]
   var omitted = 0
   var body: some View {
-    let questions = inputs.filter { $0.kind == "question" }
+    let questions = QuestionWorkPresentation.linkedInputs(inputs)
     VStack(alignment: .leading, spacing: 6) {
       ForEach(Array(questions.prefix(4))) { input in
         if let link = input.question {
@@ -16,7 +16,7 @@ struct QuestionWorkContextView: View {
           }
         }
       }
-      if questions.contains(where: { $0.question != nil }) {
+      if !questions.isEmpty {
         Text("工作关联由原调用方声明，不认证归属；具体问题仍在原会话，标为已读不等于回答或授权。").font(.caption2).foregroundStyle(.secondary)
       }
       if questions.count > 4 { Text("另有 \(questions.count - 4) 个输入请求未在此展开").font(.caption2).foregroundStyle(.secondary) }

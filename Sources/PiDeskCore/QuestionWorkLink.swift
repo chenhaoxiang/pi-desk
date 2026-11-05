@@ -1,5 +1,11 @@
 import Foundation
 
+public enum QuestionWorkPresentation {
+  public static func linkedInputs(_ inputs: [InputNotice]) -> [InputNotice] {
+    inputs.filter { $0.kind == "question" && $0.question != nil }
+  }
+}
+
 /// A read-only link reported by the original question owner. It does not expose
 /// the prompt/answer or offer a second way to resolve the original question.
 public struct QuestionWorkLink: Codable, Equatable, Sendable {

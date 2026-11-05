@@ -363,6 +363,8 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     // The same native question gets an optional work link, not a second input.
     let linkedQuestion = try JSONDecoder().decode(InputNotice.self, from: Data(contentsOf: repo.appendingPathComponent("Fixtures/question-link-v1.json")))
     var plainQuestion = linkedQuestion; plainQuestion.question = nil
+    let mixedQuestions = Array(repeating: plainQuestion, count: 5) + [linkedQuestion]
+    precondition(QuestionWorkPresentation.linkedInputs(mixedQuestions) == [linkedQuestion], "unlinked questions cannot consume the four work-link display slots or inflate their omitted count")
     fake.permission = .authorized; fake.deliveryError = nil; model.settings.notifications = true; model.muted = false
     let beforeQuestionPosts = fake.posts, beforeQuestionActions = model.store.requests.count
     quitLive.seq = 3; quitLive.inputs = [plainQuestion]

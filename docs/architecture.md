@@ -237,7 +237,7 @@ Vista owner冻结memory-only出口`pi-vista:work-observation:query:v1` / `reply:
 
 ### 原生 mission 决策记录（消费端）
 
-Snapshot可选missionDecisions只消费当前scope中成功subagent管理工具的公开ToolResult.details.mission。tool_result先按action与显式missionId匹配，最终tool_execution_end成功且白名单指纹/身份/原updatedAt一致后才发布；不返回结果patch。只取原decision id/status/createdAt/resolvedAt及mission id/schemaVersion/updatedAt，不读取或散列title/prompt/options/recommendation/resolution、missionPath或ownerSessionId。无新Vista端口、原件读取、状态库、模型回合或写入动作；初次加载及tree/compact/reload后未采集不等于零。
+Snapshot可选missionDecisions只消费当前scope中成功subagent管理工具的公开ToolResult.details.mission。tool_result先按action与显式missionId匹配（mission.create的id由成功结果建立），最终tool_execution_end成功且白名单指纹/身份/原updatedAt一致后才发布；不返回结果patch。只取原decision id/status/createdAt/resolvedAt及mission id/schemaVersion/updatedAt，不读取或散列title/prompt/options/recommendation/resolution、missionPath或ownerSessionId。无新Vista端口、原件读取、状态库、模型回合或写入动作；初次加载及tree/compact/reload后未采集不等于零。
 
 同一观察窗口保留原updatedAt时间水位：晚到旧记录不能覆盖新记录，相同时间但不同决策集合变为冲突未知，只有更晚原记录可解除；时间不是发明的revision。最多32个在途调用、16份工作记录，单份扫描512条并展示最多32条/2800字节，整体记录5400字节，整体wire仍64KiB。当前预算省略数与累计窗口移出数分开，后者不是去重后的工作数；已移出的身份不保留无限期时间水位。原记录更新不重排已保留工作的首次观察顺序。
 

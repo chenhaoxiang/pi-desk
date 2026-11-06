@@ -36,7 +36,7 @@ v1的id与新事件toolCallId原字符串对应；Desk将完整opaque id散列�
 
 ## 原生 mission 决策记录首片
 
-复用已有subagent管理ToolResult.details.mission，不新增Vista端口或owner RPC。只在当前scope开始的成功管理调用上捕获action/显式missionId，最终tool_execution_end成功且白名单原记录一致才发布。取mission id/schemaVersion/updatedAt及decision id/status/createdAt/resolvedAt；不取正文/选项/建议/答复/私有路径/创建者身份，不改工具结果。sourceUpdatedAt保留原时间；窗口内旧时间忽略，同时间不同决策集合标冲突未知，只有更晚记录解除。observerSeq只是消费顺序，不是原生revision。
+复用已有subagent管理ToolResult.details.mission，不新增Vista端口或owner RPC。只在当前scope开始的成功管理调用上捕获action/显式missionId（mission.create尚无请求id，使用其成功结果自身的missionId），最终tool_execution_end成功且白名单原记录一致才发布。取mission id/schemaVersion/updatedAt及decision id/status/createdAt/resolvedAt；不取正文/选项/建议/答复/私有路径/创建者身份，不改工具结果。sourceUpdatedAt保留原时间；窗口内旧时间忽略，同时间不同决策集合标冲突未知，只有更晚记录解除。observerSeq只是消费顺序，不是原生revision。
 
 最多16份工作记录，每份最多扫描512条、展示32条/2800字节，所有记录5400字节并从既有display预算扣除；当前整份省略与累计窗口移出分别标记，移出数不是去重工作数。稳定保留首次观察顺序，branch/session/compact/reload失效；无数据不填零，不主动mission.show或读store。用户/原Pi自然mission.show成功结果仍可带回同一原件。
 

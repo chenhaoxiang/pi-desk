@@ -114,17 +114,43 @@ try {
   const matched = await query(b, "current-answer", "matched", "not_requested"); assert.equal(matched.relations.replyTo, "new-question");
   if (!native) frozen.set("missing", { messageId: "missing", delivery: "unknown", outcomeKnown: false, replyState: "unknown", execution: "unknown", completion: "unknown" });
   await query(a, native ? "late-answer" : "missing", undefined, undefined);
-  assert.equal(queries, 5, "foreign query does not reveal another sender's relations; no observer queries");
+  if (native) {
+    const [asker, worker] = clients;
+    const sendReceipt = asker.sendMessageReceipt, held = [];
+    asker.sendMessageReceipt = function (receipt) { if (receipt.messageId === "delayed-answer") held.push(receipt); else sendReceipt.call(this, receipt); };
+    let pending;
+    try {
+      assert.equal((await asker.send(worker.sessionId, { messageId: "reused-question", text: "PRIVATE_BEFORE_ACK", expectsReply: true })).delivered, true);
+      pending = worker.send(asker.sessionId, { messageId: "delayed-answer", text: "PRIVATE_DELAYED_ANSWER", replyTo: "reused-question" });
+      await until(() => incoming.some(x => x.id === "delayed-answer") && held.length > 0);
+      assert.equal((await asker.cancelMessage("reused-question")).delivered, true);
+      const other = new Client();
+      await other.connect({ name: "different-sender", cwd: root, model: "synthetic", pid: process.pid, startedAt: Date.now(), lastActivity: Date.now() });
+      assert.equal((await other.send(worker.sessionId, { messageId: "reused-question", text: "PRIVATE_DIFFERENT_ASK", expectsReply: true })).delivered, true);
+      asker.sendMessageReceipt = sendReceipt;
+      for (const receipt of held) sendReceipt.call(asker, receipt);
+      assert.equal((await pending).delivered, true);
+      assert.ok((await other.listPendingAsks()).some(x => x.messageId === "reused-question"), "old ACK must not consume a new sender's edge");
+      assert.equal(incoming.find(x => x.id === "delayed-answer").content.text, "PRIVATE_DELAYED_ANSWER");
+    } finally { asker.sendMessageReceipt = sendReceipt; }
+  } else {
+    frozen.set("delayed-answer", { ...frozen.get("late-answer"), messageId: "delayed-answer", relations: { version: 1, senderSessionId: "worker:route", recipientSessionId: "asker:route", replyTo: "reused-question", replyCorrelation: "unknown" } });
+  }
+  const ackUnknown = await query(b, "delayed-answer", "unknown", "not_requested");
+  assert.equal(ackUnknown.delivery, "socket_delivered"); assert.equal(ackUnknown.outcomeKnown, true);
+  assert.equal(ackUnknown.relations.replyTo, "reused-question"); assert.equal(ackUnknown.relations.lateReplyTo, undefined);
+  assert.equal(queries, 6, "foreign query does not reveal another sender's relations; no observer queries");
   assert.ok(!JSON.stringify(records).includes("PRIVATE_"));
   const scope = state(a).intercomRelations.scope;
   const user = a.session.sessionManager.getEntries().find(e => e.type === "message" && e.message.role === "user");
   await a.session.navigateTree(user.id, { summarize: false });
   await until(() => state(a)?.intercomRelations?.scope !== scope); assert.equal(state(a).intercomRelations.coverage, "not-observed");
-  const report = { ok: true, source: native ? "actual-isolated-native-extension-and-broker" : "frozen-contract-fixture", sdk: JSON.parse(await readFile(join(sdkRoot, "package.json"))).version, realSwiftUDS: socket, originalReplacementAndLateRefs: true, newAskPendingAfterLate: true, originalBodyPreserved: native ? oldBody === "PRIVATE_OLD_ANSWER" : "not-tested-by-frozen-contract", foreignOrLegacyUnavailable: true, noCrossReporterJoin: true, noHumanInput: true, branchReset: true, statusQueries: queries, observationAddedQueries: 0, syntheticModelRounds: hosts.reduce((n,h) => n + h.faux.state.callCount, 0), realProviderCalls: 0, notW3Evidence: true };
+  const report = { ok: true, source: native ? "actual-isolated-native-extension-and-broker" : "frozen-contract-fixture", sdk: JSON.parse(await readFile(join(sdkRoot, "package.json"))).version, realSwiftUDS: socket, originalReplacementAndLateRefs: true, newAskPendingAfterLate: true, originalBodyPreserved: native ? oldBody === "PRIVATE_OLD_ANSWER" : "not-tested-by-frozen-contract", foreignOrLegacyUnavailable: true, ackReceiptCorrelationUnknown: true, noCrossReporterJoin: true, noHumanInput: true, branchReset: true, statusQueries: queries, observationAddedQueries: 0, syntheticModelRounds: hosts.reduce((n,h) => n + h.faux.state.callCount, 0), realProviderCalls: 0, notW3Evidence: true };
   if (process.env.PI_DESK_RELATIONS_EVIDENCE) await writeFile(process.env.PI_DESK_RELATIONS_EVIDENCE, JSON.stringify({ report, evidence }, null, 2), { mode: 0o600 });
   console.log(JSON.stringify(report));
 } finally {
   for (const host of hosts) await host.close();
+  for (const client of clients) await client.disconnect();
   if (Client && originalConnect) Client.prototype.connect = originalConnect;
   if (Client && originalStatus) Client.prototype.getMessageStatus = originalStatus;
   for (const child of [server, broker]) if (child && child.exitCode === null) { const done = new Promise(r => child.once("exit", r)); if (child === server) child.stdin.end(); else child.kill("SIGTERM"); const timer = setTimeout(() => child.kill("SIGTERM"), 1000).unref(); await done; clearTimeout(timer); }

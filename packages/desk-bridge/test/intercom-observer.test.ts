@@ -40,6 +40,13 @@ test("missing old-broker fields and receipt uncertainty never become no relation
   apply(o, "contradiction", { ...details(at + 2), delivery: "unknown", outcomeKnown: false } as never);
   assert.equal(o.read().records[0].coverage, "unavailable");
 });
+test("confirmed delivery with unmatched ACK keeps original replyTo and unknown correlation", () => {
+  const o = new IntercomRelationsObserver();
+  const value = { ...details(), relations: { version: 1, senderSessionId: "worker:route", recipientSessionId: "asker:route", replyTo: "reused-question", replyCorrelation: "unknown" } };
+  apply(o, "ack-race", value as never);
+  const row = o.read().records[0]; assert.equal(row.coverage, "observed"); assert.equal(row.delivery, "socket_delivered"); assert.equal(row.outcomeKnown, true);
+  assert.equal(row.relations?.replyCorrelation, "unknown"); assert.equal(row.relations?.replyTo, "reused-question"); assert.equal(row.relations?.lateReplyTo, undefined);
+});
 test("errors and reset reject late calls; private text accessors are not read", () => {
   const o = new IntercomRelationsObserver(); let reads = 0;
   const value = details(); for (const key of ["reason", "content", "answer", "maintenance"]) Object.defineProperty(value, key, { get() { reads++; throw Error(); } });

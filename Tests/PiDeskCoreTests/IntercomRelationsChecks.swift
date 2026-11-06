@@ -20,6 +20,8 @@ enum IntercomRelationsChecks {
     invalid = projection; invalid.records[0].relations?.supersededBy = "old-question"; precondition(!invalid.valid)
     var late = projection.records[0]; late.messageId = "late-answer"; late.relations?.supersededBy = nil; late.relations?.lateReplyTo = "old-question"; late.relations?.replyCorrelation = "late"
     precondition(late.valid && late.relations!.summary.contains("未匹配"))
+    var uncertain = late; uncertain.delivery = "socket_delivered"; uncertain.outcomeKnown = true; uncertain.relations?.lateReplyTo = nil; uncertain.relations?.replyTo = "old-question"; uncertain.relations?.replyCorrelation = "unknown"
+    precondition(uncertain.valid && uncertain.relations!.summary.contains("未知"))
     var legacy = base; legacy.intercomRelations = nil; precondition(legacy.valid)
     print("Intercom relation checks passed: optional wire, transport-only status, no work/input/approval inference, original IDs and invalid metadata.")
   }

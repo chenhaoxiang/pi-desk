@@ -5,6 +5,7 @@ import { displayBudget } from "../src/budget.ts";
 import { encode, type RecordV1 } from "../src/protocol.ts";
 import { TodoObserver } from "../src/todo-projection.ts";
 import { MissionDecisionObserver } from "../src/mission-decisions.ts";
+import { IntercomRelationsObserver } from "../src/intercom-observer.ts";
 import { boundGovernance } from "../src/governance-projection.ts";
 test("combined maximum DTOs fit one frame and omitted records remain explicit", async () => {
 	const fixture = JSON.parse(
@@ -53,6 +54,12 @@ test("combined maximum DTOs fit one frame and omitted records remain explicit", 
  s.missionDecisions = decisions.read();
  assert.ok(s.missionDecisions.omittedMissions>0);
  assert.ok(Buffer.byteLength(JSON.stringify(s.missionDecisions))>3000);
+ const messages = new IntercomRelationsObserver();
+ for(let i=0;i<16;i++){
+  const messageId="m".repeat(120)+i, details={messageId,delivery:"socket_delivered",replyState:"not_requested",outcomeKnown:true,execution:"unknown",completion:"unknown",updatedAt:1000,relations:{version:1,senderSessionId:"s".repeat(128),recipientSessionId:"r".repeat(128),replyCorrelation:"late",lateReplyTo:"a".repeat(128)}};
+  messages.start(messageId);messages.result({toolName:"intercom",toolCallId:messageId,isError:false,input:{action:"status",messageId},details});messages.end(messageId,{details},false,1001);
+ }
+ s.intercomRelations=messages.read();assert.ok(s.intercomRelations.omitted>0);
 	const bounded = displayBudget(s);
 	const frame = encode({ ...fixture, snapshot: bounded });
 	assert.ok(frame.length <= 65537);

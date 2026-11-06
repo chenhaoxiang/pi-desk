@@ -1,5 +1,20 @@
 ## ADDED Requirements
 
+### Requirement: Original transport relations without business inference
+Desk SHALL consume only finalized successful native Intercom status results for the exact requested message in the current runtime scope. It SHALL NOT issue new queries, inspect message/history text, infer relationships from request text or UI closure, or turn transport messages into work items or human-input alerts.
+
+#### Scenario: Replacement and an old reply arriving late
+- **WHEN** original retained status records provide supersedes, supersededBy or lateReplyTo with explicit broker sender and recipient IDs
+- **THEN** Desk displays those exact bounded IDs and original replyCorrelation independently per reporter; a late reply SHALL NOT mark the newer ask answered or business-approved
+
+#### Scenario: Matched, none and unknown
+- **WHEN** the original broker reports matched, none, unknown or no supported relation metadata
+- **THEN** matched means only original transport reply matching, none does not mean business unanswered, and missing/unsupported metadata remains unavailable without guessing approval, applicability or revocation
+
+#### Scenario: Scope, conflicts and bounds
+- **WHEN** status results arrive late, conflict at the same original timestamp, exceed budgets or belong to an invalidated scope
+- **THEN** older originals cannot replace a retained newer record, same-time conflicts stay unknown until a newer original, omissions remain explicit within the existing frame limit, and prior-scope calls cannot publish
+
 ### Requirement: Original mission decision status
 Desk SHALL passively project only bounded identity, state and timestamps from successful original subagent mission management results, without reading decision text or answers, invoking mission queries, introducing a data authority, or deriving authorization and completion.
 

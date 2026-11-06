@@ -18,5 +18,7 @@
   - [x] 5.1d 原问题content-free可选work/stage关联已随PR12/build78及原producer0.1.4-fork.6固定安装完成SDK/UDS验真；保留v1/单一提醒/legacy关闭、精确scope与声明边界。完整后继范围不在此项关闭。
   - [x] 5.1e 原生mission决策元数据消费候选：成功管理result/end匹配，原时间/冲突/有界省略与scope保护，A解决B未决、fresh show、无正文/人工提醒，Swift/TS及实际原生管理SDK/UDS通过。
   - [ ] 5.1f 本片独立审查、精确head CI/共享合并及唯一App覆盖安装；结果以本片PR和安装原件记录，不将5.1e候选写成已安装。
+  - [ ] 5.1g Intercom原生传输relations消费：成功status原件/最终end、严格ID/时间/scope、Swift会话详情、无人工/业务推断；定向native broker/SDK/UDS与发布件分别核验。
+  - [ ] 5.1h 本片审查/CI/正常PR合并与唯一App覆盖安装；不以候选兼容检查冒称W3。
 - [ ] 5.2 选一个原授权低风险自然工作项，验证等待续接/失败对账/owner验收/交付/Desk投影闭环。
 - [ ] 5.3 按实际交付率、催促、重复副作用、误报完成和成本结果扩展；自主升级单独核现行授权/回退/运行加载。

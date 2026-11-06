@@ -42,6 +42,12 @@ v1的id与新事件toolCallId原字符串对应；Desk将完整opaque id散列�
 
 UI复用既有工作卡片/来源会话详情；相同显式workRef可归组，但不同reporter不求和/互相覆盖。A已解决B仍未决明确显示；open不产生人工提醒、resolved不授权/验收。新负责人只是新的观察来源，不继承原创建者身份。本片不等于完整问题替换/撤销/迟答或自然自主执行闭环。
 
+## 原生 Intercom 传输关系
+
+在既有会话详情消费MessageStatus.relations v1，不新增query/bus或响应写口。只观察自然intercom status的成功tool_result与最终end，核请求messageId/当前scope及闭集投影一致。sender/recipient保持broker原ID，不认证为Pi身份；各来源独立，不跨来源拼接、造workRef或认定业务有效性。缺/坏/未知版本关系为unavailable，none不是业务未答，matched不是批准，late不是业务撤销。
+
+投影只保留关系ID、replyCorrelation和原status标量/更新时间，绝不读取正文/答案/字符串reason恢复ID。旧原时间忽略，同时间冲突未知直至更晚原件；有界16记录/32在途/5400字节与整体64KiB预算，scope失效晚到拒绝。现有详情折叠只读，无人工提醒或新管理动作。默认CI用冻结合同经真实SDK/Swift UDS，显式原owner源码可运行隔离真实extension+broker组合；这些兼容检查不是W3自然工作证据。W3仅采用实际工程PR41及原生审查阶段原件，旧父cohort、缺显式绑定或UI未核如实保留，不强reload或制造另一条演示任务。
+
 ## 后续与验收
 
 W1当前任务清单及coverage可用；W2消费已交付work/result/attention/问题引用，按显式映射归产品/工作项；W3一个低风险自然任务覆盖等待解除→续接→owner验收→交付→Desk同步；W4根据有限自然样本扩展自主升级/优化，保持原权限/预算/安全切换与回退。关闭Desk不停止Pi；消息送达/Todo完成/进程结束/源码安装等不能互相推导。

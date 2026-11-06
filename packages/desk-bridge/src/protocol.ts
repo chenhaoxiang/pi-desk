@@ -4,6 +4,7 @@ import { validTodoProjection, type TodoProjection } from "./todo-projection.ts";
 import { validGovernanceProjection, type GovernanceProjection } from "./governance-projection.ts";
 import { validQuestionWorkLink, type QuestionWorkLink } from "./question-projection.ts";
 import { validMissionDecisions, type MissionDecisionsProjection } from "./mission-decisions.ts";
+import { validIntercomRelations, type IntercomRelationsProjection } from "./intercom-observer.ts";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
@@ -147,6 +148,7 @@ export type Snapshot = {
 	/** Optional consumer projection; Pi Vista/owner remains authoritative. */
 	governance?: GovernanceProjection;
 	missionDecisions?: MissionDecisionsProjection;
+	intercomRelations?: IntercomRelationsProjection;
 	childCoverage: string;
 	tools: string[];
 	runs: Run[];
@@ -251,6 +253,7 @@ export function validate(v: unknown): asserts v is RecordV1 {
 		if (s.todo !== undefined && !validTodoProjection(s.todo)) throw new Error("invalid-todo");
 		if (s.governance !== undefined && !validGovernanceProjection(s.governance)) throw new Error("invalid-governance");
 		if (s.missionDecisions !== undefined && !validMissionDecisions(s.missionDecisions)) throw new Error("invalid-mission-decisions");
+		if (s.intercomRelations !== undefined && !validIntercomRelations(s.intercomRelations)) throw new Error("invalid-intercom-relations");
 		if (s.executionObservation !== undefined) {
 			const observation = s.executionObservation;
 			if (!object(observation) || observation.version !== 1 ||

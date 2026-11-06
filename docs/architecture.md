@@ -243,6 +243,14 @@ Snapshot可选missionDecisions只消费当前scope中成功subagent管理工具�
 
 同owner/kind/key只归组，各来源快照独立展示而不求和/替换；保留来源连接状态与原更新时间。open只称原记录未决，resolved只称原记录已解决；A解决B未决继续显示部分解决，绝不推导用户批准、全部问题答复或工作验收。无正文/选项/答案的回答UI，也不改变原InputNotice或needsInput。此片不关闭完整替换/撤销/迟答或自主恢复验收。
 
+### Intercom 原生传输关系
+
+Snapshot可选intercomRelations仅被动观察当前scope中原生intercom status工具成功ToolResult，既有tool_result核action/请求messageId，最终成功tool_execution_end核白名单投影一致才发布。没有新增查询、bus、Intercom实例或历史扫描。原owner来源是MessageStatus.relations v1与既有status details；只取messageId、delivery/outcomeKnown/replyState/updatedAt及relations的version/senderSessionId/recipientSessionId/supersedes/supersededBy/replyTo/lateReplyTo/replyCorrelation，不读content/reason/maintenance/正文/答案。原ID按owner ASCII字符规则（允许冒号、首位字母数字、最多128、无双点）及本机敏感值过滤，不截断。
+
+sender/recipient是原broker路由ID，不要求等于Pi native session；不同reporter独立，不造workRef、关系图或消息任务库。matched仅原回复关联已匹配，late仅迟答未匹配等待；none不是业务未答，unknown或缺关系/旧broker保留未知。传输关联不代表业务答案适用、授权、撤销或工作验收，不进入InputNotice/需要用户，也不因UI关闭或mission.resolved生成关联。
+
+每runtime最多32个在途调用、16条状态内存记录、5400字节显示预算，从原display总预算扣除，wire仍64KiB。保留原updatedAt，窗口内旧时间不能覆盖新记录，同时间不同投影标冲突未知，只有更晚原件解除；缺时间不清水位。scope在tree/compact/session/reload失效，当前省略和累计窗口移出分开；被移出的身份不保留无限期水位，未观察不当零。会话原工作详情折叠展示逐条原ID、关系、原时间和来源非实时提示，没有管理写入按钮。
+
 ## 12. 验证与退出策略
 
 取消正常退出时保留连接和定时维护，teardown只在applicationWillTerminate执行；冷入口命令先建立管理窗宿主再呈现sheet。启动恢复将AI累计/分组与导航偏好分开：早期导航不跳过持久数据，早期AI数值按饱和加法合并增量，分组只覆盖明确编辑的键（含删除）；合并超容量时保留旧分组并提示重新设置，不默认清空。

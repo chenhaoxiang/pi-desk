@@ -7,7 +7,7 @@ export function displayBudget(snapshot: Snapshot): Snapshot {
 	};
 	// Preserve the original total display allowance when optional work metadata
 	// is present. Whole-row omission remains visible; no larger wire frame.
-	const reserve = snapshot.governance ? Buffer.byteLength(JSON.stringify(snapshot.governance)) : 0;
+	const reserve = (snapshot.governance ? Buffer.byteLength(JSON.stringify(snapshot.governance)) : 0) + (snapshot.missionDecisions ? Buffer.byteLength(JSON.stringify(snapshot.missionDecisions)) : 0);
 	const ratio = Math.max(0, (52000 - reserve) / 52000);
 	for (const [key, baseBudget] of [
 		["runs", 14000],

@@ -30,5 +30,6 @@ jobs:
       - run: node --import tsx scripts/check-todo-native.mjs --socket
       - run: node --import tsx scripts/check-governance-native.mjs --socket
       - run: node --import tsx scripts/check-question-native.mjs --socket
+      - run: node --import tsx scripts/check-mission-decisions-native.mjs --socket
       - run: swift build -c release --jobs 2
 # No deployment, model provider, credential, global extension install or main bootstrap.

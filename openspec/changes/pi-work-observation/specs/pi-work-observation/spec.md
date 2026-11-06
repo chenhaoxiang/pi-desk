@@ -1,5 +1,28 @@
 ## ADDED Requirements
 
+### Requirement: Original mission decision status
+Desk SHALL passively project only bounded identity, state and timestamps from successful original subagent mission management results, without reading decision text or answers, invoking mission queries, introducing a data authority, or deriving authorization and completion.
+
+#### Scenario: Finalized original only
+- **WHEN** a current-scope management tool_result matches the explicit mission identity and a successful finalized tool_execution_end matches its projected original
+- **THEN** Desk may publish the decision metadata; an error, mismatch, missing or oversized source SHALL NOT become an empty or resolved record
+
+#### Scenario: One decision resolved and another open
+- **WHEN** the original record resolves A while B stays open
+- **THEN** Desk displays the partial resolution, without creating a human-input request or claiming user approval, all answers received or task acceptance
+
+#### Scenario: Fresh reporter reads the same original
+- **WHEN** another Pi session naturally executes mission.show for the same explicit mission
+- **THEN** Desk displays that successful original under its distinct reporting session; it neither scans the store nor transfers ownership or sums duplicate counts
+
+#### Scenario: Old and conflicting originals
+- **WHEN** an incoming original is older than a retained sourceUpdatedAt, or has the same timestamp with a different decision projection
+- **THEN** the older original cannot overwrite the newer record, and equal-time conflicts remain unavailable until a strictly newer valid original arrives; observer order SHALL NOT substitute for a native revision
+
+#### Scenario: Scope and display limits
+- **WHEN** the session scope changes or records exceed the bounded window or wire budget
+- **THEN** old scope calls cannot publish; current omissions and cumulative window evictions remain explicit and are not represented as a global unique work count, while the original tool and Pi execution remain unchanged
+
 ### Requirement: Original question work association
 Desk SHALL retain existing input UI and consume only the original question owner’s content-free optional work association. A caller-declared work reference SHALL NOT be treated as authenticated ownership, an applied decision, execution authorization or business completion.
 

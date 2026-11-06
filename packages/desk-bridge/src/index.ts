@@ -49,9 +49,11 @@ export function registerBridge(
 	pi.on("tool_execution_start", (e, ctx) => {
 		observe(() => session?.tool(true, e.toolCallId, e.toolName, ctx));
 	});
+	pi.on("tool_result", (event) => { observe(() => session?.missionToolResult(event)); });
 	pi.on("tool_execution_end", (e, ctx) => {
 		observe(() => {
 			if (e.toolName === "todo") session?.todoResult(e.toolCallId, e.result, e.isError);
+			if (e.toolName === "subagent") session?.missionToolEnd(e.toolCallId,e.result,e.isError);
 			session?.tool(false, e.toolCallId, e.toolName, ctx);
 		});
 	});

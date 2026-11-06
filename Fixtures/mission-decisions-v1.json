@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "source": "pi.subagents.mission",
+  "scope": "synthetic-decision-scope",
+  "observerSeq": 2,
+  "coverage": "observed",
+  "missions": [{
+    "workRef": {"owner":"chenhaoxiang/pi-subagents","kind":"task","key":"mission-one"},
+    "observedAt": 1730000000100,
+    "sourceUpdatedAt": 1730000000000,
+    "coverage": "complete",
+    "counts": {"open":1,"resolved":1,"total":2},
+    "decisions": [
+      {"id":"decision-b","status":"open","createdAt":1729999999000},
+      {"id":"decision-a","status":"resolved","createdAt":1729999999000,"resolvedAt":1730000000000}
+    ],
+    "omitted": 0
+  }],
+  "omittedMissions": 0,
+  "evictedRecords": 0
+}

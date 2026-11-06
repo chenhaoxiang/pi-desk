@@ -27,6 +27,17 @@ struct WorkResultsSection: View {
                 }
               }
               if group.entries.count > 4 { Text("另有 \(group.entries.count - 4) 条原观察，请在来源会话详情查看").font(.caption2).foregroundStyle(.secondary) }
+              ForEach(Array(group.decisions.prefix(4))) { entry in
+                MissionDecisionRecordView(record: entry.record)
+                HStack {
+                  if !entry.connected { Text("来源已非实时").foregroundStyle(.secondary) }
+                  Text("独立来源 · " + String(entry.reporter.nativeSessionId.suffix(8))).foregroundStyle(.secondary)
+                  Spacer()
+                  Button("查看来源会话") { model.select(entry.reporter); model.navigate(to: "会话") }
+                    .disabled(model.store.sessions[entry.reporter.sessionKey]?.snapshot.identity != entry.reporter)
+                }.font(.caption2)
+              }
+              if group.decisions.count > 4 { Text("更多来源的决策记录请在各自会话详情查看；不跨来源求和。").font(.caption2).foregroundStyle(.secondary) }
             }
           }
         }
@@ -89,6 +100,7 @@ struct GovernanceSessionDetail: View {
       } else {
         Text("此旧桥接没有工作结果字段；可正常使用现有Pi，不触发历史扫描或重新验收。").font(.caption).foregroundStyle(.secondary)
       }
+      MissionDecisionSessionDetail(session: session)
       Text("这些是只读的原 owner 观察，不是当前执行权限；也不新增需要你确认的事项。").font(.caption2).foregroundStyle(.secondary)
     }
   }

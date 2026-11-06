@@ -187,9 +187,10 @@ export class DeskSession {
 			this.now,
 		);
 		this.governance = new GovernanceClient(pi.events, identity.nativeSessionId, () => {
-			if (!this.stopped) { this.snapshot.governance = this.governance.read(); this.changed(); }
+			if (!this.stopped) { this.snapshot.governance = this.governance.read(); this.snapshot.codeProgress = this.governance.readCodeProgress(); this.changed(); }
 		});
 		this.snapshot.governance = this.governance.read();
+		this.snapshot.codeProgress = this.governance.readCodeProgress();
 		this.transport =
 			options.transport?.(
 				() => this.record("hello"),

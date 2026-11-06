@@ -158,11 +158,30 @@ public struct WorkResultEntry: Identifiable, Sendable {
   public var observedAt: Double?
   public var result: PiOwnerResult
   public var id: String
+  public var observerEpoch: String = "unprovided"
+  public var sequence: Int = 0
+}
+public struct WorkHandoffEntry: Identifiable, Sendable {
+  public var id: String
+  public var reporter: Identity
+  public var connected: Bool
+  public var observedAt: Double
+  public var handoff: PiWorkHandoff
+  public var observerEpoch: String
+  public var sequence: Int
+}
+public struct WorkInputEntry: Identifiable, Sendable {
+  public var id: String
+  public var reporter: Identity
+  public var input: InputNotice
 }
 public struct WorkResultGroup: Identifiable, Sendable {
   public var id: PiWorkRef
   public var entries: [WorkResultEntry]
   public var decisions: [MissionDecisionEntry] = []
+  public var progress: [WorkProgressEntry] = []
+  public var handoffs: [WorkHandoffEntry] = []
+  public var inputs: [WorkInputEntry] = []
 }
 public enum WorkResultPortfolio {
   /// Only explicit owner/kind/key can group observations. Reporting a child's
@@ -175,9 +194,26 @@ public enum WorkResultPortfolio {
         let observation = item.observation
         guard let binding = observation.binding else { continue }
         let ref = binding.workRef
-        let entry = WorkResultEntry(reporter: session.snapshot.identity, connected: session.connection == .connected && projection?.stale != true, observedAt: item.observedAt, result: observation, id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + (projection?.observerEpoch ?? "unknown") + ":" + String(item.seq))
+        let entry = WorkResultEntry(reporter: session.snapshot.identity, connected: session.connection == .connected && projection?.stale != true, observedAt: item.observedAt, result: observation, id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + (projection?.observerEpoch ?? "unknown") + ":" + String(item.seq), observerEpoch: projection?.observerEpoch ?? "unprovided", sequence: item.seq)
         if let index = slots[ref] { result[index].entries.append(entry) }
         else { slots[ref] = result.count; result.append(WorkResultGroup(id: ref, entries: [entry])) }
+      }
+      if let progress = session.snapshot.codeProgress, let epoch = progress.observerEpoch {
+        for record in progress.observations {
+          let ref = record.binding.workRef
+          let entry = WorkProgressEntry(id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + epoch + ":p:" + String(record.seq), reporter: session.snapshot.identity, observerEpoch: epoch, connected: session.connection == .connected && progress.stale != true && progress.coverage == "observed", progress: record)
+          if let index = slots[ref] { result[index].progress.append(entry) }
+          else { slots[ref] = result.count; result.append(WorkResultGroup(id: ref, entries: [], progress: [entry])) }
+        }
+      }
+      for item in projection?.handoffs ?? [] {
+        let h = item.observation
+        // A contradictory cross-work handoff remains visible in session detail,
+        // never assigned to one guessed work card.
+        guard let ref = h.successor?.workRef ?? h.previous?.workRef, h.previous == nil || h.successor == nil || h.previous!.workRef == h.successor!.workRef else { continue }
+        let entry = WorkHandoffEntry(id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + (projection?.observerEpoch ?? "unprovided") + ":h:" + String(item.seq), reporter: session.snapshot.identity, connected: session.connection == .connected && projection?.stale != true, observedAt: item.observedAt, handoff: h, observerEpoch: projection?.observerEpoch ?? "unprovided", sequence: item.seq)
+        if let index = slots[ref] { result[index].handoffs.append(entry) }
+        else { slots[ref] = result.count; result.append(WorkResultGroup(id: ref, entries: [], handoffs: [entry])) }
       }
       if let decisions = session.snapshot.missionDecisions {
         for record in decisions.missions {
@@ -186,6 +222,14 @@ public enum WorkResultPortfolio {
           if let index = slots[ref] { result[index].decisions.append(entry) }
           else { slots[ref] = result.count; result.append(WorkResultGroup(id: ref, entries: [], decisions: [entry])) }
         }
+      }
+    }
+    // Inputs may attach only by the original question producer's explicit
+    // declared work reference. They never manufacture a new work/acceptance.
+    for session in sessions where session.connection == .connected {
+      for input in session.snapshot.inputs {
+        guard input.kind == "question", let question = input.question, question.binding == "declared", let ref = question.workRef, let index = slots[ref] else { continue }
+        result[index].inputs.append(WorkInputEntry(id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + input.id, reporter: session.snapshot.identity, input: input))
       }
     }
     return result

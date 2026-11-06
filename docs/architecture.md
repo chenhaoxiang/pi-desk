@@ -251,6 +251,16 @@ sender/recipient是原broker路由ID，不要求等于Pi native session；不同
 
 每runtime最多32个在途调用、16条状态内存记录、5400字节显示预算，从原display总预算扣除，wire仍64KiB。保留原updatedAt，窗口内旧时间不能覆盖新记录，同时间不同投影标冲突未知，只有更晚原件解除；缺时间不清水位。scope在tree/compact/session/reload失效，当前省略和累计窗口移出分开；被移出的身份不保留无限期水位，未观察不当零。会话原工作详情折叠展示逐条原ID、关系、原时间和来源非实时提示，没有管理写入按钮。
 
+### 代码进度旁路与工作卡片
+
+日常进度不塞进terminal result或需要换run/session的handoff。原Vista memory-only snapshot新增可选codeProgress v1侧car（source=explicit-code-owner，独立seq/coverage/observations/omitted），共用原hostSessionId/observerEpoch；原observations数组仍仅result/handoff，原seq/coverage/时间不因进度变化而改变，不新增query。冻结合同和12个phase/waitReason/nextAction合法组合由Vista既有work-result-continuity-design正文维护。每row只含原binding（代码必须headSha）、显式repository/pullRequest、原observedAt与非授权标记；没有标题、任意正文、accepted或可执行指令。当前未提供的任务名、PR或等待来源明示缺失，不从目录、名称、Todo计数或聊天补齐。
+
+Desk分别校验和比较结果lane、进度lane的seq/fingerprint。same outer seq但progress自身seq更新可正常发布；坏/缺progress只局部unknown，有旧进度时标last-known/stale，不抹有效v1结果。unavailable可保留旧rows与原time但推进progress水位，旧observed不能清stale；同seq矛盾需更高seq恢复。scope reset沿新outer epoch清空并拒绝旧epoch。changed合并使用两个有界槽，不用一条lane的高seq丢掉另一条lane的较新值。sidecar整体UTF8最多5400bytes、16整条记录；继续从原展示预算扣除，wire总上限仍64KiB。原work.refresh一次只读memory，不触发GitHub、文件、owner验收、模型或操作。
+
+工作卡片按workRef归组，默认摘要只在相同完整binding/报告来源/观察epoch内取各lane最新seq。旧accepted不能覆盖同绑定更新unknown；不同head、run、revision、session和reporter不合成总体完成。先前观察折叠可见，不删除失败/unknown；进度较新时旧验收标为较早记录而不重新验真。原head、阶段、等待来源、下一步和各自原时间就近显示，公共范围说明只写一次。handoff保留原建议与未重验限制；CI/Gate缺失不变成人工审批。只有当前原生InputNotice的显式declared workRef能附在已有工作卡，未关联输入继续走原会话，不凭工作存在推导需要用户。
+
+原件导航只复用准确来源会话/终端；opaque resultRef供选择复制，不猜文件路径。仅显式已验证repository与pullRequest可构造固定https://github.com/<repo>/pull/<number>链接。没有自动执行、验收或任意shell按钮。producer显式vista_code_observe的受限读取属于原owner，不由Desk刷新触发；原accepted终态仍走旧result验证，进度source-delivery不替代安装/生产/业务验收。
+
 ## 12. 验证与退出策略
 
 取消正常退出时保留连接和定时维护，teardown只在applicationWillTerminate执行；冷入口命令先建立管理窗宿主再呈现sheet。启动恢复将AI累计/分组与导航偏好分开：早期导航不跳过持久数据，早期AI数值按饱和加法合并增量，分组只覆盖明确编辑的键（含删除）；合并超容量时保留旧分组并提示重新设置，不默认清空。

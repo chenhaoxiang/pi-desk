@@ -6,6 +6,7 @@ import { encode, type RecordV1 } from "../src/protocol.ts";
 import { TodoObserver } from "../src/todo-projection.ts";
 import { MissionDecisionObserver } from "../src/mission-decisions.ts";
 import { IntercomRelationsObserver } from "../src/intercom-observer.ts";
+import { projectCodeProgress, type CodeProgressProjection } from "../src/code-progress.ts";
 import { boundGovernance } from "../src/governance-projection.ts";
 test("combined maximum DTOs fit one frame and omitted records remain explicit", async () => {
 	const fixture = JSON.parse(
@@ -60,6 +61,11 @@ test("combined maximum DTOs fit one frame and omitted records remain explicit", 
   messages.start(messageId);messages.result({toolName:"intercom",toolCallId:messageId,isError:false,input:{action:"status",messageId},details});messages.end(messageId,{details},false,1001);
  }
  s.intercomRelations=messages.read();assert.ok(s.intercomRelations.omitted>0);
+ const cp=JSON.parse(await readFile(new URL("../../../Fixtures/code-progress-v1.json",import.meta.url),"utf8"));delete cp.observerEpoch;
+ const rows=Array.from({length:16},(_,i)=>({...cp.observations[0],seq:i+1,binding:{...cp.observations[0].binding,runId:"r".repeat(128),sessionId:"s".repeat(128)}}));
+ cp.seq=16;cp.observations=rows;while(Buffer.byteLength(JSON.stringify(cp))>5400){cp.observations.shift();cp.omitted++;}
+ s.codeProgress=projectCodeProgress(cp,"synthetic-epoch") as CodeProgressProjection;
+ assert.ok(s.codeProgress && Buffer.byteLength(JSON.stringify(s.codeProgress))>4000);
 	const bounded = displayBudget(s);
 	const frame = encode({ ...fixture, snapshot: bounded });
 	assert.ok(frame.length <= 65537);

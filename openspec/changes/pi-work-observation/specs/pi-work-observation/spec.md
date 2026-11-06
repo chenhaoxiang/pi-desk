@@ -1,5 +1,31 @@
 ## ADDED Requirements
 
+### Requirement: Independent original code progress
+Desk SHALL consume the optional codeProgress v1 sidecar from the existing owner snapshot query/reply/changed port, with independent sequence/fingerprint and the original host/epoch fence. Progress SHALL NOT alter old result/handoff semantics, timestamps or acceptance, and work.refresh SHALL NOT perform network, file, model or owner-verification work.
+
+#### Scenario: Progress changes without a result change
+- **WHEN** a valid code progress update has a new progress sequence but the old outer sequence is unchanged
+- **THEN** the progress view updates while the original result/handoff view and its timestamps remain unchanged; a legacy client continues to consume the old fields
+
+#### Scenario: Unavailable or invalid optional progress
+- **WHEN** progress is missing, malformed, conflicting, or reports unavailable with retained rows
+- **THEN** only that lane is unknown/last-known; old rows keep their original times and cannot regain current status from a lower sequence, and valid original result data is not erased
+
+### Requirement: Work summary preserves exact sources and scope
+Existing work cards SHALL show only original work references, explicit PR/head, observed stage/wait source, stage-scoped acceptance, original next action and declared native input; missing metadata SHALL be explicit rather than inferred from names, directories, Todo counts or chat.
+
+#### Scenario: Earlier acceptance and newer unknown
+- **WHEN** one complete binding and reporter has both earlier accepted and newer unknown observations
+- **THEN** the newer observation is its default summary, earlier observations remain expandable, and different heads/runs/revisions/reporters are not merged into overall completion
+
+#### Scenario: Bounded original navigation
+- **WHEN** an explicit public repository/pullRequest or original reporter route is available
+- **THEN** the user may open that canonical PR or exact source session; opaque result references are not guessed into paths, commands or URLs, and no execution/approval button is added
+
+#### Scenario: Human input remains native
+- **WHEN** code checks, owner Gate or source evidence are missing or pending without a native input lifecycle
+- **THEN** no human approval/request is created; only existing declared-work input notices may attach to the work card
+
 ### Requirement: Original transport relations without business inference
 Desk SHALL consume only finalized successful native Intercom status results for the exact requested message in the current runtime scope. It SHALL NOT issue new queries, inspect message/history text, infer relationships from request text or UI closure, or turn transport messages into work items or human-input alerts.
 

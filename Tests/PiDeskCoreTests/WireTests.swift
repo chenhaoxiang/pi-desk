@@ -28,6 +28,7 @@ import PiDeskCore
     try GovernanceChecks.run(record.snapshot!, root: root)
     try QuestionLinkChecks.run(record.snapshot!, root: root)
     try MissionDecisionChecks.run(record.snapshot!, root: root)
+    try IntercomRelationsChecks.run(record.snapshot!, root: root)
     print(
       "Core checks passed: shared wire, invalid/version/limits, identity, state, usage, requests.")
   }

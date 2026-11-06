@@ -1,0 +1,7 @@
+{
+  "version":1,"source":"pi.intercom.status","scope":"synthetic-relations","observerSeq":3,"coverage":"observed","omitted":0,"evictedRecords":0,
+  "records":[
+    {"messageId":"old-question","observedAt":1730000000100,"sourceUpdatedAt":1730000000000,"coverage":"observed","delivery":"failed","replyState":"expired","outcomeKnown":true,"relations":{"version":1,"senderSessionId":"route:asker","recipientSessionId":"route:worker","supersededBy":"new-question","replyCorrelation":"none"}},
+    {"messageId":"new-question","observedAt":1730000000100,"sourceUpdatedAt":1730000000001,"coverage":"observed","delivery":"socket_delivered","replyState":"pending","outcomeKnown":true,"relations":{"version":1,"senderSessionId":"route:asker","recipientSessionId":"route:worker","supersedes":"old-question","replyCorrelation":"none"}}
+  ]
+}

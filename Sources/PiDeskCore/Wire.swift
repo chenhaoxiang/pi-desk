@@ -195,6 +195,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var todo: TodoProjection?
   public var governance: GovernanceProjection?
   public var missionDecisions: MissionDecisionsProjection?
+  public var intercomRelations: IntercomRelationsProjection?
   public var childCoverage: String
   public var tools: [String]
   public var runs: [Run]
@@ -215,6 +216,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
       && (todo == nil || todo!.valid)
       && (governance == nil || governance!.valid)
       && (missionDecisions == nil || missionDecisions!.valid)
+      && (intercomRelations == nil || intercomRelations!.valid)
       && (display.route == nil || display.route!.valid)
       && tools.count <= 32 && runs.count <= 64 && schedules.count <= 64 && inputs.count <= 32
       && usage.count <= 8 && evidence.count <= 32 && tools.allSatisfy { $0.utf8.count <= 128 }

@@ -101,6 +101,7 @@ struct GovernanceSessionDetail: View {
         Text("此旧桥接没有工作结果字段；可正常使用现有Pi，不触发历史扫描或重新验收。").font(.caption).foregroundStyle(.secondary)
       }
       MissionDecisionSessionDetail(session: session)
+      IntercomRelationsDetail(session: session)
       Text("这些是只读的原 owner 观察，不是当前执行权限；也不新增需要你确认的事项。").font(.caption2).foregroundStyle(.secondary)
     }
   }

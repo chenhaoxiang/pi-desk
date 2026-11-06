@@ -59,12 +59,13 @@ test("routing identity is independent of the reporting Pi session and never cros
 });
 
 test("IDs remain bounded, exact and content-free; unsafe IDs are unavailable, never truncated", () => {
-  for (const id of ["", "a".repeat(129), "/private/path", "token\nline", "sk-" + "x".repeat(30), "..", "中文描述"]) {
+  for (const id of ["", "bad..id", "_leading", "a".repeat(129), "/private/path", "token\nline", "sk-" + "x".repeat(30), "..", "中文描述"]) {
     assert.equal(projectIntercomRelations({ ...source(), messageId: id }), undefined);
     for (const key of ["senderSessionId", "recipientSessionId", "supersedes", "supersededBy", "replyTo", "lateReplyTo"]) {
       assert.equal(projectIntercomRelations(source({ replyCorrelation: "unknown", [key]: id })), undefined);
     }
   }
+  assert.equal(projectIntercomRelations(source({ senderSessionId: "route:sender" }))?.relations.senderSessionId, "route:sender");
   const id = "a".repeat(128);
   assert.equal(projectIntercomRelations({ ...source(), messageId: id })?.messageId, id);
 });

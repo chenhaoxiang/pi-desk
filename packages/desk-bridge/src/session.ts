@@ -39,6 +39,7 @@ import { TodoObserver } from "./todo-projection.ts";
 import { GovernanceClient } from "./governance-client.ts";
 import { QuestionObserver, WORK_QUESTION_EVENT } from "./question-observer.ts";
 import { MissionDecisionObserver } from "./mission-decisions.ts";
+import { IntercomRelationsObserver } from "./intercom-observer.ts";
 export type TransportLike = Pick<
 	BridgeTransport,
 	"start" | "publish" | "reply" | "close" | "dropped"
@@ -95,6 +96,7 @@ export class DeskSession {
 	private governance: GovernanceClient;
 	private questions: QuestionObserver;
 	private missionDecisions = new MissionDecisionObserver();
+	private intercomRelations = new IntercomRelationsObserver();
 	private bridgeSource: string;
 	private terminalRoute?: NonNullable<Snapshot["display"]["route"]>;
 	constructor(
@@ -159,6 +161,7 @@ export class DeskSession {
 			executionObservation: initialExecutionObservation,
 			todo: this.todo.read(),
 			missionDecisions: this.missionDecisions.read(),
+			intercomRelations: this.intercomRelations.read(),
 			childCoverage: "unknown",
 			tools: [],
 			runs: [],
@@ -471,7 +474,8 @@ export class DeskSession {
 	resetTodoScope(ctx: ExtensionContext) {
 		if (this.stopped) return;
 		this.todo.reset(); this.snapshot.todo = this.todo.read();
-		this.missionDecisions.reset(); this.snapshot.missionDecisions = this.missionDecisions.read(); this.observe(ctx);
+		this.missionDecisions.reset(); this.snapshot.missionDecisions = this.missionDecisions.read();
+		this.intercomRelations.reset(); this.snapshot.intercomRelations = this.intercomRelations.read(); this.observe(ctx);
 	}
 	todoResult(id: string, result: unknown, failed: boolean) {
 		if (this.stopped) return;
@@ -479,11 +483,16 @@ export class DeskSession {
 			this.snapshot.todo = this.todo.read(); this.changed();
 		}
 	}
+	intercomToolResult(event: unknown) { if (!this.stopped) this.intercomRelations.result(event); }
+	intercomToolEnd(id: string, result: unknown, failed: boolean) {
+		if (!this.stopped && this.intercomRelations.end(id,result,failed,this.now())) { this.snapshot.intercomRelations = this.intercomRelations.read(); this.changed(); }
+	}
 	missionToolResult(event: unknown) { if (!this.stopped) this.missionDecisions.result(event); }
 	missionToolEnd(id: string, result: unknown, failed: boolean) {
 		if (!this.stopped && this.missionDecisions.end(id,result,failed,this.now())) { this.snapshot.missionDecisions = this.missionDecisions.read(); this.changed(); }
 	}
 	tool(start: boolean, id: string, name: string, ctx: ExtensionContext) {
+		if (start && name === "intercom") this.intercomRelations.start(id);
 		if (start && name === "subagent") this.missionDecisions.start(id);
 		if (start && name === "todo") { this.todo.start(id); this.snapshot.todo = this.todo.read(); }
 		this.observe(ctx);
@@ -890,6 +899,7 @@ export class DeskSession {
 		this.governance.close();
 		this.questions.close();
 		this.missionDecisions.reset();
+		this.intercomRelations.reset();
 		this.usageWriter?.close();
 		this.assistant.close();
 		this.ctx = undefined;

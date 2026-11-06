@@ -40,6 +40,8 @@ export class GovernanceClient {
   private pending?: { id: string; off: () => void; timer: ReturnType<typeof setTimeout>; serial: number; targetEpoch?: string };
   private queued: unknown;
   private queuedProgress: unknown;
+  private progressNotice?: { epoch: string; seq: number; fingerprint: string };
+  private queuedProgressConflict?: { epoch: string; seq: number };
   private scheduled = false;
   private serial = 0;
   private epoch?: string;
@@ -57,6 +59,7 @@ export class GovernanceClient {
     this.off = this.events.on(WORK_CHANGED, payload => {
       if (this.closed || own(payload,"version") !== 1 || own(own(payload,"snapshot"),"hostSessionId") !== this.hostSessionId) return;
       const next = own(payload,"snapshot"), epoch = own(next,"observerEpoch");
+      this.noteProgress(next);
       const newer = (queued: unknown, oldSeq: unknown, newSeq: unknown) => own(queued,"observerEpoch") !== epoch || !uint(oldSeq) || !uint(newSeq) || newSeq >= oldSeq;
       // Two bounded slots: coalescing one lane must not discard a newer other
       // lane merely because their independent sequences advance differently.
@@ -94,6 +97,24 @@ export class GovernanceClient {
     try { this.events.emit(WORK_QUERY,{version:1,requestId:id,hostSessionId:this.hostSessionId}); }
     catch { this.finish(); if (serial === this.serial) this.unavailable(true); }
   }
+  private markProgressConflict(epoch: string, seq: number) {
+    const previous = this.queuedProgressConflict;
+    if (!previous || previous.epoch !== epoch || seq > previous.seq) this.queuedProgressConflict = {epoch,seq};
+  }
+  private noteProgress(raw: unknown) {
+    const epoch = own(raw,"observerEpoch");
+    if (!safeReference(epoch) || this.retired.includes(epoch) || own(raw,"version") !== 1 || own(raw,"hostSessionId") !== this.hostSessionId
+      || own(raw,"scope") !== "session-recent-observations" || own(raw,"authorization") !== "none" || own(raw,"readOnly") !== true || own(raw,"executable") !== false) return;
+    const progress = projectCodeProgress(own(raw,"codeProgress"),epoch);
+    if (!progress || (epoch === this.epoch && progress.seq < this.progressSeq)) return;
+    const fingerprint = JSON.stringify(progress), previous = this.progressNotice;
+    // Snapshot only the bounded projected fingerprint, not raw content. One
+    // highest-sequence notice and one conflict watermark survive last-wins
+    // coalescing; a third copy cannot hide a middle equal-sequence conflict.
+    if ((previous?.epoch === epoch && previous.seq === progress.seq && previous.fingerprint !== fingerprint)
+      || (epoch === this.epoch && progress.seq === this.progressSeq && this.progressFingerprint !== undefined && this.progressFingerprint !== fingerprint)) this.markProgressConflict(epoch,progress.seq);
+    if (!previous || previous.epoch !== epoch || progress.seq >= previous.seq) this.progressNotice = {epoch,seq:progress.seq,fingerprint};
+  }
   private accept(raw: unknown, fromQuery: boolean) {
     const epoch = own(raw,"observerEpoch");
     if (own(raw,"version") !== 1 || own(raw,"hostSessionId") !== this.hostSessionId || !safeReference(epoch)
@@ -107,6 +128,8 @@ export class GovernanceClient {
       if (this.epoch) this.retired = [...this.retired.slice(-7),this.epoch];
       this.epoch = epoch; this.seq = -1; this.fingerprint = undefined;
       this.progressSeq = -1; this.progressFingerprint = undefined; this.progressConflict = false;
+      if (this.progressNotice?.epoch !== epoch) this.progressNotice = undefined;
+      if (this.queuedProgressConflict?.epoch !== epoch) this.queuedProgressConflict = undefined;
       this.value = emptyGovernance("not-observed"); this.progress = emptyCodeProgress("not-observed");
     }
     if (!projected) this.value = emptyGovernance();
@@ -119,13 +142,19 @@ export class GovernanceClient {
         if (JSON.stringify(this.value) !== fingerprint) this.value = projected;
       }
     }
-    if (!progress) this.progressUnavailable();
+    // Also catch a changed mutable payload between notification and flush.
+    if (progress && this.progressNotice?.epoch === epoch && this.progressNotice.seq === progress.seq && this.progressNotice.fingerprint !== JSON.stringify(progress)) this.markProgressConflict(epoch,progress.seq);
+    const conflict = this.queuedProgressConflict;
+    if (conflict?.epoch === epoch && conflict.seq >= this.progressSeq && (!progress || progress.seq <= conflict.seq)) {
+      this.progressSeq = Math.max(this.progressSeq,conflict.seq); this.progressConflict = true; this.progressUnavailable();
+    } else if (!progress) this.progressUnavailable();
     else if (progress.seq >= this.progressSeq) {
       const fingerprint = JSON.stringify(progress);
       if (progress.seq === this.progressSeq && (this.progressConflict || this.progressFingerprint !== fingerprint)) {
         this.progressConflict = true; this.progressUnavailable();
       } else {
         this.progressSeq = progress.seq; this.progressFingerprint = fingerprint; this.progressConflict = false;
+        if (this.queuedProgressConflict?.epoch === epoch && progress.seq > this.queuedProgressConflict.seq) this.queuedProgressConflict = undefined;
         if (JSON.stringify(this.progress) !== fingerprint) this.progress = progress;
       }
     }
@@ -143,5 +172,5 @@ export class GovernanceClient {
     this.notify();
   }
   private finish() { if (this.pending) { clearTimeout(this.pending.timer); this.pending.off(); this.pending = undefined; } }
-  close() { this.closed = true; this.finish(); this.off?.(); this.off = undefined; this.queued = undefined; this.queuedProgress = undefined; this.value = emptyGovernance(); this.progress = emptyCodeProgress(); }
+  close() { this.closed = true; this.finish(); this.off?.(); this.off = undefined; this.queued = undefined; this.queuedProgress = undefined; this.progressNotice = undefined; this.queuedProgressConflict = undefined; this.value = emptyGovernance(); this.progress = emptyCodeProgress(); }
 }

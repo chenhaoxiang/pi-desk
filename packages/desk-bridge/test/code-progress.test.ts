@@ -56,6 +56,22 @@ test("missing or invalid progress is only stale/unknown in its lane and same-seq
   h.send(snapshot());await tick();assert.equal(h.client.readCodeProgress().stale,true);
   h.send(snapshot(sidecar(4)));await tick();assert.equal(h.client.readCodeProgress().stale,undefined);assert.equal(h.client.readCodeProgress().seq,4);h.client.close();
 });
+test("same-tick equal-sequence contradictions cannot be coalesced back into a current snapshot",async()=>{
+  const h=host();h.client.start();await tick();const result=structuredClone(h.client.read());
+  const conflict=sidecar();conflict.observations[2].observedAt++;
+  h.send(snapshot(conflict));h.send(snapshot());await tick();
+  assert.equal(h.client.readCodeProgress().stale,true,"queued contradiction followed by the original still latches conflict");
+  assert.deepEqual(h.client.read(),result);
+  h.send(snapshot());await tick();assert.equal(h.client.readCodeProgress().stale,true);
+  h.send(snapshot(sidecar(4)));await tick();assert.equal(h.client.readCodeProgress().stale,undefined);
+  const first=sidecar(5),different=sidecar(5);different.observations[0].observedAt++;
+  h.send(snapshot(first));h.send(snapshot(different));h.send(snapshot(first));await tick();
+  assert.equal(h.client.readCodeProgress().stale,true,"a not-yet-accepted sequence also retains middle contradictions");
+  h.send(snapshot(sidecar(6)));await tick();assert.equal(h.client.readCodeProgress().stale,undefined);
+  const lastConflict=sidecar(6);lastConflict.observations[1].observedAt++;
+  h.send(snapshot(lastConflict));h.send(snapshot(sidecar(7)));await tick();
+  assert.equal(h.client.readCodeProgress().seq,7);assert.equal(h.client.readCodeProgress().stale,undefined,"a genuinely newer sequence in the same batch clears the older conflict");h.client.close();
+});
 test("producer unavailable retains original rows and advances only progress watermark; new epoch resets it",async()=>{
   const h=host();h.client.start();await tick();const before=structuredClone(h.client.read()), rows=structuredClone(h.client.readCodeProgress().observations);
   const unavailable={...sidecar(4),coverage:"unavailable"};h.send(snapshot(unavailable));await tick();

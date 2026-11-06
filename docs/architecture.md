@@ -7,8 +7,8 @@ release_scope: 本机实现与首版已配置路径收口；非正式发行或�
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-05
-verification_scope: 本轮治理引用预编译、Swift正负例与同输入wire decode/store微基准；复用PR10/build73和Vista最终跨包证据，不含新GUI/FPS或完整自然自治资格
+verified: 2026-11-06
+verification_scope: 本轮mission决策消费Swift/TS负例和实际管理SDK/Swift UDS；复用已交付W1/W2，不含新GUI/FPS或完整自然自治资格
 ---
 
 # 系统架构
@@ -234,6 +234,14 @@ Vista owner冻结memory-only出口`pi-vista:work-observation:query:v1` / `reply:
 在既有InputNotice附加可选question元数据：caller-declared的PiWorkRef/stage与原owner epoch/seq/time，不复制问题、选项或答案。source来自原问题工具的`pi:work-question:v1`，legacy `pi:input-required`不变。两条事件共用完整toolCallId散列后的输入ID；新关联只更新同一行，不再提醒/重置已读。工作声明不认证归属，缺/坏关联明确unbound/unavailable，仍回原入口作答。
 
 原owner的opened/answer-received/closed只影响输入生命周期，收到答案不等于决定已应用或业务完成；Legacy end依旧能关闭输入，不把可选关联变成原流程前置。新事件按准确session/epoch/seq拒绝不适用数据，但无epoch的旧事件不具备该证明，完整replace/revoke/partial/跨负责人问题仍未完成。观察只在有界内存，输入列表预算和既有64KiB帧上限不扩大，无历史读取/模型/回答写口。
+
+### 原生 mission 决策记录（消费端）
+
+Snapshot可选missionDecisions只消费当前scope中成功subagent管理工具的公开ToolResult.details.mission。tool_result先按action与显式missionId匹配，最终tool_execution_end成功且白名单指纹/身份/原updatedAt一致后才发布；不返回结果patch。只取原decision id/status/createdAt/resolvedAt及mission id/schemaVersion/updatedAt，不读取或散列title/prompt/options/recommendation/resolution、missionPath或ownerSessionId。无新Vista端口、原件读取、状态库、模型回合或写入动作；初次加载及tree/compact/reload后未采集不等于零。
+
+同一观察窗口保留原updatedAt时间水位：晚到旧记录不能覆盖新记录，相同时间但不同决策集合变为冲突未知，只有更晚原记录可解除；时间不是发明的revision。最多32个在途调用、16份工作记录，单份扫描512条并展示最多32条/2800字节，整体记录5400字节，整体wire仍64KiB。当前预算省略数与累计窗口移出数分开，后者不是去重后的工作数；已移出的身份不保留无限期时间水位。原记录更新不重排已保留工作的首次观察顺序。
+
+同owner/kind/key只归组，各来源快照独立展示而不求和/替换；保留来源连接状态与原更新时间。open只称原记录未决，resolved只称原记录已解决；A解决B未决继续显示部分解决，绝不推导用户批准、全部问题答复或工作验收。无正文/选项/答案的回答UI，也不改变原InputNotice或needsInput。此片不关闭完整替换/撤销/迟答或自主恢复验收。
 
 ## 12. 验证与退出策略
 

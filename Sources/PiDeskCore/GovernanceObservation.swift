@@ -162,6 +162,7 @@ public struct WorkResultEntry: Identifiable, Sendable {
 public struct WorkResultGroup: Identifiable, Sendable {
   public var id: PiWorkRef
   public var entries: [WorkResultEntry]
+  public var decisions: [MissionDecisionEntry] = []
 }
 public enum WorkResultPortfolio {
   /// Only explicit owner/kind/key can group observations. Reporting a child's
@@ -169,14 +170,22 @@ public enum WorkResultPortfolio {
   public static func groups(_ sessions: [SessionView]) -> [WorkResultGroup] {
     var result: [WorkResultGroup] = [], slots: [PiWorkRef: Int] = [:]
     for session in sessions {
-      guard let projection = session.snapshot.governance else { continue }
-      for item in projection.results {
+      let projection = session.snapshot.governance
+      for item in projection?.results ?? [] {
         let observation = item.observation
         guard let binding = observation.binding else { continue }
         let ref = binding.workRef
-        let entry = WorkResultEntry(reporter: session.snapshot.identity, connected: session.connection == .connected && projection.stale != true, observedAt: item.observedAt, result: observation, id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + (projection.observerEpoch ?? "unknown") + ":" + String(item.seq))
+        let entry = WorkResultEntry(reporter: session.snapshot.identity, connected: session.connection == .connected && projection?.stale != true, observedAt: item.observedAt, result: observation, id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + (projection?.observerEpoch ?? "unknown") + ":" + String(item.seq))
         if let index = slots[ref] { result[index].entries.append(entry) }
         else { slots[ref] = result.count; result.append(WorkResultGroup(id: ref, entries: [entry])) }
+      }
+      if let decisions = session.snapshot.missionDecisions {
+        for record in decisions.missions {
+          let ref = record.workRef
+          let entry = MissionDecisionEntry(id: session.snapshot.identity.sessionKey + ":" + session.snapshot.identity.runtimeEpoch + ":" + decisions.scope + ":" + ref.key, reporter: session.snapshot.identity, connected: session.connection == .connected, record: record)
+          if let index = slots[ref] { result[index].decisions.append(entry) }
+          else { slots[ref] = result.count; result.append(WorkResultGroup(id: ref, entries: [], decisions: [entry])) }
+        }
       }
     }
     return result

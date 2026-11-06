@@ -136,6 +136,7 @@ test("factory starts no resources, observation never changes host loadout or blo
 			"session_info_changed",
 			"model_select",
 			"tool_execution_start",
+			"tool_result",
 			"tool_execution_end",
 			"turn_end",
 			"ui_prompt_start",

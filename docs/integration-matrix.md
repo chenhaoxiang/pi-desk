@@ -7,8 +7,8 @@ release_scope: 接口基线快照与本地实现接线；非全模式认证
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-05
-verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift UDS合成接线、指定模型合成请求；旧owner组合沿原日期范围，非全局热加载/业务正文验收
+verified: 2026-11-06
+verification_scope: 本片Pi1.5.0-fork.4与Subagents0.86.0-fork.2原生管理结果经SDK/Swift UDS；仅决策元数据，不代表旧业务会话加载或完整问题闭环
 ---
 
 # 接口核实与集成矩阵
@@ -34,6 +34,7 @@ verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift
 |---|---|---|
 | 生命周期 | `session_start/shutdown`、`agent_settled`、`model_select`、`tool_execution_start/end` | 需bridge；不从agent_end推断稳定结束，不用tool_call gate做观察；session header createdAt只投影标量，旧bridge缺失为unknown |
 | Pi治理工作结果 | Pi Vista `adapter-pi`公开`PiWorkBinding`/`PiResultConsumption`/`PiWorkHandoffObservation`；冻结出口合同为`pi-vista:work-observation:query:v1`与`pi-vista:work-observation:reply:v1:<requestId>`/`changed:v1`，snapshot含hostSessionId/observerEpoch/seq、16条观察窗口和omitted累计 | Desk只接完成观察的有界可选Snapshot副本；query只读owner内存，不重复readOwner/原件IO/验证/模型/持久化/执行。binding.sessionId可不同hostSessionId，保留子结果/交接原binding。出口已在Vista PR71/source a06f7f33固定安装，Desk PR10/build73已完成最终安装SDK/SwiftUDS验真；旧来源仍not-observed/unavailable，不猜产品/goal/人工问题 |
+| 原生决策记录 | subagent的mission.create/show/update/resolve-decision/close成功ToolResult.details.mission；公开MissionDecision的id/status/createdAt/resolvedAt及mission.updatedAt | 只消费自然结果，tool_result捕获身份、最终end核对；无新Vista端口/查询/原件IO。SDK1.5.0-fork.4+Subagents0.86.0-fork.2管理原件→Swift UDS已验A解决/B未决及fresh show；source时间保护、独立reporter，不读取正文/答案或推导批准/验收 |
 | 原生任务 | `todo`成功结果的`TaskDetails`，`create/update/get/list/delete/clear`返回当前全量tasks（list状态筛选只影响content），投影id/subject/activeForm/status/blockedBy/owner | 无公开当前snapshot RPC，只前向有界观察；clear/tree/compact/替换失效，未采集不当零，完成不当验收，owner标签不认证；隔离真实owner/Swift UDS验证，不import第二状态实例或扫描历史 |
 | 直接消息 | `pi.sendUserMessage(content,{deliverAs:'steer'|'followUp'})`返回void | 需bridge；提交不等于模型接收/任务完成，不承诺native durable requestId |
 | 中止当前回合 | `ctx.abort():void` | 只对当前身份/epoch；读后续生命周期，不等同清队列/停计划/停所有孩子 |
@@ -50,7 +51,7 @@ verification_scope: 本轮公开Pi1.5 ModelRegistry/SessionManager与真实Swift
 | Intercom出站v1 | outbox字段为requestId/extensionId/name/to/message，无wake或mode | 不把它当精确steer/follow-up接口；自身会话走直接Pi API，跨peer能力后续按owner实现 |
 | Schedule Prompt | schedule_prompt工具有管理动作；`schedule:event:v1`只负责事件触发，不是管理接口 | 不向事件负载塞prompt/管理命令。通用在线CRUD需owner seam，不直接读写schedule-prompts.json |
 | Schedule常驻宿主 | 文档提供固定run/status/stop/plist，回环控制仅鉴权status/stop | 不能凭配置文件存在声称服务运行；不假造在线新建/启用/暂停端点 |
-| 待输入 | `ui_prompt_start/end`；question producer提供`pi:input-required`内容无关生命周期；新增owner候选`pi:work-question:v1`给native session/toolCallId/epoch/seq/time和caller-declared workRef/stage | 保留原UI/事件，同一问题单一提醒；坏/缺关联unavailable/unbound，不阻止提问、不认证工作、不读正文/答案、不代答。新出口尚在owner候选，最终source/install资格另核；原v1 end不具epoch证明 |
+| 待输入 | `ui_prompt_start/end`；question producer提供`pi:input-required`内容无关生命周期；owner的`pi:work-question:v1`给native session/toolCallId/epoch/seq/time和caller-declared workRef/stage | 保留原UI/事件，同一问题单一提醒；坏/缺关联unavailable/unbound，不阻止提问、不认证工作、不读正文/答案、不代答。PR12/build78已与原producer0.1.4-fork.6固定安装件完成SDK/UDS验真；原v1 end不具epoch证明，完整问题后继范围仍未关闭 |
 | Guard/Gate/CI | 各owner只读状态/受限观察，可有head/freshness | 当前没有通用Pi Desk producer；先明示未接入，不读raw审计或把自报passed当权威 |
 | 现有服务控制台 | 用户显式配置的精确页面/受限API | 首版打开原管理页；不复制私有源码、机器地址、路径、scope或凭据进公开仓 |
 | 原会话定位 | Herdr精确pane；本轮补Terminal.app唯一TTY/TERM_SESSION_ID route，tmux仅在一次性client_tty可核对时转外层TTY | count非1/Automation拒绝/旧bridge缺route显示不可定位；不按cwd/名称猜，不对活跃session自动`pi --session`开第二writer |

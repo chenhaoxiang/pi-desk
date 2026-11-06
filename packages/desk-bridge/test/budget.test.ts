@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { displayBudget } from "../src/budget.ts";
 import { encode, type RecordV1 } from "../src/protocol.ts";
 import { TodoObserver } from "../src/todo-projection.ts";
+import { MissionDecisionObserver } from "../src/mission-decisions.ts";
 import { boundGovernance } from "../src/governance-projection.ts";
 test("combined maximum DTOs fit one frame and omitted records remain explicit", async () => {
 	const fixture = JSON.parse(
@@ -44,6 +45,14 @@ test("combined maximum DTOs fit one frame and omitted records remain explicit", 
 	const work = JSON.parse(await readFile(new URL("../../../Fixtures/work-results-v1.json", import.meta.url), "utf8"));
 	work.results = Array.from({length:16}, (_,i) => ({ ...work.results[0], seq:i+1, observation:{...work.results[0].observation,resultRef:"r".repeat(128)} })); work.observerSeq=17; work.handoffs[0].seq=17;
 	s.governance = boundGovernance(work);
+	const decisions = new MissionDecisionObserver();
+ for(let i=0;i<16;i++){
+  const id="mission-"+i, details={mode:"management",missionId:id,mission:{schemaVersion:1,id,updatedAt:"2026-11-06T00:00:00.000Z",decisions:Array.from({length:512},(_,j)=>({id:"d".repeat(120)+j,status:"open",createdAt:"2026-11-06T00:00:00.000Z"}))}};
+  decisions.start(id);decisions.result({toolName:"subagent",toolCallId:id,isError:false,input:{action:"mission.show",options:{missionId:id}},details});decisions.end(id,{details},false,1000);
+ }
+ s.missionDecisions = decisions.read();
+ assert.ok(s.missionDecisions.omittedMissions>0);
+ assert.ok(Buffer.byteLength(JSON.stringify(s.missionDecisions))>3000);
 	const bounded = displayBudget(s);
 	const frame = encode({ ...fixture, snapshot: bounded });
 	assert.ok(frame.length <= 65537);

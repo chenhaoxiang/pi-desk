@@ -38,6 +38,7 @@ import { MAX_CREATED_AT_MS } from "./protocol.ts";
 import { TodoObserver } from "./todo-projection.ts";
 import { GovernanceClient } from "./governance-client.ts";
 import { QuestionObserver, WORK_QUESTION_EVENT } from "./question-observer.ts";
+import { MissionDecisionObserver } from "./mission-decisions.ts";
 export type TransportLike = Pick<
 	BridgeTransport,
 	"start" | "publish" | "reply" | "close" | "dropped"
@@ -93,6 +94,7 @@ export class DeskSession {
 	private todo = new TodoObserver();
 	private governance: GovernanceClient;
 	private questions: QuestionObserver;
+	private missionDecisions = new MissionDecisionObserver();
 	private bridgeSource: string;
 	private terminalRoute?: NonNullable<Snapshot["display"]["route"]>;
 	constructor(
@@ -156,6 +158,7 @@ export class DeskSession {
 			pending: null,
 			executionObservation: initialExecutionObservation,
 			todo: this.todo.read(),
+			missionDecisions: this.missionDecisions.read(),
 			childCoverage: "unknown",
 			tools: [],
 			runs: [],
@@ -467,7 +470,8 @@ export class DeskSession {
 	}
 	resetTodoScope(ctx: ExtensionContext) {
 		if (this.stopped) return;
-		this.todo.reset(); this.snapshot.todo = this.todo.read(); this.observe(ctx);
+		this.todo.reset(); this.snapshot.todo = this.todo.read();
+		this.missionDecisions.reset(); this.snapshot.missionDecisions = this.missionDecisions.read(); this.observe(ctx);
 	}
 	todoResult(id: string, result: unknown, failed: boolean) {
 		if (this.stopped) return;
@@ -475,7 +479,12 @@ export class DeskSession {
 			this.snapshot.todo = this.todo.read(); this.changed();
 		}
 	}
+	missionToolResult(event: unknown) { if (!this.stopped) this.missionDecisions.result(event); }
+	missionToolEnd(id: string, result: unknown, failed: boolean) {
+		if (!this.stopped && this.missionDecisions.end(id,result,failed,this.now())) { this.snapshot.missionDecisions = this.missionDecisions.read(); this.changed(); }
+	}
 	tool(start: boolean, id: string, name: string, ctx: ExtensionContext) {
+		if (start && name === "subagent") this.missionDecisions.start(id);
 		if (start && name === "todo") { this.todo.start(id); this.snapshot.todo = this.todo.read(); }
 		this.observe(ctx);
 		this.noteActivity(start ? "tool-start" : "tool-end");
@@ -880,6 +889,7 @@ export class DeskSession {
 		this.todo.reset();
 		this.governance.close();
 		this.questions.close();
+		this.missionDecisions.reset();
 		this.usageWriter?.close();
 		this.assistant.close();
 		this.ctx = undefined;

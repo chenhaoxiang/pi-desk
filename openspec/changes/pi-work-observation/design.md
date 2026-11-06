@@ -34,6 +34,14 @@ v1的id与新事件toolCallId原字符串对应；Desk将完整opaque id散列�
 
 首片只在旧输入卡片/详情/工作总览显示原声明的关联，具体问题仍回准确原入口处理。“已读”仍只改本机提醒，answer-received不是应用决定或授予权限。原owner源码与最终安装件分层验真，不把候选SDK fixture成功写成全活跃会话已加载。
 
+## 原生 mission 决策记录首片
+
+复用已有subagent管理ToolResult.details.mission，不新增Vista端口或owner RPC。只在当前scope开始的成功管理调用上捕获action/显式missionId，最终tool_execution_end成功且白名单原记录一致才发布。取mission id/schemaVersion/updatedAt及decision id/status/createdAt/resolvedAt；不取正文/选项/建议/答复/私有路径/创建者身份，不改工具结果。sourceUpdatedAt保留原时间；窗口内旧时间忽略，同时间不同决策集合标冲突未知，只有更晚记录解除。observerSeq只是消费顺序，不是原生revision。
+
+最多16份工作记录，每份最多扫描512条、展示32条/2800字节，所有记录5400字节并从既有display预算扣除；当前整份省略与累计窗口移出分别标记，移出数不是去重工作数。稳定保留首次观察顺序，branch/session/compact/reload失效；无数据不填零，不主动mission.show或读store。用户/原Pi自然mission.show成功结果仍可带回同一原件。
+
+UI复用既有工作卡片/来源会话详情；相同显式workRef可归组，但不同reporter不求和/互相覆盖。A已解决B仍未决明确显示；open不产生人工提醒、resolved不授权/验收。新负责人只是新的观察来源，不继承原创建者身份。本片不等于完整问题替换/撤销/迟答或自然自主执行闭环。
+
 ## 后续与验收
 
 W1当前任务清单及coverage可用；W2消费已交付work/result/attention/问题引用，按显式映射归产品/工作项；W3一个低风险自然任务覆盖等待解除→续接→owner验收→交付→Desk同步；W4根据有限自然样本扩展自主升级/优化，保持原权限/预算/安全切换与回退。关闭Desk不停止Pi；消息送达/Todo完成/进程结束/源码安装等不能互相推导。

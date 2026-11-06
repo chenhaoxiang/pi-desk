@@ -5,6 +5,7 @@ import { validGovernanceProjection, type GovernanceProjection } from "./governan
 import { validQuestionWorkLink, type QuestionWorkLink } from "./question-projection.ts";
 import { validMissionDecisions, type MissionDecisionsProjection } from "./mission-decisions.ts";
 import { validIntercomRelations, type IntercomRelationsProjection } from "./intercom-observer.ts";
+import { validCodeProgress, type CodeProgressProjection } from "./code-progress.ts";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
@@ -149,6 +150,7 @@ export type Snapshot = {
 	governance?: GovernanceProjection;
 	missionDecisions?: MissionDecisionsProjection;
 	intercomRelations?: IntercomRelationsProjection;
+	codeProgress?: CodeProgressProjection;
 	childCoverage: string;
 	tools: string[];
 	runs: Run[];
@@ -254,6 +256,7 @@ export function validate(v: unknown): asserts v is RecordV1 {
 		if (s.governance !== undefined && !validGovernanceProjection(s.governance)) throw new Error("invalid-governance");
 		if (s.missionDecisions !== undefined && !validMissionDecisions(s.missionDecisions)) throw new Error("invalid-mission-decisions");
 		if (s.intercomRelations !== undefined && !validIntercomRelations(s.intercomRelations)) throw new Error("invalid-intercom-relations");
+		if (s.codeProgress !== undefined && !validCodeProgress(s.codeProgress)) throw new Error("invalid-code-progress");
 		if (s.executionObservation !== undefined) {
 			const observation = s.executionObservation;
 			if (!object(observation) || observation.version !== 1 ||

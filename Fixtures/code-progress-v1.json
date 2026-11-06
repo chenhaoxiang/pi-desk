@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "source": "explicit-code-owner",
+  "seq": 3,
+  "coverage": "observed",
+  "observerEpoch": "vista-synthetic-epoch",
+  "observations": [
+    {"seq":1,"binding":{"workRef":{"owner":"example/owner","kind":"task","key":"existing-work"},"stageId":"source-shared-delivery","runId":"run-b","sessionId":"session-a","revision":1,"headSha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"repository":"example/project","pullRequest":42,"observedAt":1730000000000,"phase":"head-checks","waitReason":"required_checks_pending","nextAction":"wait_required_checks","authorization":"none","readOnly":true,"executable":false},
+    {"seq":2,"binding":{"workRef":{"owner":"example/owner","kind":"task","key":"existing-work"},"stageId":"source-shared-delivery","runId":"run-b","sessionId":"session-a","revision":1,"headSha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"repository":"example/project","pullRequest":42,"observedAt":1730000000001,"phase":"unknown","waitReason":"source_original_unavailable","nextAction":"inspect_originals","authorization":"none","readOnly":true,"executable":false},
+    {"seq":3,"binding":{"workRef":{"owner":"example/owner","kind":"task","key":"existing-work"},"stageId":"source-shared-delivery","runId":"run-new","sessionId":"session-a","revision":0,"headSha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"repository":"example/project","pullRequest":42,"observedAt":1730000000002,"phase":"owner-gate","waitReason":"owner_delivery_pending","nextAction":"follow_owner_delivery","authorization":"none","readOnly":true,"executable":false}
+  ],
+  "omitted": 0
+}

@@ -48,6 +48,14 @@ UI复用既有工作卡片/来源会话详情；相同显式workRef可归组，�
 
 投影只保留关系ID、replyCorrelation和原status标量/更新时间，绝不读取正文/答案/字符串reason恢复ID。旧原时间忽略，同时间冲突未知直至更晚原件；有界16记录/32在途/5400字节与整体64KiB预算，scope失效晚到拒绝。现有详情折叠只读，无人工提醒或新管理动作。默认CI用冻结合同经真实SDK/Swift UDS，显式原owner源码可运行隔离真实extension+broker组合；这些兼容检查不是W3自然工作证据。W3仅采用实际工程PR41及原生审查阶段原件，旧父cohort、缺显式绑定或UI未核如实保留，不强reload或制造另一条演示任务。
 
+## #81 工作卡片与独立代码进度
+
+复用原查询/回包/changed的snapshot可选codeProgress v1侧car，原result/handoff数组不加kind，原seq/coverage不变；字段/12合法三元组以Vista既有work-result-continuity-design合同为准。双lane分别校验seq/指纹，共享准确host+epoch；缺/坏进度局部unknown，unavailable升自身seq并保留旧rows时明确stale，row时间不刷新。最多16整row/整个sidecar5400UTF8字节，计入原64KiB帧总预算。刷新只读同进程已有内存，原owner显式工具的有界GitHub/Gate读取不由Desk触发。
+
+工作卡分原记录、关联PR/head、原阶段/等待来源、原已验范围、原下一步和真实待输入。最新摘要仅在相同完整binding/reporter/observerEpoch内按各lane原seq选取；更新unknown不被旧accepted覆盖，较早验收标原记录，不影响较新进度的待核显示。不同head/run/revision/source独立，先前同绑定记录可展开；显示排序只按原观察时间，不发明“全任务当前owner”。未知任务名/PR/等待原因不从Todo或会话名补猜。
+
+状态说明共享一次，每阶段短标仅子产物/仅源码，完整source绑定/原件引用后置可展开。PR链接只由显式safe repo/number构造，来源终端只定位准确reporter而非猜binding.sessionId。只有实际QuestionWorkLink声明关联的原生输入能附到已有工作，CI/Gate/交接wait不变成人工批准。不提供执行按钮、权限或第二任务库。源码/冻结合同SDK/实际producer+合成原件/真实工程/唯一安装GUI各自记证据，旧W3不重跑。
+
 ## 后续与验收
 
 W1当前任务清单及coverage可用；W2消费已交付work/result/attention/问题引用，按显式映射归产品/工作项；W3一个低风险自然任务覆盖等待解除→续接→owner验收→交付→Desk同步；W4根据有限自然样本扩展自主升级/优化，保持原权限/预算/安全切换与回退。关闭Desk不停止Pi；消息送达/Todo完成/进程结束/源码安装等不能互相推导。

@@ -5,128 +5,248 @@ struct WorkResultsSection: View {
   @EnvironmentObject var model: AppModel
   var body: some View {
     if !model.workResults.isEmpty {
-      LazyVStack(alignment: .leading, spacing: 10) {
-        Text("原 owner 工作结果").font(.headline)
-        if model.workResults.count > 32 { Text("总览显示前32个已观察工作引用；其他请在来源会话详情查看。").font(.caption2).foregroundStyle(.secondary) }
-        Text("相同的 owner／类型／工作引用才合组；结果仅代表原来那个阶段，不折算整体完成率。").font(.caption).foregroundStyle(.secondary)
+      LazyVStack(alignment: .leading, spacing: 12) {
+        Text("工作记录").font(.headline)
+        WorkObservationMeaning()
+        if model.workResults.count > 32 { Text("总览显示前32个已观察工作引用；其余见来源会话。").font(.caption2).foregroundStyle(.secondary) }
         ForEach(Array(model.workResults.prefix(32))) { group in
-          DeskCard {
-            VStack(alignment: .leading, spacing: 10) {
-              Text(group.id.kindTitle + " · " + group.id.key).font(.headline).textSelection(.enabled)
-              Text(group.id.owner).font(.caption).foregroundStyle(.secondary)
-              ForEach(Array(group.entries.prefix(4))) { entry in
-                VStack(alignment: .leading, spacing: 6) {
-                  OwnerResultRow(result: entry.result)
-                  HStack {
-                    if !entry.connected { Text("来源已非实时").foregroundStyle(.orange) }
-                    if let date = entry.observedAt { Text("原观察：" + Date(timeIntervalSince1970: date / 1000).formatted(date: .abbreviated, time: .shortened)) }
-                    Spacer()
-                    Button("查看来源会话") { model.select(entry.reporter); model.navigate(to: "会话") }
-                      .disabled(model.store.sessions[entry.reporter.sessionKey]?.snapshot.identity != entry.reporter)
-                  }.font(.caption2).foregroundStyle(.secondary)
-                }
-              }
-              if group.entries.count > 4 { Text("另有 \(group.entries.count - 4) 条原观察，请在来源会话详情查看").font(.caption2).foregroundStyle(.secondary) }
-              ForEach(Array(group.decisions.prefix(4))) { entry in
-                MissionDecisionRecordView(record: entry.record)
-                HStack {
-                  if !entry.connected { Text("来源已非实时").foregroundStyle(.secondary) }
-                  Text("独立来源 · " + String(entry.reporter.nativeSessionId.suffix(8))).foregroundStyle(.secondary)
-                  Spacer()
-                  Button("查看来源会话") { model.select(entry.reporter); model.navigate(to: "会话") }
-                    .disabled(model.store.sessions[entry.reporter.sessionKey]?.snapshot.identity != entry.reporter)
-                }.font(.caption2)
-              }
-              if group.decisions.count > 4 { Text("更多来源的决策记录请在各自会话详情查看；不跨来源求和。").font(.caption2).foregroundStyle(.secondary) }
-            }
+          DeskCard { WorkRecordCard(group: group, navigation: true) }
+        }
+      }
+    }
+  }
+}
+private struct WorkObservationMeaning: View {
+  var body: some View {
+    DisclosureGroup("状态说明：进度不是验收，产物不等于任务完成") {
+      Text("工作只按原始引用归组。每份记录保留原来源、阶段、head和时刻；已读、决策已解决、进度或Todo完成都不授予执行权限。不同来源不合成整体完成率。")
+    }.font(.caption2).foregroundStyle(.secondary)
+  }
+}
+private struct WorkRecordCard: View {
+  let group: WorkResultGroup
+  var navigation = false
+  var body: some View {
+    let stages = WorkCardPresentation.stages(group)
+    VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(group.id.kindTitle + " · " + group.id.key).font(.headline).textSelection(.enabled)
+        Text(group.id.owner + " · 原任务标题未提供").font(.caption2).foregroundStyle(.secondary)
+      }
+      if stages.isEmpty { WorkInfoRow(label: "阶段 / PR", value: "原来源未提供") }
+      ForEach(Array(stages.prefix(4))) { stage in WorkStageCard(stage: stage, navigation: navigation) }
+      if stages.count > 4 {
+        DisclosureGroup("其他原始绑定（\(stages.count - 4)）") {
+          ForEach(Array(stages.dropFirst(4))) { stage in WorkStageCard(stage: stage, navigation: navigation) }
+        }.font(.caption)
+      }
+      if !group.handoffs.isEmpty {
+        DisclosureGroup("原交接下一步（\(group.handoffs.count)份记录）") {
+          ForEach(group.handoffs) { entry in
+            WorkHandoffRow(handoff: entry.handoff)
+            WorkSourceLine(reporter: entry.reporter, connected: entry.connected, observedAt: entry.observedAt, navigation: navigation)
+          }
+        }.font(.caption)
+      }
+      if !group.decisions.isEmpty {
+        DisclosureGroup("原决策状态（\(group.decisions.count)个来源，不跨来源求和）") {
+          ForEach(group.decisions) { entry in
+            MissionDecisionRecordView(record: entry.record)
+            WorkSourceLine(reporter: entry.reporter, connected: entry.connected, observedAt: entry.record.observedAt, navigation: navigation)
+          }
+        }.font(.caption)
+      }
+      VStack(alignment: .leading, spacing: 5) {
+        WorkInfoRow(label: "需你处理", value: WorkCardPresentation.inputTitle(group))
+        if !group.inputs.isEmpty {
+          Text("仅原生输入等待；工作关联由调用方声明，不是已认证的任务归属。").font(.caption2).foregroundStyle(.secondary)
+          ForEach(group.inputs) { entry in
+            WorkSourceLine(reporter: entry.reporter, connected: true, observedAt: entry.input.startedAt, navigation: true)
           }
         }
       }
     }
   }
 }
+private struct WorkInfoRow: View {
+  let label: String
+  let value: String
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Text(label).foregroundStyle(.secondary).frame(width: 72, alignment: .leading)
+      Text(value).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+    }.font(.caption)
+  }
+}
+private struct WorkStageCard: View {
+  let stage: WorkStageSummary
+  var navigation: Bool
+  var body: some View {
+    let binding = stage.id.binding, progress = stage.latestProgress, result = stage.latestResult
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(alignment: .top) {
+        Text(stage.phaseTitle).font(.subheadline.weight(.medium)).foregroundStyle(stage.hasUncertainty ? Color.orange : Color.primary)
+        Spacer(minLength: 8)
+        Text(stage.scopeTitle).font(.caption2).foregroundStyle(.secondary)
+      }
+      if let progress, let url = progress.progress.pullRequestURL {
+        HStack(alignment: .firstTextBaseline) {
+          Text("关联 PR").foregroundStyle(.secondary).frame(width: 72, alignment: .leading)
+          Link(progress.progress.repository + " #" + String(progress.progress.pullRequest), destination: url)
+            .accessibilityLabel("打开原PR " + progress.progress.repository + " " + String(progress.progress.pullRequest))
+        }.font(.caption)
+      } else { WorkInfoRow(label: "关联 PR", value: "原来源未提供") }
+      WorkInfoRow(label: "记录 head", value: binding.headSha.map { String($0.prefix(12)) } ?? "未提供")
+      WorkInfoRow(label: "等待来源", value: stage.waitTitle)
+      WorkInfoRow(label: "原已验记录", value: stage.resultTitle)
+      WorkInfoRow(label: "原下一步", value: stage.nextTitle)
+      if let progress {
+        WorkSourceLine(reporter: progress.reporter, connected: progress.connected, observedAt: progress.progress.observedAt, navigation: navigation, kind: "进度")
+      }
+      if let result {
+        WorkSourceLine(reporter: result.reporter, connected: result.connected, observedAt: result.observedAt, navigation: navigation && progress == nil, kind: "结果")
+      }
+      if progress == nil && result == nil, let handoff = stage.latestHandoff {
+        WorkSourceLine(reporter: handoff.reporter, connected: handoff.connected, observedAt: handoff.observedAt, navigation: navigation, kind: "交接")
+      }
+      let count = stage.historicalProgress.count + stage.historicalResults.count
+      if count > 0 {
+        DisclosureGroup("同一绑定的先前观察（\(count)）") {
+          ForEach(stage.historicalProgress) { entry in
+            VStack(alignment: .leading, spacing: 3) {
+              Text(entry.progress.phaseTitle + " · " + entry.progress.waitTitle)
+              Text("原下一步：" + entry.progress.nextActionTitle)
+              WorkSourceLine(reporter: entry.reporter, connected: entry.connected, observedAt: entry.progress.observedAt, navigation: false, kind: "进度")
+            }.padding(.vertical, 4)
+          }
+          ForEach(stage.historicalResults) { entry in
+            VStack(alignment: .leading, spacing: 3) {
+              Text(entry.result.statusTitle)
+              if entry.result.decision != "deliverable" { Text(entry.result.reasonTitle) }
+              Text("原件引用 · " + (entry.result.resultRef ?? "未提供")).textSelection(.enabled)
+              WorkSourceLine(reporter: entry.reporter, connected: entry.connected, observedAt: entry.observedAt, navigation: false, kind: "结果")
+            }.padding(.vertical, 4)
+          }
+        }.font(.caption2).foregroundStyle(.secondary)
+      }
+      DisclosureGroup("来源绑定与原件引用") {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("观察来源：" + stage.id.reporter.nativeSessionId)
+          Text("运行代际：" + stage.id.reporter.runtimeEpoch)
+          Text("观察代际：" + stage.id.observerEpoch)
+          Text("原 session：" + binding.sessionId)
+          Text("原 run：" + binding.runId + " · revision \(binding.revision)")
+          if let head = binding.headSha { Text("原 head：" + head) }
+          if let result {
+            Text("原件引用：" + (result.result.resultRef ?? "未提供"))
+            Text("原结果原因：" + result.result.reasonTitle)
+          }
+          if let progress { Text("原进度原因：" + progress.progress.waitReason) }
+          Text("除明确关联的PR外，原件仅提供引用；不把引用猜成文件或网址。")
+        }.textSelection(.enabled)
+      }.font(.caption2).foregroundStyle(.secondary)
+    }.padding(12).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+  }
+}
+private struct WorkSourceLine: View {
+  let reporter: Identity
+  let connected: Bool
+  let observedAt: Double?
+  var navigation: Bool
+  var kind = "记录"
+  @EnvironmentObject var model: AppModel
+  private var timeLabel: String {
+    guard let observedAt else { return "原" + kind + " · 时间未提供" }
+    let formatted = Date(timeIntervalSince1970: observedAt / 1000).formatted(date: .abbreviated, time: .standard)
+    return "原" + kind + " · " + formatted
+  }
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack {
+        Text(timeLabel)
+        if !connected { Text("最后观测 · 非实时").foregroundStyle(.orange) }
+      }
+      HStack {
+        Text("来源会话 · " + String(reporter.nativeSessionId.suffix(8)))
+        if navigation {
+          Spacer(minLength: 8)
+          Button("查看来源会话") { model.select(reporter); model.navigate(to: "会话") }
+            .disabled(model.store.sessions[reporter.sessionKey]?.snapshot.identity != reporter)
+            .accessibilityLabel("查看来源会话 " + reporter.nativeSessionId)
+          Button("来源终端") { model.openOriginal(identity: reporter) }
+            .disabled(!model.canOpenOriginal(identity: reporter))
+            .accessibilityLabel("定位来源终端 " + reporter.nativeSessionId)
+            .help("只定位此观察来源会话，不冒充绑定中的其他session，也不执行或恢复任务")
+        }
+      }
+    }.font(.caption2).foregroundStyle(.secondary)
+  }
+}
 struct GovernanceCoverageLine: View {
   let session: SessionView
   var body: some View {
-    let projection = session.snapshot.governance
-    Text(projection?.coverageTitle ?? "工作结果：当前桥接未提供观测")
-      .font(.caption2).foregroundStyle(.secondary)
+    Text(session.snapshot.governance?.coverageTitle ?? "工作结果：当前桥接未提供观测").font(.caption2).foregroundStyle(.secondary)
   }
 }
 struct GovernanceSessionDetail: View {
   let session: SessionView
   @EnvironmentObject var model: AppModel
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    let groups = WorkResultPortfolio.groups([session]), projection = session.snapshot.governance
+    VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Label("工作结果与交接", systemImage: "doc.text.magnifyingglass").font(.headline)
+        Label("工作记录与交接", systemImage: "doc.text.magnifyingglass").font(.headline)
         Spacer()
         Button("读取现有观察") { model.refreshWork(identity: session.snapshot.identity) }
           .disabled(session.connection != .connected || !session.snapshot.capabilities.queries.contains("work.refresh"))
           .help("只读取原owner内存观察，不重新执行、验收或调用模型")
       }
       GovernanceCoverageLine(session: session)
-      if let p = session.snapshot.governance {
-        if p.results.isEmpty && p.handoffs.isEmpty {
-          Text(p.coverage == "not-applicable" ? "原 owner 明确此会话不在当前观察范围内；不会重载会话来补齐。" : "尚无可展示的原 owner 结果；不把产物存在、Todo完成或本轮结束当成已交付。").font(.caption).foregroundStyle(.secondary)
+      Text(session.snapshot.codeProgress?.coverageTitle ?? "代码进度：当前桥接未提供").font(.caption2).foregroundStyle(.secondary)
+      WorkObservationMeaning()
+      if groups.isEmpty { Text("当前没有可关联工作的原始观察；缺失不等于零项或工作完成。").font(.caption).foregroundStyle(.secondary) }
+      ForEach(groups) { group in WorkRecordCard(group: group) }
+      if let projection {
+        let unbound = projection.results.filter { $0.observation.binding == nil }
+        if !unbound.isEmpty {
+          DisclosureGroup("尚未绑定工作的原结果（\(unbound.count)）") {
+            ForEach(unbound, id: \.seq) { item in Text(item.observation.reasonTitle + " · 原结果未知") }
+          }.font(.caption)
         }
-        ForEach(p.results, id: \.seq) { item in
-          let result = item.observation
-          if let binding = result.binding {
-            Text(binding.workRef.owner + " · " + binding.workRef.key).font(.subheadline.weight(.medium)).textSelection(.enabled)
-          }
-          OwnerResultRow(result: result)
+        let unmapped = projection.handoffs.filter { h in
+          let old = h.observation.previous?.workRef, next = h.observation.successor?.workRef
+          return old == nil && next == nil || (old != nil && next != nil && old != next)
         }
-        ForEach(p.handoffs, id: \.seq) { item in
-          let handoff = item.observation
-          VStack(alignment: .leading, spacing: 6) {
-            Text(handoff.decision == "handoff_observed" ? "已记录原生交接" : "交接关系待对账").font(.subheadline.weight(.medium))
-            Text("原 owner 下一步：" + handoff.nextActionTitle + "；不因此执行或恢复任务。").font(.caption)
-            Text("保留事实引用 \(handoff.acceptedFactRefs.count) · 未决效果 \(handoff.unresolvedEffectRefs.count) · 阻塞引用 \(handoff.blockerRefs.count)").font(.caption).foregroundStyle(.secondary)
-            DisclosureGroup("查看原交接引用") {
-              ForEach(Array(handoff.acceptedFactRefs.enumerated()), id: \.offset) { _, ref in Text("事实 · " + ref) }
-              ForEach(Array(handoff.unresolvedEffectRefs.enumerated()), id: \.offset) { _, ref in Text("未决 · " + ref) }
-              ForEach(Array(handoff.blockerRefs.enumerated()), id: \.offset) { _, ref in Text("阻塞 · " + ref) }
-              Text("原因：" + handoff.reasonCode)
-            }.font(.caption2).textSelection(.enabled)
-            Text("接续阶段尚未重新核验，旧证据不自动沿用为当前证明。").font(.caption2).foregroundStyle(.secondary)
-          }
+        if !unmapped.isEmpty {
+          DisclosureGroup("尚未对应单一工作的交接（\(unmapped.count)）") {
+            ForEach(unmapped, id: \.seq) { WorkHandoffRow(handoff: $0.observation) }
+          }.font(.caption)
         }
-        if p.omittedObservations > 0 { Text("原观察窗口已移出 \(p.omittedObservations) 条历史记录；不是工作总数。").font(.caption2).foregroundStyle(.secondary) }
-        if p.omittedResults + p.omittedHandoffs > 0 {
-          Text("为保持有界响应，另有 \(p.omittedResults) 个结果、\(p.omittedHandoffs) 个交接未显示。").font(.caption).foregroundStyle(.orange)
-        }
-        if let at = p.observedAt { Text("原观察时间：" + Date(timeIntervalSince1970: at / 1000).formatted()).font(.caption2).foregroundStyle(.secondary) }
-      } else {
-        Text("此旧桥接没有工作结果字段；可正常使用现有Pi，不触发历史扫描或重新验收。").font(.caption).foregroundStyle(.secondary)
+        if projection.omittedObservations > 0 { Text("原结果窗口累计移出 \(projection.omittedObservations) 条记录，不是工作总数。").font(.caption2).foregroundStyle(.secondary) }
+        if projection.omittedResults + projection.omittedHandoffs > 0 { Text("显示预算另省略 \(projection.omittedResults) 个结果、\(projection.omittedHandoffs) 个交接。").font(.caption2).foregroundStyle(.secondary) }
       }
-      MissionDecisionSessionDetail(session: session)
+      if let progress = session.snapshot.codeProgress, progress.omitted > 0 { Text("原进度窗口累计移出 \(progress.omitted) 条记录，不是PR总数。").font(.caption2).foregroundStyle(.secondary) }
+      if let decisions = session.snapshot.missionDecisions, !groups.allSatisfy({ $0.decisions.isEmpty }) {
+        if decisions.omittedMissions > 0 { Text("决策显示预算另省略 \(decisions.omittedMissions) 份当前记录。").font(.caption2).foregroundStyle(.secondary) }
+        if decisions.evictedRecords > 0 { Text("决策窗口累计移出 \(decisions.evictedRecords) 份记录，不是去重工作总数。").font(.caption2).foregroundStyle(.secondary) }
+      }
+      if groups.allSatisfy({ $0.decisions.isEmpty }) { MissionDecisionSessionDetail(session: session) }
       IntercomRelationsDetail(session: session)
-      Text("这些是只读的原 owner 观察，不是当前执行权限；也不新增需要你确认的事项。").font(.caption2).foregroundStyle(.secondary)
     }
   }
 }
-private struct OwnerResultRow: View {
-  let result: PiOwnerResult
+private struct WorkHandoffRow: View {
+  let handoff: PiWorkHandoff
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
-      HStack(alignment: .top) {
-        Text(result.binding?.stageTitle ?? "工作绑定未知").font(.caption.weight(.medium))
-        Spacer()
-        Text(result.statusTitle).font(.caption).foregroundStyle(result.decision == "deliverable" ? Color.primary : Color.secondary)
-      }
-      Text(result.scopeNote).font(.caption2).foregroundStyle(.secondary)
-      if result.decision != "deliverable" { Text(result.reasonTitle).font(.caption).foregroundStyle(.orange) }
-      DisclosureGroup("来源与绑定") {
-        if let binding = result.binding {
-          Text("run：" + binding.runId)
-          Text("session：" + binding.sessionId)
-          Text("revision：\(binding.revision)")
-          if let head = binding.headSha { Text("head：" + head) }
-        }
-        if let ref = result.resultRef { Text("result：" + ref) }
-        Text("原因：" + result.reasonCode)
-      }.font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
-    }.padding(10).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+      Text(handoff.decision == "handoff_observed" ? "原生交接记录" : "交接关系待对账").font(.caption.weight(.medium))
+      Text("原交接下一步：" + handoff.nextActionTitle + " · 尚未重新核验，不据此执行")
+      DisclosureGroup("查看保留引用") {
+        ForEach(Array(handoff.acceptedFactRefs.enumerated()), id: \.offset) { _, ref in Text("事实 · " + ref) }
+        ForEach(Array(handoff.unresolvedEffectRefs.enumerated()), id: \.offset) { _, ref in Text("未决效果 · " + ref) }
+        ForEach(Array(handoff.blockerRefs.enumerated()), id: \.offset) { _, ref in Text("阻塞 · " + ref) }
+        Text("原因 · " + handoff.reasonCode)
+      }.textSelection(.enabled)
+    }.font(.caption2).foregroundStyle(.secondary)
   }
 }

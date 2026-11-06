@@ -8,7 +8,7 @@ status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-11-06
-verification_scope: W1/W2及PR12问题关联已交付；本片原生mission决策元数据候选已通过实际管理SDK/Swift UDS，审查/共享/安装另记；完整问题与自然恢复闭环未宣称
+verification_scope: PR13/14与build84已交付，PR42有限W3自然样本已核；本片#81工作卡与独立代码进度候选通过定向Core/bridge及冻结producer SDK/UDS，真实新工程/审查/安装另记，不泛化长期自治
 ---
 
 # 分阶段实施方案
@@ -20,8 +20,8 @@ verification_scope: W1/W2及PR12问题关联已交付；本片原生mission决�
 | 切片 | 交付内容 | 验收及边界 |
 |---|---|---|
 | W1（已交付） | 已接入Pi的当前Todo/步骤/依赖与覆盖；工作总览、原生名称和精确会话下钻 | 成功TaskDetails白名单、只读内存投影；未采集不当零，完成不当验收，branch/clear/晚到隔离，旧bridge不强reload |
-| W2（结果/交接/问题关联已交付，决策记录首片实施中） | 按已交付owner合同接work_ref/结果/问题与等待/nextAction，显式产品与跨session归属 | 不接候选字段、不按cwd/名字猜；没有producer明确缺省；管理写入仍回Pi原owner |
-| W3 | 一件原授权低风险自然工作从任务到执行、外部等待解除、恢复、owner验收、交付与Desk同步 | 以不催促续接、无重复副作用、真实原件与用户需要处理事项验证；关闭Desk不停止Pi |
+| W2（结果/交接/问题关联/决策及传输关系已交付，工作卡摘要与代码进度实施中） | 按已交付owner合同接work_ref/结果/问题与等待/nextAction，显式产品与跨session归属 | 不接候选字段、不按cwd/名字猜；没有producer明确缺省；管理写入仍回Pi原owner |
+| W3（有限单样本已核） | 一件原授权低风险自然工作从任务到执行、外部等待解除、恢复、owner验收、交付与Desk同步 | 以不催促续接、无重复副作用、真实原件与用户需要处理事项验证；关闭Desk不停止Pi |
 | W4 | 按真实问题扩展优化和受控升级 | 原验收/预算/权限不由执行AI自改；隔离候选、安全切换和回退；不是当前授权下开启全局24×7或任意升级 |
 
 W1采用已有Snapshot的可选Todo投影，不新增中心数据schema。先观察当前成功todo结果的id/subject/activeForm/status/blockedBy/owner；不读params/description/metadata/正文。当前没有公开snapshot RPC，初次加载及branch切换后显示未采集，等待原生事件；不能另import getTodos产生第二模块实例。仅真实输入生命周期算需要用户，pending/blockedBy不推断等待CI或授权。Todo.owner只展示，不认证职责。产品映射和owner nextAction未接通前明确未提供。
@@ -37,6 +37,12 @@ W1最终经PR9合入`690e7f8`，精确head双端CI及合后CI`41910104247`通过
 PR12问题关联已合入fe12d5a并安装build78，固定原producer0.1.4-fork.6跨SDK/codemode/Swift UDS通过；此处沿用原件，不重跑有效W1/W2。当前增量不建新Vista端口，直接有界消费原subagent管理工具成功result及最终end中的mission决策标量。已实现原时间水位/同时间冲突未知、scope失效、预算省略与独立来源卡片；不读正文/选项/答案，不把open/resolved变成人工提醒/批准/验收。
 
 实际Pi1.5.0-fork.4、Subagents0.86.0-fork.2隔离管理工具经SDK→Desk→Swift UDS：create/update/resolve A/fresh show共4次，A已解决/B未决、原decision id及创建者不变，新reporter独立，tree后未采集；8个faux回合、真实provider0、观察新增模型0。单元覆盖坏身份/访问器/超量/晚到/同时间冲突与组合64KiB预算。默认CI复跑冻结合同的真实SDK事件/Swift UDS，实际owner包通过显式PI_DESK_SUBAGENTS选择，不访问业务store。共享合并/唯一App安装依据本片PR及本机安装原件，不用候选验证代替；无预览App/旧业务reload。
+
+### #81 工作卡与代码进度
+
+当前唯一测试App为PR14/build84；PR13原生决策与PR14传输关系均已正常合并、CI和安装验真。有限W3采用真实Subagents PR42工程及其原结果/交付原件，后续System Events正常AX核到准确新session、当前Todo与原mission/run产物观察，原缺口已收口；早前Cua失败、unknown结果和不同来源保留，当前快照不补证全部历史，原件见原PR交付/父验收记录，不重跑W3或扩成长期自治结论。
+
+本轮只改已有工作卡与必要旁路：原result/handoff不能装日常进度，故与Vista冻结原snapshot.codeProgress可选v1侧car，旧lane及query不变；进度永不accepted，work.refresh仍只读内存。UI摘要按完整binding/source/epoch选原最新事实，旧head/unknown历史可展开；显式PR/head/阶段/等待来源/原验收/原下一步与真正原输入分层，未知字段明说未提供。源码、固定producer+合成原件的SDK/SwiftUDS、真实本工程及新runtime/有限CI、独立审查/唯一安装分别验真。用户测试期仍直接覆盖唯一App，不起第二预览、不强reload旧业务。
 
 ## 1. 当前交付与下一次实施起点
 

@@ -17,8 +17,10 @@
   - [x] 5.1c 负例/真实跨包SDK/UDS、性能、独审和精确headCI，直接覆盖本机唯一测试版，不启动预览副本。
   - [x] 5.1d 原问题content-free可选work/stage关联已随PR12/build78及原producer0.1.4-fork.6固定安装完成SDK/UDS验真；保留v1/单一提醒/legacy关闭、精确scope与声明边界。完整后继范围不在此项关闭。
   - [x] 5.1e 原生mission决策元数据消费候选：成功管理result/end匹配，原时间/冲突/有界省略与scope保护，A解决B未决、fresh show、无正文/人工提醒，Swift/TS及实际原生管理SDK/UDS通过。
-  - [ ] 5.1f 本片独立审查、精确head CI/共享合并及唯一App覆盖安装；结果以本片PR和安装原件记录，不将5.1e候选写成已安装。
-  - [ ] 5.1g Intercom原生传输relations消费：成功status原件/最终end、严格ID/时间/scope、Swift会话详情、无人工/业务推断；定向native broker/SDK/UDS与发布件分别核验。
-  - [ ] 5.1h 本片审查/CI/正常PR合并与唯一App覆盖安装；不以候选兼容检查冒称W3。
-- [ ] 5.2 选一个原授权低风险自然工作项，验证等待续接/失败对账/owner验收/交付/Desk投影闭环。
+  - [x] 5.1f 原决策消费已随PR13完成独审/精确CI/合并和唯一build80安装；交付原件保留在PR，不将任务原记录当验收。
+  - [x] 5.1g Intercom原生传输relations消费随PR14交付：成功status/final end、严格ID/时间/scope、Swift详情与无业务批准推断；固定fork9实际broker/SDK/UDS含ACKunknown通过。
+  - [x] 5.1h PR14独审/精确CI/普通merge及唯一build84安装完成；兼容fixture未当W3。
+- [x] 5.2 有限自然样本PR42完成原任务、真实等待/修复/独审/CI/交付及准确新scope Desk当前投影；父与Desk验收原件保留，unknown/失败/旧来源不删除，不外推全历史/全局自治。
+- [ ] 5.4 #81独立可选codeProgress消费：双lane seq/指纹/失效、整行预算、旧client兼容、原time不刷新。
+- [ ] 5.5 #81既有工作卡摘要：同完整binding/source最新事实、旧head/unknown历史保留、明确PR与原件入口、仅原input需用户；精确候选审查/CI/正常merge与唯一安装验真。
 - [ ] 5.3 按实际交付率、催促、重复副作用、误报完成和成本结果扩展；自主升级单独核现行授权/回退/运行加载。

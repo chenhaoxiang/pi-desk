@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
+import { types } from "node:util";
 import { dense, own, safeReference, uint, type WorkRef } from "./governance-projection.ts";
 
-export type MissionDecisionRow = { id: string; status: "open" | "resolved"; createdAt: number; resolvedAt?: number };
+export type MissionCloseReason = "answered" | "withdrawn" | "superseded";
+export type MissionDecisionRow = {
+  id: string; status: "open" | "resolved"; createdAt: number; resolvedAt?: number;
+  closeReason?: MissionCloseReason; supersedes?: string; supersededBy?: string;
+};
 export type MissionDecisionView = {
   workRef: WorkRef; observedAt: number; sourceUpdatedAt?: number;
   coverage: "complete" | "partial" | "unavailable"; reason?: string;
@@ -22,6 +27,50 @@ function timestamp(value: unknown): number | undefined {
   const ms = Date.parse(value); return uint(ms, MAX_TIME) ? ms : undefined;
 }
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const closeReasons = ["answered", "withdrawn", "superseded"] as const;
+const invalidField = Symbol("invalid-decision-field");
+function optionalField(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object" || types.isProxy(value)) return invalidField;
+  const d = Object.getOwnPropertyDescriptor(value, key);
+  return d === undefined ? undefined : "value" in d ? d.value : invalidField;
+}
+function decisionRow(value: unknown, native: boolean): MissionDecisionRow | undefined {
+  const id=own(value,"id"),status=own(value,"status"),created=own(value,"createdAt"),resolved=optionalField(value,"resolvedAt");
+  const createdAt=native?timestamp(created):created;
+  const resolvedAt: number|undefined = resolved===undefined ? undefined : native ? timestamp(resolved) : uint(resolved,MAX_TIME) ? resolved : undefined;
+  const closeReason=optionalField(value,"closeReason"),supersedes=optionalField(value,"supersedes"),supersededBy=optionalField(value,"supersededBy");
+  if(!missionId(id)||(status!=="open"&&status!=="resolved")||!uint(createdAt,MAX_TIME)||(resolved!==undefined&&!uint(resolvedAt,MAX_TIME)))return;
+  if(closeReason!==undefined&&(!closeReasons.some(reason=>reason===closeReason)||status!=="resolved"||resolvedAt===undefined))return;
+  if(supersedes!==undefined&&(!missionId(supersedes)||supersedes===id))return;
+  if(supersededBy!==undefined&&(!missionId(supersededBy)||supersededBy===id||closeReason!=="superseded"))return;
+  if(closeReason==="superseded"&&supersededBy===undefined)return;
+  return {id,status,createdAt,...(resolvedAt===undefined?{}:{resolvedAt:resolvedAt as number}),...(typeof closeReason==="string"?{closeReason:closeReason as MissionCloseReason}:{}),...(typeof supersedes==="string"?{supersedes}:{}),...(typeof supersededBy==="string"?{supersededBy}:{})};
+}
+/** Source rows are checked before sorting/truncation. Wire rows are displayed in
+ * open-first order; only budget-omitted peers may be absent, not contradicted. */
+function validDecisionLinks(rows: readonly MissionDecisionRow[], omitted: boolean, sourceOrder = false): boolean {
+  const byId = new Map(rows.map((row,index)=>[row.id,{row,index}]));
+  if(byId.size!==rows.length)return false;
+  for(const [index,row] of rows.entries()){
+    if(row.supersedes!==undefined){
+      const prior=byId.get(row.supersedes);
+      if(!prior){if(!omitted)return false;}
+      else if(sourceOrder&&prior.index>=index)return false;
+      // Timestamps are not append order (the owner does not require monotonic
+      // clocks). Follow retained links only to reject a cycle, not pick a winner.
+      if(!sourceOrder){
+        const seen=new Set([row.id]);let next:string|undefined=row.supersedes;
+        while(next!==undefined){if(seen.has(next))return false;seen.add(next);next=byId.get(next)?.row.supersedes;}
+      }
+    }
+    if(row.supersededBy!==undefined){
+      const replacement=byId.get(row.supersededBy)?.row;
+      if(!replacement){if(!omitted)return false;}
+      else if(replacement.supersedes!==row.id)return false;
+    }
+  }
+  return true;
+}
 function unavailable(id: string, now: number, reason: string, sourceUpdatedAt?: number): MissionDecisionView {
   return { workRef: {owner:"chenhaoxiang/pi-subagents",kind:"task",key:id}, observedAt:now,
     ...(sourceUpdatedAt === undefined ? {} : {sourceUpdatedAt}), coverage:"unavailable",reason,decisions:[],omitted:0 };
@@ -37,12 +86,9 @@ function project(details: unknown, now: number): Candidate | undefined {
   const fail=(reason:string):Candidate=>({id,time,fingerprint:reason,view:unavailable(id,now,reason,time)});
   if (own(record,"schemaVersion") !== 1 || own(record,"id") !== id || time === undefined) return fail("source-invalid");
   const raw=dense(own(record,"decisions"),512); if(!raw)return fail("source-unavailable");
-  const rows:MissionDecisionRow[]=[],ids=new Set<string>();
-  for(const decision of raw){
-    const key=own(decision,"id"),status=own(decision,"status"),createdAt=timestamp(own(decision,"createdAt")),resolved=own(decision,"resolvedAt"),resolvedAt=resolved===undefined?undefined:timestamp(resolved);
-    if(!missionId(key)||ids.has(key)||(status!=="open"&&status!=="resolved")||createdAt===undefined||(resolved!==undefined&&resolvedAt===undefined))return fail("source-invalid");
-    ids.add(key);rows.push({id:key,status,createdAt,...(resolvedAt===undefined?{}:{resolvedAt})});
-  }
+  const rows:MissionDecisionRow[]=[];
+  for(const decision of raw){const row=decisionRow(decision,true);if(!row)return fail("source-invalid");rows.push(row);}
+  if(!validDecisionLinks(rows,false,true))return fail("source-invalid");
   rows.sort((a,b)=>a.id < b.id ? -1 : a.id === b.id ? 0 : 1);
   const fingerprint=hash(rows),open=rows.filter(row=>row.status==="open").length;
   const ordered=[...rows.filter(row=>row.status==="open"),...rows.filter(row=>row.status==="resolved")];
@@ -65,9 +111,10 @@ export function validMissionDecisions(value: unknown): value is MissionDecisions
     if(!["complete","partial"].some(x=>x===state)||time===undefined||own(m,"reason")!==undefined)return false;
     const o=own(count,"open"),r=own(count,"resolved"),t=own(count,"total");
     if(!uint(o,512)||!uint(r,512)||!uint(t,512)||o+r!==t||rows.length+lost!==t||(state==="complete"&&lost!==0))return false;
-    const rowIds=new Set<string>();let visibleOpen=0;
-    for(const row of rows){const id=own(row,"id"),status=own(row,"status"),resolvedAt=own(row,"resolvedAt");if(!missionId(id)||rowIds.has(id)||(status!=="open"&&status!=="resolved")||!uint(own(row,"createdAt"),MAX_TIME)||(resolvedAt!==undefined&&!uint(resolvedAt,MAX_TIME)))return false;rowIds.add(id);if(status==="open")visibleOpen++;}
-    if(visibleOpen>o||rows.length-visibleOpen>r)return false;
+    const projected:MissionDecisionRow[]=[];
+    for(const value of rows){const row=decisionRow(value,false);if(!row)return false;projected.push(row);}
+    const visibleOpen=projected.filter(row=>row.status==="open").length;
+    if(!validDecisionLinks(projected,lost>0)||visibleOpen>o||rows.length-visibleOpen>r)return false;
   }
   return coverage!=="observed"||(omitted===0&&evicted===0&&missions.every(m=>own(m,"coverage")==="complete"));
 }

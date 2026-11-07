@@ -36,11 +36,11 @@ v1的id与新事件toolCallId原字符串对应；Desk将完整opaque id散列�
 
 ## 原生 mission 决策记录首片
 
-复用已有subagent管理ToolResult.details.mission，不新增Vista端口或owner RPC。只在当前scope开始的成功管理调用上捕获action/显式missionId（mission.create尚无请求id，使用其成功结果自身的missionId），最终tool_execution_end成功且白名单原记录一致才发布。取mission id/schemaVersion/updatedAt及decision id/status/createdAt/resolvedAt；不取正文/选项/建议/答复/私有路径/创建者身份，不改工具结果。sourceUpdatedAt保留原时间；窗口内旧时间忽略，同时间不同决策集合标冲突未知，只有更晚记录解除。observerSeq只是消费顺序，不是原生revision。
+复用已有subagent管理ToolResult.details.mission，不新增Vista端口或owner RPC。只在当前scope开始的成功管理调用上捕获action/显式missionId（mission.create尚无请求id，使用其成功结果自身的missionId），最终tool_execution_end成功且白名单原记录一致才发布。取mission id/schemaVersion/updatedAt及decision id/status/createdAt/resolvedAt、可选closeReason/supersedes/supersededBy；不取正文/选项/建议/答复/私有路径/创建者身份，不改工具结果。sourceUpdatedAt保留原时间；窗口内旧时间忽略，同时间不同决策集合标冲突未知，只有更晚记录解除。observerSeq只是消费顺序，不是原生revision。
 
 最多16份工作记录，每份最多扫描512条、展示32条/2800字节，所有记录5400字节并从既有display预算扣除；当前整份省略与累计窗口移出分别标记，移出数不是去重工作数。稳定保留首次观察顺序，branch/session/compact/reload失效；无数据不填零，不主动mission.show或读store。用户/原Pi自然mission.show成功结果仍可带回同一原件。
 
-UI复用既有工作卡片/来源会话详情；相同显式workRef可归组，但不同reporter不求和/互相覆盖。A已解决B仍未决明确显示；open不产生人工提醒、resolved不授权/验收。新负责人只是新的观察来源，不继承原创建者身份。本片不等于完整问题替换/撤销/迟答或自然自主执行闭环。
+UI复用既有工作卡片/来源会话详情；相同显式workRef可归组，但不同reporter不求和/互相覆盖。A已关闭B仍未决明确显示；原closeReason分别展示答复记录/负责人撤回/实际替换，缺原因保持unknown。supersedes仅替换意向，须旧项原closure才能有supersededBy；正常间隙答复、多候选和后继后来关闭不改写历史。源完整数组先校验先前同record引用与closure匹配再排序省略，显示顺序不冒充append顺序，省略对端不等于dangling。三可选标量进原一致性指纹及原预算，不进私密正文。open不产生人工提醒，resolved不判断答案有效性、不授权/验收。新负责人只是新的观察来源，不继承原创建者身份。本片不等于跨store消息关联或自然自主执行闭环。
 
 ## 原生 Intercom 传输关系
 

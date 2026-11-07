@@ -41,6 +41,29 @@ struct DeskSettings: Codable {
   var displayMode: IslandDisplayMode { IslandDisplayMode(rawValue: islandMode ?? "") ?? .automatic }
   var screenPolicy: String { islandScreen ?? "follow" }
 }
+struct TerminalRouteAccess {
+  var isRunning: () -> Bool
+  var permission: (Bool) async -> String
+  var focus: (String) async throws -> String
+  // Tests can supply a synthetic current peer; nil always uses the real UDS server.
+  var peerInfo: ((UUID, @escaping (PeerProcessInfo?) -> Void) -> Void)? = nil
+  static let live = TerminalRouteAccess(isRunning: { TerminalRouteActivator.isTerminalRunning() }, permission: { await TerminalRouteActivator.permissionStatus(requestConsent: $0) }, focus: { try await TerminalRouteActivator.focus(ttyPath: $0) })
+}
+
+struct TerminalDiagnosticContext: Equatable {
+  let identity: Identity
+  let connection: UUID
+  let route: Route?
+  init(_ session: SessionView) { identity = session.snapshot.identity; connection = session.connectionId; route = session.snapshot.display.route }
+  func matches(_ session: SessionView) -> Bool { self == TerminalDiagnosticContext(session) }
+}
+struct TerminalDiagnosticObservation: Equatable {
+  let context: TerminalDiagnosticContext
+  let message: String
+  let recordedAt: Date
+  let notice: String?
+}
+
 @MainActor final class AppModel: ObservableObject {
   @Published var store = SessionStore() {
     didSet { invalidateSessionProjection(order: Set(oldValue.sessions.keys) != Set(store.sessions.keys)) }
@@ -522,44 +545,107 @@ struct DeskSettings: Codable {
     let process: PeerProcessInfo
     let route: Route
   }
+  // Route facts never contain permission checks or focus outcomes.
   @Published private(set) var routeNotes: [Identity: String] = [:]
+  @Published private(set) var permissionDiagnostics: [Identity: TerminalDiagnosticObservation] = [:]
+  @Published private(set) var locationDiagnostics: [Identity: TerminalDiagnosticObservation] = [:]
+  private var permissionRequests: [Identity: UUID] = [:]
+  private var locationRequests: [Identity: UUID] = [:]
+  private var routingStopped = false
   private var peerRoutes: [Identity: PeerRouteBinding] = [:]
-  private var routeAttempts: [UUID: Identity] = [:]
+  private var routeAttempts: [UUID: (identity: Identity, token: UUID)] = [:]
   private var server: SocketServer!
+  private let terminalAccess: TerminalRouteAccess
+  private func currentRouteContext(_ identity: Identity) -> TerminalDiagnosticContext? {
+    guard !isPreview, !routingStopped, let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity, session.connection == .connected else { return nil }
+    return TerminalDiagnosticContext(session)
+  }
+  private func routeContextIsCurrent(_ context: TerminalDiagnosticContext) -> Bool { currentRouteContext(context.identity) == context }
+  private func clearTerminalDiagnostics(_ identity: Identity) {
+    if let notice = locationDiagnostics[identity]?.notice, sessionNotes[identity] == notice { sessionNotes.removeValue(forKey: identity) }
+    permissionDiagnostics.removeValue(forKey: identity); locationDiagnostics.removeValue(forKey: identity)
+    permissionRequests.removeValue(forKey: identity); locationRequests.removeValue(forKey: identity)
+  }
+  private func reconcileTerminalDiagnostics(previous: SessionView?, current: SessionView) {
+    let identity = current.snapshot.identity
+    if let previous, !TerminalDiagnosticContext(previous).matches(current) {
+      clearTerminalDiagnostics(previous.snapshot.identity)
+      clearTerminalDiagnostics(identity)
+      routeNotes.removeValue(forKey: identity)
+      peerRoutes.removeValue(forKey: identity)
+      routeAttempts.removeValue(forKey: previous.connectionId)
+      routeAttempts.removeValue(forKey: current.connectionId)
+    }
+    // Same bound, still-valid fallback routes can be restored before comparing
+    // scopes. A legacy snapshot omitting its route is not a route replacement.
+    let live = Set(store.sessions.values.map { $0.snapshot.identity })
+    routeNotes = routeNotes.filter { live.contains($0.key) }
+    permissionDiagnostics = permissionDiagnostics.filter { live.contains($0.key) }
+    locationDiagnostics = locationDiagnostics.filter { live.contains($0.key) }
+    permissionRequests = permissionRequests.filter { live.contains($0.key) }
+    locationRequests = locationRequests.filter { live.contains($0.key) }
+    peerRoutes = peerRoutes.filter { live.contains($0.key) }
+    let connections = Set(store.sessions.values.map { $0.connectionId })
+    routeAttempts = routeAttempts.filter { connections.contains($0.key) }
+  }
+  func latestPermissionDiagnostic(for session: SessionView) -> TerminalDiagnosticObservation? {
+    guard let value = permissionDiagnostics[session.snapshot.identity], value.context.matches(session) else { return nil }
+    return value
+  }
+  func latestLocationDiagnostic(for session: SessionView) -> TerminalDiagnosticObservation? {
+    guard let value = locationDiagnostics[session.snapshot.identity], value.context.matches(session) else { return nil }
+    return value
+  }
+  @discardableResult private func recordLocation(_ message: String, notice: String, context: TerminalDiagnosticContext, request: UUID) -> Bool {
+    guard routeContextIsCurrent(context), locationRequests[context.identity] == request else { return false }
+    locationDiagnostics[context.identity] = TerminalDiagnosticObservation(context: context, message: message, recordedAt: Date(), notice: notice)
+    note(notice, for: context.identity)
+    locationRequests.removeValue(forKey: context.identity)
+    return true
+  }
   func checkOriginalRoutePermission(identity: Identity, requestConsent: Bool = false) {
+    guard let context = currentRouteContext(identity) else { return }
+    let request = UUID(); permissionRequests[identity] = request
     Task {
-      let status = await TerminalRouteActivator.permissionStatus(requestConsent: requestConsent)
-      guard store.sessions[identity.sessionKey]?.snapshot.identity == identity else { return }
-      routeNotes[identity] = status
+      defer { if permissionRequests[identity] == request { permissionRequests.removeValue(forKey: identity) } }
+      guard routeContextIsCurrent(context), permissionRequests[identity] == request else { return }
+      let status = await terminalAccess.permission(requestConsent)
+      guard routeContextIsCurrent(context), permissionRequests[identity] == request else { return }
+      permissionDiagnostics[identity] = TerminalDiagnosticObservation(context: context, message: status, recordedAt: Date(), notice: nil)
     }
   }
   func refreshOriginalRoute(identity: Identity) {
     guard let session = store.sessions[identity.sessionKey], session.snapshot.identity == identity else { return }
     routeAttempts.removeValue(forKey: session.connectionId)
-    peerRoutes.removeValue(forKey: identity)
+    // Keep same-connection fallback provenance. Dropping it would turn the next
+    // legacy route-less heartbeat into a false route change and erase diagnostics.
+    // Actual focus still rechecks this bound peer before the live permission call.
     resolveOriginalRoute(session)
   }
   private func resolveOriginalRoute(_ session: SessionView) {
     let identity = session.snapshot.identity, connection = session.connectionId
-    guard !isPreview, session.connection == .connected else { routeNotes[identity] = "会话已断开；不会聚焦最后一次旧路由"; return }
-    if let binding = peerRoutes[identity], binding.connection == connection {
+    guard !isPreview, !routingStopped, session.connection == .connected else { routeNotes[identity] = "会话已断开或观察停止；不会聚焦最后一次旧路由"; return }
+    if let binding = peerRoutes[identity], binding.connection == connection, session.snapshot.display.route == nil || session.snapshot.display.route == binding.route {
       _ = store.updateRoute(binding.route, identity: identity, connection: connection)
       return
     }
-    guard routeAttempts[connection] != identity else { return }
-    if let route = session.snapshot.display.route, route.kind == "terminal", route.terminalApp == "com.apple.Terminal", route.ttyPath != nil { routeNotes[identity] = "桥接已提供精确Terminal TTY"; return }
+    guard routeAttempts[connection]?.identity != identity else { return }
+    if let route = session.snapshot.display.route, route.kind == "terminal", route.terminalApp == "com.apple.Terminal", route.ttyPath != nil { routeNotes[identity] = "当前快照已提供精确Terminal TTY；这不是权限或定位成功"; return }
     if session.snapshot.display.route?.kind == "herdr" && !settings.herdrExecutable.isEmpty { return }
-    routeAttempts[connection] = identity
+    let lookup = UUID(); routeAttempts[connection] = (identity, lookup)
+    let context = TerminalDiagnosticContext(session)
     routeNotes[identity] = "正在从当前连接解析终端；无需重载Pi"
-    server.peerProcessInfo(connection) { [weak self] info in
+    let readPeer = terminalAccess.peerInfo ?? server.peerProcessInfo
+    readPeer(connection) { [weak self] info in
       Task { @MainActor in
-        guard let self, let current = self.store.sessions[identity.sessionKey], current.connectionId == connection, current.snapshot.identity == identity, current.connection == .connected else { return }
+        guard let self, self.routeContextIsCurrent(context), self.routeAttempts[connection]?.token == lookup, let current = self.store.sessions[identity.sessionKey] else { return }
         guard let info else { self.routeNotes[identity] = "无法核验连接进程或出生时间；未采用旧PID"; return }
         guard let tty = info.ttyPath else { self.routeNotes[identity] = "当前Pi进程没有controlling TTY；可能是非终端宿主"; return }
-        guard TerminalRouteActivator.acceptsTTY(tty, terminalRunning: TerminalRouteActivator.isTerminalRunning()) else { self.routeNotes[identity] = "已核验TTY，但Terminal.app未运行；不会自动启动终端"; return }
+        guard TerminalRouteActivator.acceptsTTY(tty, terminalRunning: self.terminalAccess.isRunning()) else { self.routeNotes[identity] = "已核验TTY，但Terminal.app未运行；不会自动启动终端"; return }
         let route = Route(kind: "terminal", sessionId: identity.nativeSessionId, cwd: current.snapshot.display.cwd, ttyPath: tty, terminalApp: "com.apple.Terminal")
+        guard self.store.updateRoute(route, identity: identity, connection: connection) else { self.routeNotes[identity] = "已核验底层TTY；当前桥接路由未被覆盖，仍需核对原入口"; return }
+        self.clearTerminalDiagnostics(identity)
         self.peerRoutes[identity] = PeerRouteBinding(connection: connection, process: info, route: route)
-        _ = self.store.updateRoute(route, identity: identity, connection: connection)
         self.routeNotes[identity] = info.terminalPID == nil ? "已核验TTY；Terminal.app祖先不可从进程树确认，focus时用唯一TTY回读" : "已从当前连接核验Terminal TTY（兼容旧桥接）"
       }
     }
@@ -737,7 +823,8 @@ struct DeskSettings: Codable {
   var activeCount: Int { sessions.filter { Presentation.isExecutionActive($0) }.count }
   var unknownExecutionCount: Int { sessions.filter { Presentation.needsExecutionReview($0) }.count }
   var inputCount: Int { sessions.filter { Presentation.needsInput($0) }.count }
-  init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil, localAssistant: LocalAssistantTransport? = nil, assistantClient: DeskAssistantClient? = nil) {
+  init(notificationClient: NotificationClient? = nil, usageLedger: UsageLedgerClient? = nil, localAssistant: LocalAssistantTransport? = nil, assistantClient: DeskAssistantClient? = nil, terminalAccess: TerminalRouteAccess = .live) {
+    self.terminalAccess = terminalAccess
     self.assistant = assistantClient ?? DeskAssistantClient()
     self.localAssistant = localAssistant ?? LocalAssistantTransport()
     let home = FileManager.default.homeDirectoryForCurrentUser
@@ -845,14 +932,16 @@ struct DeskSettings: Codable {
       }
     }
   }
-  private func consume(_ event: SocketServer.Event) {
+  // Internal test seam for the existing socket callback, not an external API.
+  func consume(_ event: SocketServer.Event) {
     switch event {
     case .record(let record, let connection):
       if record.kind == "assistant-response" {
         guard let session = store.sessions[record.identity.sessionKey], session.snapshot.identity == record.identity, session.connectionId == connection, session.connection == .connected else { return }
         assistant.receive(record); return
       }
-      let wasKnown = store.sessions[record.identity.sessionKey] != nil
+      let previousRouteSession = store.sessions[record.identity.sessionKey]
+      let wasKnown = previousRouteSession != nil
       guard store.apply(record, connection: connection, now: Date().timeIntervalSince1970 * 1000)
       else {
         if record.kind == "hello" { server.close(connection) }
@@ -863,9 +952,14 @@ struct DeskSettings: Codable {
       if record.kind == "action-result", let id = record.requestId, let request = store.requests[id] {
         note(Presentation.action(request.action) + "：" + Presentation.receipt(request.status), for: record.identity)
       }
-      peerRoutes = peerRoutes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
-      routeNotes = routeNotes.filter { $0.key.sessionKey != record.identity.sessionKey || $0.key == record.identity }
-      if let session = store.sessions[record.identity.sessionKey] { resolveOriginalRoute(session) }
+      if let session = store.sessions[record.identity.sessionKey], session.snapshot.display.route == nil,
+        let binding = peerRoutes[record.identity], binding.connection == connection {
+        _ = store.updateRoute(binding.route, identity: record.identity, connection: connection)
+      }
+      if let session = store.sessions[record.identity.sessionKey] {
+        reconcileTerminalDiagnostics(previous: previousRouteSession, current: session)
+        resolveOriginalRoute(session)
+      }
       markVisibleResultViewed(record.identity)
       restoreHidden(record.identity, connection: store.sessions[record.identity.sessionKey]?.connection ?? .connected)
       selectPreferredSession()
@@ -873,7 +967,10 @@ struct DeskSettings: Codable {
     case .disconnected(let id):
       peerRoutes = peerRoutes.filter { $0.value.connection != id }
       routeAttempts.removeValue(forKey: id)
-      for session in sessions where session.connectionId == id { routeNotes[session.snapshot.identity] = "会话已断开；当前连接定位已失效" }
+      for session in sessions where session.connectionId == id {
+        clearTerminalDiagnostics(session.snapshot.identity)
+        routeNotes[session.snapshot.identity] = "会话已断开；当前连接定位已失效"
+      }
       store.disconnect(id)
       for session in sessions where session.connectionId == id { restoreHidden(session.snapshot.identity, connection: session.connection) }
       selectPreferredSession()
@@ -909,6 +1006,7 @@ struct DeskSettings: Codable {
     persistViewState()
   }
   func stop() {
+    routingStopped = true; permissionRequests.removeAll(); locationRequests.removeAll(); routeAttempts.removeAll()
     assistant.stop()
     localAssistant.stop()
     flushViewState()
@@ -987,35 +1085,49 @@ struct DeskSettings: Codable {
     else { actionNote = "没有精确的当前终端/Herdr路由；未打开同名对象或第二个Pi"; return }
     let currentIdentity = s.snapshot.identity
     if route.kind == "terminal" {
-      guard (route.terminalApp == nil || route.terminalApp == "com.apple.Terminal"), let ttyPath = route.ttyPath, TerminalRouteActivator.acceptsTTY(ttyPath, terminalRunning: TerminalRouteActivator.isTerminalRunning()) else {
-        note("原会话暂不可定位，详见定位诊断", for: currentIdentity)
+      let context = TerminalDiagnosticContext(s), request = UUID()
+      locationRequests[currentIdentity] = request
+      guard (route.terminalApp == nil || route.terminalApp == "com.apple.Terminal"), let ttyPath = route.ttyPath, TerminalRouteActivator.acceptsTTY(ttyPath, terminalRunning: terminalAccess.isRunning()) else {
+        recordLocation("原会话TTY或Terminal实例不可用；未发起定位", notice: "原会话暂不可定位，详见定位诊断", context: context, request: request)
         return
       }
       Task {
+        var permissionRequest: UUID?
+        defer {
+          if locationRequests[currentIdentity] == request { locationRequests.removeValue(forKey: currentIdentity) }
+          if let permissionRequest, permissionRequests[currentIdentity] == permissionRequest { permissionRequests.removeValue(forKey: currentIdentity) }
+        }
         do {
-          guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
+          guard routeContextIsCurrent(context), locationRequests[currentIdentity] == request else { return }
           if let binding = peerRoutes[currentIdentity] {
-            let info: PeerProcessInfo? = await withCheckedContinuation { continuation in server.peerProcessInfo(s.connectionId) { continuation.resume(returning: $0) } }
+            let readPeer = terminalAccess.peerInfo ?? server.peerProcessInfo
+            let info: PeerProcessInfo? = await withCheckedContinuation { continuation in readPeer(s.connectionId) { continuation.resume(returning: $0) } }
+            guard routeContextIsCurrent(context), locationRequests[currentIdentity] == request else { return }
             guard let info, info == binding.process else { throw NavigationError.unavailable }
           }
-          // Read-only preflight and actual send now share this App actor and
-          // exact Terminal PID targets. It still is not a focus success proof.
-          let permission = await TerminalRouteActivator.permissionStatus()
-          guard permission == "终端Automation已授权" else {
-            routeNotes[currentIdentity] = permission
-            note("终端定位权限不可用，详见定位诊断", for: currentIdentity)
+          // Always perform the existing live preflight. A displayed previous
+          // permission check is never used as current authorization.
+          let check = UUID(); permissionRequest = check; permissionRequests[currentIdentity] = check
+          let permission = await terminalAccess.permission(false)
+          guard routeContextIsCurrent(context), locationRequests[currentIdentity] == request else { return }
+          guard permissionRequests[currentIdentity] == check else {
+            recordLocation("本次预检已由较新权限检查替代；未发起定位，可按最近检查结果重新操作", notice: "权限检查已有更新，本次未定位", context: context, request: request)
             return
           }
-          guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
-          let result = try await TerminalRouteActivator.focus(ttyPath: ttyPath)
-          guard let current = store.sessions[currentIdentity.sessionKey], current.snapshot.identity == currentIdentity, current.connectionId == s.connectionId, current.connection == .connected else { throw NavigationError.unavailable }
-          routeNotes[currentIdentity] = "Pi Desk同进程AppleEvent已唯一匹配并回读：" + result
-          note("已打开准确的原会话", for: currentIdentity)
-          markResultViewed(currentIdentity)
+          permissionDiagnostics[currentIdentity] = TerminalDiagnosticObservation(context: context, message: permission, recordedAt: Date(), notice: nil)
+          permissionRequests.removeValue(forKey: currentIdentity)
+          guard permission == "终端Automation已授权" else {
+            recordLocation("未发起终端定位；" + permission, notice: "终端定位权限不可用，详见定位诊断", context: context, request: request)
+            return
+          }
+          guard routeContextIsCurrent(context), locationRequests[currentIdentity] == request else { return }
+          let result = try await terminalAccess.focus(ttyPath)
+          guard routeContextIsCurrent(context), locationRequests[currentIdentity] == request else { return }
+          if recordLocation("Pi Desk同进程AppleEvent已唯一匹配并回读：" + result, notice: "已打开准确的原会话", context: context, request: request) { markResultViewed(currentIdentity) }
         } catch {
+          guard routeContextIsCurrent(context), locationRequests[currentIdentity] == request else { return }
           let reason = error is NavigationError ? "当前连接/代际/peer已变化；未宣称旧路由定位成功" : TerminalRouteActivator.diagnostic(error)
-          routeNotes[currentIdentity] = reason
-          note("原会话定位未成功，详见定位诊断", for: currentIdentity)
+          recordLocation(reason, notice: "原会话定位未成功，详见定位诊断", context: context, request: request)
         }
       }
       return

@@ -7,8 +7,8 @@ release_scope: 本机实现与首版已配置路径收口；非正式发行或�
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-06
-verification_scope: 本轮mission决策消费Swift/TS负例和实际管理SDK/Swift UDS；复用已交付W1/W2，不含新GUI/FPS或完整自然自治资格
+verified: 2026-11-07
+verification_scope: 终端诊断AppModel定向合成回归与narrow-UX；复用原mission决策Swift/TS/SDK/UDS证据，不含本轮真实权限/焦点、GUI/FPS或完整自然自治资格
 ---
 
 # 系统架构
@@ -260,6 +260,14 @@ Desk分别校验和比较结果lane、进度lane的seq/fingerprint。same outer 
 工作卡片按workRef归组，默认摘要只在相同完整binding/报告来源/观察epoch内取各lane最新seq。旧accepted不能覆盖同绑定更新unknown；不同head、run、revision、session和reporter不合成总体完成。先前观察折叠可见，不删除失败/unknown；进度较新时旧验收标为较早记录而不重新验真。原head、阶段、等待来源、下一步和各自原时间就近显示，公共范围说明只写一次。handoff保留原建议与未重验限制；CI/Gate缺失不变成人工审批。只有当前原生InputNotice的显式declared workRef能附在已有工作卡，未关联输入继续走原会话，不凭工作存在推导需要用户。
 
 原件导航只复用准确来源会话/终端；opaque resultRef供选择复制，不猜文件路径。仅显式已验证repository与pullRequest可构造固定https://github.com/<repo>/pull/<number>链接。没有自动执行、验收或任意shell按钮。producer显式vista_code_observe的受限读取属于原owner，不由Desk刷新触发；原accepted终态仍走旧result验证，进度source-delivery不替代安装/生产/业务验收。
+
+### 终端诊断的三个独立记录
+
+路由事实、最近权限检查、最近定位结果分别保存在App有界内存中，跟随SessionStore最多64个会话，不入数据库或新协议。普通hello/snapshot只更新路由事实，不抹权限/定位的原消息与原记录时间；TTY存在明确不代表权限或定位成功。权限字符串继续由原TerminalRouteActivator产生，noErr/-1744/-1743/其他错误分支不变；不按截图猜现场OSStatus。
+
+检查与定位以完整identity/runtimeEpoch、当前connectionId及完整route绑定。接入代际/连接/路由变化或断开清理旧记录与在途token；相同identity重连也不继承旧结果。各类操作使用进程内request token，较晚返回的旧请求不能覆盖新检查/新定位，route A→B→A同样不能复用旧token。前后await都核当前作用域，旧允许结果不能对变化后的目标发起focus，旧定位成功也不标新目标已定位。既有同连接有效peer-route可恢复到legacy快照后再比较，避免仅因旧bridge没有原route字段反复清除诊断。
+
+每次显式定位仍调用原live permissionStatus，不读取缓存检查作为权限。诊断UI标“最近”及记录时刻，非实时来源标last-known；检查/刷新只做其原动作，不自动重试定位或请求同意。内部可注入TerminalRouteAccess仅用于隔离回归，默认委托现有系统检查/focus，不新增模型工具、权限API或修改TCC/焦点算法。原Herdr路由算法不扩展。
 
 ## 12. 验证与退出策略
 

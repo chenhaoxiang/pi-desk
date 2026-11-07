@@ -396,7 +396,13 @@ struct SessionDetail: View {
         }.font(.caption)
         DisclosureGroup("原会话定位诊断") {
           VStack(alignment: .leading, spacing: 9) {
+            Text("路由事实").font(.caption.weight(.semibold))
             Text(model.routeNotes[snap.identity] ?? "没有可用的精确路由；不会按名称猜测窗口或启动第二个Pi。")
+            Text("TTY只确认来源；最近记录不代表当前权限，每次定位仍会重新核验。").font(.caption2)
+            if session.connection != .connected { Text("来源已非实时，以下仅为最后记录；连接恢复前不发起定位。").font(.caption2) }
+            TerminalDiagnosticRecordView(title: "最近权限检查", observation: model.latestPermissionDiagnostic(for: session), empty: "当前连接/路由尚无检查记录，可先检查终端权限。")
+            TerminalDiagnosticRecordView(title: "最近定位结果", observation: model.latestLocationDiagnostic(for: session), empty: "当前连接/路由尚无定位结果；路由存在不等于定位成功。")
+            Text("下一步：按权限检查结果处理授权；刷新定位只重新核对路由，不会自动重试定位。").font(.caption2)
             ViewThatFits(in: .horizontal) {
               HStack { routeButtons(session) }
               VStack(alignment: .leading, spacing: 8) { routeButtons(session) }
@@ -415,6 +421,20 @@ struct SessionDetail: View {
     Button("刷新定位") { model.refreshOriginalRoute(identity: session.snapshot.identity) }.disabled(session.connection != .connected)
     Button("检查终端权限") { model.checkOriginalRoutePermission(identity: session.snapshot.identity) }.disabled(session.connection != .connected)
     Button("请求终端定位权限") { model.checkOriginalRoutePermission(identity: session.snapshot.identity, requestConsent: true) }.disabled(session.connection != .connected)
+  }
+}
+private struct TerminalDiagnosticRecordView: View {
+  let title: String
+  let observation: TerminalDiagnosticObservation?
+  let empty: String
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(title).font(.caption.weight(.semibold))
+      if let observation {
+        Text(observation.message).textSelection(.enabled)
+        Text("记录于 " + observation.recordedAt.formatted(date: .abbreviated, time: .standard)).font(.caption2).foregroundStyle(.secondary)
+      } else { Text(empty) }
+    }.frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 struct RunsSection: View {

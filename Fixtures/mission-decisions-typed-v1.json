@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "source": "pi.subagents.mission",
+  "scope": "synthetic-typed-scope",
+  "observerSeq": 6,
+  "coverage": "observed",
+  "missions": [{
+    "workRef": {"owner":"chenhaoxiang/pi-subagents","kind":"task","key":"mission-typed"},
+    "observedAt": 1730000000100,
+    "sourceUpdatedAt": 1730000000000,
+    "coverage": "complete",
+    "counts": {"open":2,"resolved":4,"total":6},
+    "decisions": [
+      {"id":"d2","status":"open","createdAt":1729999999100,"supersedes":"d1"},
+      {"id":"d3","status":"open","createdAt":1729999999200,"supersedes":"d1"},
+      {"id":"d1","status":"resolved","createdAt":1729999999000,"resolvedAt":1730000000000,"closeReason":"superseded","supersededBy":"d3"},
+      {"id":"answered","status":"resolved","createdAt":1729999999000,"resolvedAt":1730000000000,"closeReason":"answered"},
+      {"id":"withdrawn","status":"resolved","createdAt":1729999999000,"resolvedAt":1730000000000,"closeReason":"withdrawn"},
+      {"id":"legacy","status":"resolved","createdAt":1729999999000,"resolvedAt":1730000000000}
+    ],
+    "omitted": 0
+  }],
+  "omittedMissions": 0,
+  "evictedRecords": 0
+}

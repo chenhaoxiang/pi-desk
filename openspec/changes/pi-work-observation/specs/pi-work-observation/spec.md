@@ -52,6 +52,14 @@ Desk SHALL passively project only bounded identity, state and timestamps from su
 - **WHEN** the original record resolves A while B stays open
 - **THEN** Desk displays the partial resolution, without creating a human-input request or claiming user approval, all answers received or task acceptance
 
+#### Scenario: Typed closure and replacement intent
+- **WHEN** finalized original decision rows provide optional closeReason, supersedes or supersededBy
+- **THEN** Desk displays only the supplied answered/withdrawn/superseded closure and exact references; supersedes alone remains intent, legacy resolved rows without a reason remain unclassified, and no answer validity, authorization, human-input alert or task completion is inferred
+
+#### Scenario: Contradictory links or omitted peers
+- **WHEN** typed metadata has malformed IDs, impossible same-record links, closure contradictions or a peer omitted by display limits
+- **THEN** malformed source metadata stays unavailable, while only explicitly budget-omitted peers may be absent from the display; sorted display order is not source append order, and omissions do not promote intent to closure
+
 #### Scenario: Fresh reporter reads the same original
 - **WHEN** another Pi session naturally executes mission.show for the same explicit mission
 - **THEN** Desk displays that successful original under its distinct reporting session; it neither scans the store nor transfers ownership or sums duplicate counts

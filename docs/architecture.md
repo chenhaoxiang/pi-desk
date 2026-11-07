@@ -8,7 +8,7 @@ status: active
 truth_mode: maintained
 created: 2026-10-24
 verified: 2026-11-07
-verification_scope: 终端诊断AppModel定向合成回归与narrow-UX；复用原mission决策Swift/TS/SDK/UDS证据，不含本轮真实权限/焦点、GUI/FPS或完整自然自治资格
+verification_scope: typed决策可选标量的Swift/TS、冻结合同SDK/Swift UDS与旧合同回归；真实producer精确版本及安装分层记录，不含新GUI/FPS或完整自然自治资格
 ---
 
 # 系统架构
@@ -237,11 +237,11 @@ Vista owner冻结memory-only出口`pi-vista:work-observation:query:v1` / `reply:
 
 ### 原生 mission 决策记录（消费端）
 
-Snapshot可选missionDecisions只消费当前scope中成功subagent管理工具的公开ToolResult.details.mission。tool_result先按action与显式missionId匹配（mission.create的id由成功结果建立），最终tool_execution_end成功且白名单指纹/身份/原updatedAt一致后才发布；不返回结果patch。只取原decision id/status/createdAt/resolvedAt及mission id/schemaVersion/updatedAt，不读取或散列title/prompt/options/recommendation/resolution、missionPath或ownerSessionId。无新Vista端口、原件读取、状态库、模型回合或写入动作；初次加载及tree/compact/reload后未采集不等于零。
+Snapshot可选missionDecisions只消费当前scope中成功subagent管理工具的公开ToolResult.details.mission。tool_result先按action与显式missionId匹配（mission.create的id由成功结果建立），最终tool_execution_end成功且白名单指纹/身份/原updatedAt一致后才发布；不返回结果patch。只取原decision id/status/createdAt/resolvedAt、可选closeReason/supersedes/supersededBy及mission id/schemaVersion/updatedAt，不读取或散列title/prompt/options/recommendation/resolution、missionPath或ownerSessionId。无新Vista端口、原件读取、状态库、模型回合或写入动作；初次加载及tree/compact/reload后未采集不等于零。
 
 同一观察窗口保留原updatedAt时间水位：晚到旧记录不能覆盖新记录，相同时间但不同决策集合变为冲突未知，只有更晚原记录可解除；时间不是发明的revision。最多32个在途调用、16份工作记录，单份扫描512条并展示最多32条/2800字节，整体记录5400字节，整体wire仍64KiB。当前预算省略数与累计窗口移出数分开，后者不是去重后的工作数；已移出的身份不保留无限期时间水位。原记录更新不重排已保留工作的首次观察顺序。
 
-同owner/kind/key只归组，各来源快照独立展示而不求和/替换；保留来源连接状态与原更新时间。open只称原记录未决，resolved只称原记录已解决；A解决B未决继续显示部分解决，绝不推导用户批准、全部问题答复或工作验收。无正文/选项/答案的回答UI，也不改变原InputNotice或needsInput。此片不关闭完整替换/撤销/迟答或自主恢复验收。
+同owner/kind/key只归组，各来源快照独立展示而不求和/替换；保留来源连接状态与原更新时间。open仍称原记录未决；resolved仅在原closeReason明确时显示收到答复记录、原负责人撤回或已被替换，legacy缺字段明确关闭原因未提供。supersedes只展示替换意向，不意味着旧项关闭；只有旧项原closeReason=superseded及精确supersededBy才显示实际替换。多个意向不猜赢家，间隙里原项正常答复也不改写意向。源完整数组在排序/省略前校验先前同record引用、closure匹配及无环；DTO显示顺序不是原append顺序，整行省略时对端可能未显示，缺可选字段不从标题/正文补推。标量参与原时间冲突/最终一致性指纹，预算不扩大。无正文/选项/答案的回答UI，不判断答案适用性或用户批准，不改变InputNotice/needsInput、授权或工作验收；此片不等于跨store消息关联或完整自主恢复。
 
 ### Intercom 原生传输关系
 

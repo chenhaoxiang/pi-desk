@@ -8,11 +8,32 @@ import { MissionDecisionObserver, validMissionDecisions } from "../src/mission-d
 const at=1730000000000;
 const open=(id:string,extra:Record<string,unknown>={})=>({id,status:"open",createdAt:new Date(at-100).toISOString(),...extra});
 const closed=(id:string,extra:Record<string,unknown>={})=>({...open(id),status:"resolved",resolvedAt:new Date(at).toISOString(),...extra});
-function apply(observer:MissionDecisionObserver,call:string,rows:unknown[],time=at,finalRows=rows){
-  const details=(decisions:unknown[])=>({mode:"management",missionId:"typed-mission",mission:{schemaVersion:1,id:"typed-mission",updatedAt:new Date(time).toISOString(),decisions}});
+function apply(observer:MissionDecisionObserver,call:string,rows:unknown[],time=at,finalRows=rows,schemaVersion:unknown=1){
+  const details=(decisions:unknown[])=>({mode:"management",missionId:"typed-mission",mission:{schemaVersion,id:"typed-mission",updatedAt:new Date(time).toISOString(),decisions}});
   observer.start(call);observer.result({toolName:"subagent",toolCallId:call,isError:false,input:{action:"mission.show",options:{missionId:"typed-mission"}},details:details(rows)});
   return observer.end(call,{details:details(finalRows)},false,time+10);
 }
+test("schema-1 and fenced schema-2 sources share the existing content-free projection",()=>{
+  const rows=[closed("d1",{closeReason:"superseded",supersededBy:"d2"}),open("d2",{supersedes:"d1",title:"PRIVATE_TITLE"})];
+  const projections=[];
+  for(const version of [1,2]){
+    const observer=new MissionDecisionObserver();apply(observer,"schema-"+version,rows,at,rows,version);
+    const projection=observer.read();
+    assert.equal(projection.version,1,"source schema does not change the wire format");
+    assert.equal(projection.missions[0].coverage,"complete");
+    assert.ok(validMissionDecisions(projection));
+    assert.ok(!JSON.stringify(projection).includes("PRIVATE_TITLE"));
+    projections.push(projection.missions[0]);
+  }
+  assert.deepEqual(projections[1],projections[0]);
+  for(const version of [0,3,"2",null]){
+    const observer=new MissionDecisionObserver();
+    apply(observer,"unsupported",rows,at,rows,version);
+    assert.equal(observer.read().missions[0].coverage,"unavailable");
+    assert.deepEqual(observer.read().missions[0].decisions,[]);
+  }
+});
+
 test("typed metadata preserves replacement intent, actual closure and legacy unknown as distinct facts",()=>{
   const observer=new MissionDecisionObserver();
   apply(observer,"intent",[open("d1"),open("d2",{supersedes:"d1"})]);

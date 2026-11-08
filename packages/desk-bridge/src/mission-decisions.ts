@@ -84,7 +84,8 @@ function project(details: unknown, now: number): Candidate | undefined {
   if (!missionId(id)) return;
   const time=timestamp(own(record,"updatedAt"));
   const fail=(reason:string):Candidate=>({id,time,fingerprint:reason,view:unavailable(id,now,reason,time)});
-  if (own(record,"schemaVersion") !== 1 || own(record,"id") !== id || time === undefined) return fail("source-invalid");
+  const schemaVersion=own(record,"schemaVersion");
+  if ((schemaVersion !== 1 && schemaVersion !== 2) || own(record,"id") !== id || time === undefined) return fail("source-invalid");
   const raw=dense(own(record,"decisions"),512); if(!raw)return fail("source-unavailable");
   const rows:MissionDecisionRow[]=[];
   for(const decision of raw){const row=decisionRow(decision,true);if(!row)return fail("source-invalid");rows.push(row);}

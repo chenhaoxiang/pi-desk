@@ -87,6 +87,9 @@ public enum WorkCardPresentation {
       left.element.lastOriginalTime == right.element.lastOriginalTime ? left.offset < right.offset : left.element.lastOriginalTime > right.element.lastOriginalTime
     }.map { $0.element }
   }
+  public static func needsUserInput(_ group: WorkResultGroup) -> Bool {
+    !group.inputs.isEmpty
+  }
   public static func inputTitle(_ group: WorkResultGroup) -> String {
     group.inputs.isEmpty ? "未观察到关联本工作的原生输入" : "\(group.inputs.count) 项原生输入声明关联此工作"
   }

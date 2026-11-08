@@ -3,16 +3,21 @@ import SwiftUI
 
 struct WorkResultsSection: View {
   @EnvironmentObject var model: AppModel
+  var onlyNeedingInput = false
   var body: some View {
-    if !model.workResults.isEmpty {
+    let groups = onlyNeedingInput ? model.workResults.filter(WorkCardPresentation.needsUserInput) : model.workResults
+    if !groups.isEmpty {
       LazyVStack(alignment: .leading, spacing: 12) {
-        Text("工作记录").font(.headline)
+        Text(onlyNeedingInput ? "输入声明关联的工作" : "工作记录").font(.headline)
         WorkObservationMeaning()
-        if model.workResults.count > 32 { Text("总览显示前32个已观察工作引用；其余见来源会话。").font(.caption2).foregroundStyle(.secondary) }
-        ForEach(Array(model.workResults.prefix(32))) { group in
+        if groups.count > 32 { Text("总览显示前32个已观察工作引用；其余见来源会话。").font(.caption2).foregroundStyle(.secondary) }
+        ForEach(Array(groups.prefix(32))) { group in
           DeskCard { WorkRecordCard(group: group, navigation: true) }
         }
       }
+    } else if onlyNeedingInput && !model.workResults.isEmpty {
+      Text("已采集工作中未观察到声明关联的输入；未绑定输入仍见下方来源会话。未决记录不等于需要你处理。")
+        .font(.caption).foregroundStyle(.secondary)
     }
   }
 }
@@ -49,12 +54,19 @@ private struct WorkRecordCard: View {
         }.font(.caption)
       }
       if !group.decisions.isEmpty {
-        DisclosureGroup("原决策状态（\(group.decisions.count)个来源，不跨来源求和）") {
-          ForEach(group.decisions) { entry in
-            MissionDecisionRecordView(record: entry.record)
-            WorkSourceLine(reporter: entry.reporter, connected: entry.connected, observedAt: entry.record.observedAt, navigation: navigation)
-          }
-        }.font(.caption)
+        Text("原决策状态（\(group.decisions.count)个来源，不跨来源求和）").font(.caption).foregroundStyle(.secondary)
+        ForEach(Array(group.decisions.prefix(2))) { entry in
+          MissionDecisionRecordView(record: entry.record)
+          WorkSourceLine(reporter: entry.reporter, connected: entry.connected, observedAt: entry.record.observedAt, navigation: navigation)
+        }
+        if group.decisions.count > 2 {
+          DisclosureGroup("其他原决策来源（\(group.decisions.count - 2)）") {
+            ForEach(Array(group.decisions.dropFirst(2))) { entry in
+              MissionDecisionRecordView(record: entry.record)
+              WorkSourceLine(reporter: entry.reporter, connected: entry.connected, observedAt: entry.record.observedAt, navigation: navigation)
+            }
+          }.font(.caption)
+        }
       }
       VStack(alignment: .leading, spacing: 5) {
         WorkInfoRow(label: "需你处理", value: WorkCardPresentation.inputTitle(group))

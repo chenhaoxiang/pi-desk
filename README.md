@@ -24,7 +24,7 @@ Pi同源工作台首批正在实施：新增工作总览和原生Todo只读清�
 
 ## 构建和合成检查
 
-需要macOS14+、Swift6工具链和Node22.19+（本机测试Node26）。本轮开发SDK基线为1.5.0；旧宿主缺少新注册表API时只降级AI。下面默认合成检查不需要真实模型密钥、不调用真实provider；指定模型真实验真是独立显式维护动作，不进入CI。
+需要macOS14+、Swift6工具链和Node22.19+（本机测试Node26）。本轮开发SDK基线为1.5.0；旧宿主缺少新注册表API时只降级AI。下面默认合成检查不需要真实模型密钥、不调用真实provider；指定模型真实验真是独立显式维护动作，不进入CI。安装/验证/回退入口直接使用Node对`.ts`的内置类型剥离，不要求先安装`node_modules`或`tsx`；测试、类型检查和native SDK检查仍需先安装开发依赖。
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund
@@ -41,19 +41,21 @@ bash scripts/package-app.sh release
 
 ## 稳定本机安装与回退
 
-先在 clean 的已验证源码上构建 release，再显式安装：
+安装/回退前正常退出本 App，保留未发送草稿；`verify` 只读核验，无需退出。没有可复用产物时，先在 clean 的已验证源码上构建 release，再显式安装：
 
 ```sh
 bash scripts/package-app.sh release
-node --import tsx scripts/install-local.mjs install
-node --import tsx scripts/install-local.mjs verify
+node scripts/install-local.mjs install
+node scripts/install-local.mjs verify
 ```
+
+已有 clean release 产物时，仅在 `BuildInfo` 的 sourceCommit、sourceTree、配置及构建输入与本次已验证版本一致时复用，不因换目录或进入安装阶段重复构建。若本次要求绑定 merge SHA，sourceCommit 必须为该 merge；不能仅凭 tree 相同给旧产物改标。产物缺失或输入变化才补受影响的构建与验证，安装器的签名、字节和 hash 核验始终保留。
 
 - App 固定在当前用户的 `~/Applications/Pi Desk.app`，随附 `Contents/Helpers/PiDeskPeerCheck`；首次可从 Finder 打开，不要求管理员权限，不关闭系统保护。
 - Bridge 固定在 `~/Library/Application Support/PiDesk/bridge/<source-commit>/`，内容按 manifest 校验并设为只读，不指向 worktree/tmp。普通 Pi 通过 `~/.pi/agent/extensions/pi-desk-bridge.ts` 自动发现这一固定入口；无需每次设置 helper 环境变量或 `--extension`。
 - 不改原 `settings.json`、模型、思考档、工具、prompt 或权限；已运行的会话不强制 reload，待新会话/安全自然加载才接入。显式 `--no-extensions` 或原资源排除规则继续生效。
 - `install-current.json` 只记录 App/bridge 安装字节与上一版回退位置，不保存任务、对话或凭据。安装器只替换可核验的本工具已管理版本，未知/被改写的目标保全并报错；更新前退出本 App，Pi 无需退出。
-- 首次安装的回退是退出 App 后运行 `node --import tsx scripts/install-local.mjs rollback`，只移除受管理的 App/入口与当前安装记录；有上一版则恢复其准确字节。已有 Pi 不被停止，旧的固定 bridge 版本保留以免破坏已加载会话。未知目标和其他 Pi 设置/组件不清理。
+- 首次安装的回退是退出 App 后运行 `node scripts/install-local.mjs rollback`，只移除受管理的 App/入口与当前安装记录；有上一版则恢复其准确字节。已有 Pi 不被停止，旧的固定 bridge 版本保留以免破坏已加载会话。未知目标和其他 Pi 设置/组件不清理。
 - Schedule seam 仍只是独立候选，不随 App 偷装/升级全局 Schedule，也不启动常驻监督。未配置/旧 owner 的可选能力按实际 unavailable 展示。
 
 2026-10-30 本机按用户要求只保留上述稳定 App，已清理受管理旧版、构建候选和视觉预览副本，并解除旧 App 回退引用；**该本机安装不再提供旧版 App 一键回退**。这不删除用量库、会话、历史导入备份或旧固定 bridge；已加载 Pi 仍可继续使用旧 bridge。安装器未来更新的默认备份行为未在本轮修改。

@@ -25,6 +25,7 @@ enum WorkCardChecks {
     let successor = stages.first { $0.id.binding.runId == "run-c" }!
     precondition(successor.nextTitle.contains("对账") && successor.nextTitle.contains("尚未重新核验") && source.nextTitle == "核对原始来源")
     precondition(!Presentation.needsInput(session) && group.inputs.isEmpty, "CI/owner-gate/reconcile cannot become human input")
+    precondition(!WorkCardPresentation.needsUserInput(group), "a work card without a declared native input is not an attention item")
     var other = session; other.snapshot.identity.nativeSessionId = "different-reporter"
     let mixed = WorkResultPortfolio.groups([session,other])
     precondition(mixed.count == 1 && WorkCardPresentation.stages(mixed[0]).count == 8)
@@ -52,7 +53,7 @@ enum WorkCardChecks {
     precondition(lastKnown.latestProgress?.connected == false && lastKnown.phaseTitle.hasPrefix("进度待核"))
     question.question?.workRef = progress.observations[0].binding.workRef
     var asking = session; asking.snapshot.inputs = [question]
-    precondition(asking.snapshot.valid && WorkResultPortfolio.groups([asking])[0].inputs.count == 1 && Presentation.needsInput(asking))
+    precondition(asking.snapshot.valid && WorkResultPortfolio.groups([asking])[0].inputs.count == 1 && WorkCardPresentation.needsUserInput(WorkResultPortfolio.groups([asking])[0]) && Presentation.needsInput(asking))
     asking.snapshot.inputs[0].question?.binding = "unbound"; asking.snapshot.inputs[0].question?.workRef = nil; asking.snapshot.inputs[0].question?.workPhase = nil
     precondition(WorkResultPortfolio.groups([asking])[0].inputs.isEmpty, "unbound native inputs stay in the session, not guessed into a work card")
     var unlinked = session; unlinked.snapshot.codeProgress = nil; unlinked.snapshot.governance = nil

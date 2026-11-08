@@ -29,7 +29,7 @@ struct WorkOverviewPage: View {
             Label("\(observed.count)/\(online.count) 在线任务已观察", systemImage: "checklist")
           }.font(.caption).foregroundStyle(.secondary)
         }
-        if filter == "全部" { WorkResultsSection() }
+        if filter == "全部" || filter == "需要你" { WorkResultsSection(onlyNeedingInput: filter == "需要你") }
         Picker("查看工作", selection: $filter) {
           ForEach(["全部", "需要你", "依赖阻塞", "任务未采集"], id: \.self) { Text($0).tag($0) }
         }.pickerStyle(.segmented).labelsHidden()

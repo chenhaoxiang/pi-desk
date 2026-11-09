@@ -8,6 +8,7 @@ public struct SessionView: Sendable {
   public var receivedAt: Double
   public var firstSeenAt: Double
   public var coalesced: Int = 0
+  public var lastObservedActivity: ObservedActivityStamp? = nil
 }
 public struct PendingAction: Identifiable, Sendable {
   public var id: String
@@ -57,9 +58,13 @@ public struct SessionStore {
           retired.removeValue(forKey: old.key)
         }
       }
+      // Keep only the latest original event's display scalars for this exact
+      // host/native-session key. Never put cached activity back in raw snapshot:
+      // a new runtime must not inherit old turn-end/unread/execution evidence.
+      let lastActivity = ObservedActivityStamp(snapshot) ?? sessions[key]?.lastObservedActivity
       sessions[key] = SessionView(
         snapshot: snapshot, connectionId: connection, connection: .connected, receivedAt: now,
-        firstSeenAt: sessions[key]?.firstSeenAt ?? now, coalesced: coalesced)
+        firstSeenAt: sessions[key]?.firstSeenAt ?? now, coalesced: coalesced, lastObservedActivity: lastActivity)
       return true
     }
     guard let current = sessions[key], current.connectionId == connection,

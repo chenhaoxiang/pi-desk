@@ -7,8 +7,8 @@ release_scope: 本机实现与首版已配置路径收口；非正式发行或�
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-07
-verification_scope: typed决策可选标量的Swift/TS、冻结合同SDK/Swift UDS与旧合同回归；真实producer精确版本及安装分层记录，不含新GUI/FPS或完整自然自治资格
+verified: 2026-11-08
+verification_scope: 活动时间连续性Core与App定向回归；原typed决策/SDK/UDS证据沿原版本，新增展示缓存不改原wire/执行证明，不冒称新GUI或业务验收
 ---
 
 # 系统架构
@@ -67,7 +67,7 @@ App断线重连同一epoch，要求全量当前快照并保留monotonic seq；�
 
 ### 3.1.1 体验投影与本机偏好
 
-可选 `activity` 只由真实 agent_start、工具开始/结束、agent_settled 与准确子任务事件更新，包含有界 sequence/kind/at、回合起止及结束序号。心跳、刷新、startup idle 对账不更新该时钟；不转发消息、工具参数或结果。旧 bridge 缺字段显示活动时间未提供，不强制 reload。未查看变化要求当前执行证明、无 pending 且状态为已结束/异常/中止，并按 runtime 的结束序号记已查看，不能代替业务验收或回答输入。
+可选 `activity` 只由真实 agent_start、工具开始/结束、agent_settled 与准确子任务事件更新，包含有界 sequence/kind/at、回合起止及结束序号。心跳、刷新、startup idle 对账不更新该时钟；不转发消息、工具参数或结果。首次接入尚无事件显示尚未观察到活动，不强制reload。SessionView在最多64个已接入会话内仅保存一份原事件展示副本（source identity/at/kind/sequence），合法新快照缺activity时保留原时间；新runtime未报活动时明确上次运行，新的真实事件再替换此展示副本。它不是Codable、没有数据库/新wire/新原件读取，App退出或会话被窗口移出即不保留；不承诺恢复未观察历史。原snapshot绝不回填缓存activity，缺字段仍是缺字段。执行证明、needsInput、未查看结果与验收逻辑只用原实时source，绝不把旧runtime的turnEndSequence带入新runtime；显示最后已知并不代表当前工作推进。未查看变化要求当前执行证明、无pending且状态为已结束/异常/中止，并按runtime的结束序号记已查看，不能代替业务验收或回答输入。
 
 主列表只在用户主动置顶时改变分组，普通状态变化不重排；顶部速览在展开时按输入、异常、未查看变化、置顶、运行选择至多四个在线对象，并冻结该次展开的准确 identities 和槽位；失效 epoch 以等高禁用占位保留，不让后续行或编辑器前移。原会话路由及操作反馈也绑定 identity/epoch，异步回执不跟随当前选中对象漂移。
 

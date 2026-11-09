@@ -7,8 +7,8 @@ release_scope: 原生源码候选与静态设计参照；非完整实机验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-07
-verification_scope: 原决策详情typed关闭与替换标量的Swift/TS/冻结SDK/UDS；原终端诊断和现场证据沿原版本，不冒称新版全控件/VoiceOver/Herdr实机
+verified: 2026-11-08
+verification_scope: 活动时间连续性Core/App回归与来源文案；原typed决策及现场证据沿原版本，不冒称新版全控件/VoiceOver/Herdr实机
 ---
 
 # 交互设计
@@ -69,7 +69,7 @@ verification_scope: 原决策详情typed关闭与替换标量的Swift/TS/冻结S
 ## 6. 空、错与断联
 
 - 空列表：“尚无已接入Pi会话”，提供原扩展加载说明；不扫描历史以填满界面。
-- 断联：保留最后更新时间并置stale；不改成任务失败，不重发管理请求。
+- 断联：保留最后更新时间并置stale；不改成任务失败，不重发管理请求。活动时间用原事件时间继续计算，不因新快照未带activity而变成从未提供；缺字段/断连称最后已知，新运行尚无事件称上次运行活动。从未观察过称尚未观察到活动，详情/tooltip解释原事件绝对时间和来源范围，不用心跳时间补活动。此副本仅当前App会话窗口的展示缓存，不持久化，不影响执行、未读、输入或验收。
 - 新epoch：清掉旧可操作状态，重新获取capabilities；不保留可误点的旧运行对象。
 - 未确认操作：展示unknown和原操作引用，给查询入口；没有证据不启用“自动重试”。
 - Token partial：显示缺失范围/owner未覆盖数量，不写0。

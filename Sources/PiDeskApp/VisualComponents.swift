@@ -89,6 +89,7 @@ struct SessionCard: View {
           Text(metadata).lineLimit(1).truncationMode(.middle)
           Spacer(minLength: 2)
           Text(SessionExperience.timing(session)).lineLimit(1).layoutPriority(1)
+            .help(SessionExperience.activityDetail(session))
         }.font(.system(size: 11)).foregroundStyle(.secondary)
           .help(Presentation.connection(session.connection) + " · " + metadata)
         if island {

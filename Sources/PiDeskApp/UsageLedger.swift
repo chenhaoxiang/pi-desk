@@ -261,6 +261,24 @@ public struct UsageModelTotal: Identifiable, Equatable {
   public var id: String { model }
 }
 
+/// One presentation from the existing aggregate, reused by screen and copy.
+/// No query/store, billing assumption or current-time refresh of original data.
+public enum UsageObservationText {
+  public static func scope(_ usage: UsageAggregate) -> String {
+    usage.range.start.formatted(date: .abbreviated, time: .omitted) + "—" + usage.range.endDate.formatted(date: .abbreviated, time: .omitted)
+      + " · " + usage.timeZoneID + " · " + usage.selectedOrigin.title + " · " + (usage.selectedModel ?? "所有已记录模型")
+  }
+  public static func metric(_ usage: UsageAggregate) -> String {
+    let value = usage.totals.metric(.interaction)
+    return value.known ? "交互Token：" + value.value.formatted() + (value.complete ? "（所选记录字段完整）" : "（已记录下界）") : "交互Token：尚未采集，不按零处理"
+  }
+  public static func freshness(_ usage: UsageAggregate) -> String {
+    let original = usage.refreshedAt.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "未提供"
+    let state = usage.error == nil ? "既有用量记录" : "读取未确认 · 上次保留结果"
+    return state + "；原用量更新时间：" + original
+  }
+  public static func text(_ usage: UsageAggregate) -> String { scope(usage) + "\n" + metric(usage) + "\n" + freshness(usage) }
+}
 public struct UsageAggregate: Equatable {
   public var range: UsageDateRange
   public var timeZoneID: String

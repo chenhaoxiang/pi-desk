@@ -133,6 +133,18 @@ Pi Desk SHALL 根据实际待输入生命周期和有来源的任务状态呈现
 - **WHEN** the same native session loads a new runtime
 - **THEN** a previous runtime's viewed marker does not dismiss a new turn-end observation, and disconnected or missing-current-proof records do not create fresh result reminders
 
+### Requirement: Same-source observation brief
+
+Desk SHALL derive an explicitly bounded current observation brief only from the existing portfolio, native inputs and existing usage aggregate, without new task/state/financial stores, models, background jobs, original reads or inferred business outcomes.
+
+#### Scenario: User reads or copies the current brief
+- **WHEN** the user expands or copies the brief
+- **THEN** original work references, reporter/head/time and stage scope remain explicit, usage retains its original range/source/model and known-data qualification, and missing price/work attribution/business KPI stays unknown rather than estimated ROI or complete daily history
+
+#### Scenario: PR label is ambiguous
+- **WHEN** a work group has one explicit PR or multiple targets
+- **THEN** only the unique explicit target may be a readable label; multiple targets do not choose an inferred winner or task title and complete work references remain accessible
+
 ### Requirement: Notification and input independence
 
 Pi Desk SHALL 让已读、静音、关闭提醒和通知失败只影响表现，不代答、取消原问题或重跑业务；无法可靠接管时保留原通知兜底。
@@ -140,6 +152,10 @@ Pi Desk SHALL 让已读、静音、关闭提醒和通知失败只影响表现，
 #### Scenario: User dismisses an input reminder
 - **WHEN** 用户关闭或静音提醒
 - **THEN** 原Pi问题仍可按原流程处理，提醒动作不等于同意、拒绝或回答
+
+#### Scenario: User temporarily hides one input reminder
+- **WHEN** the user chooses local fifteen-minute deferral
+- **THEN** only that exact source/runtime/input lifecycle display is deferred in bounded App memory, the original input/count/notification/execution remain unchanged, deferred items remain discoverable and restore on expiry or explicit user action, and no new scheduler or persistence source is created
 
 #### Scenario: Notification transport fails
 - **WHEN** 显示或通知交付失败

@@ -57,6 +57,12 @@ public struct WorkStageSummary: Identifiable, Sendable {
   public var hasUncertainty: Bool { latestProgress?.progress.hasSourceProblem == true || latestProgress?.connected == false || latestResult?.result.decision == "reconcile_required" || latestResult?.result.decision == "reportable_terminal" || latestResult?.connected == false }
 }
 public enum WorkCardPresentation {
+  /// An explicit PR label, not an invented task title or inferred repository.
+  public static func displayTitle(_ group: WorkResultGroup) -> String {
+    let targets = Set(group.progress.filter { $0.progress.valid }.map { $0.progress.repository + " #" + String($0.progress.pullRequest) })
+    if targets.count == 1, let target = targets.first { return target }
+    return group.id.kindTitle + " · " + String(group.id.key.prefix(12))
+  }
   public static func stages(_ group: WorkResultGroup) -> [WorkStageSummary] {
     var stages: [WorkStageSummary] = [], slots: [WorkStageKey: Int] = [:], progressTargets: [WorkStageKey: [Int]] = [:]
     for entry in group.progress {

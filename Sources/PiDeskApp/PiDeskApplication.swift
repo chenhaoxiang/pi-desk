@@ -624,9 +624,15 @@ struct TokenPage: View {
     }
   }
 }
+private struct DeferredInputDisplayRow: Identifiable {
+  let source: Identity
+  let input: InputNotice
+  var id: String { source.sessionKey + ":" + source.runtimeEpoch + ":" + input.id + ":" + String(input.startedAt) }
+}
 struct AttentionPage: View {
   @EnvironmentObject var model: AppModel
-  private var inputSessions: [SessionView] { model.attentionSessions.filter { Presentation.needsInput($0) } }
+  private var inputSessions: [SessionView] { model.attentionSessions.filter { s in Presentation.needsInput(s) && s.snapshot.inputs.contains { !model.isInputDeferred($0, identity: s.snapshot.identity) } } }
+  private var deferredInputs: [DeferredInputDisplayRow] { model.sessions.filter { $0.connection == .connected }.flatMap { s in s.snapshot.inputs.filter { model.isInputDeferred($0, identity: s.snapshot.identity) }.map { DeferredInputDisplayRow(source: s.snapshot.identity, input: $0) } } }
   private var failedSessions: [SessionView] { model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) == .failed } }
   private var resultSessions: [SessionView] { model.attentionSessions.filter { !Presentation.needsInput($0) && Presentation.executionState($0) != .failed && model.hasUnreadResult($0) } }
   var body: some View {
@@ -635,6 +641,15 @@ struct AttentionPage: View {
         Toggle("本次静音提醒", isOn: $model.muted).font(.caption)
           .help("只改变提醒表现，不回答或取消原问题")
         AttentionSection(title: "等待你输入", sessions: inputSessions)
+        if !deferredInputs.isEmpty {
+          DisclosureGroup("\(deferredInputs.count) 项暂收起；原问题仍在等待") {
+            ForEach(deferredInputs) { item in
+              Text("来源 " + item.source.nativeSessionId.suffix(8) + " · 原输入 " + item.input.id.suffix(8)).font(.caption)
+            }
+            Button("恢复显示这些提醒") { model.restoreDeferredInputs() }
+            Text("仅本次App内暂收起15分钟，届时恢复显示；不回答、关闭或暂停原问题，不改变原生通知。").font(.caption2).foregroundStyle(.secondary)
+          }
+        }
         AttentionSection(title: "本轮出现异常", sessions: failedSessions)
         AttentionSection(title: "本轮结束，有新变化", sessions: resultSessions)
         if model.attentionCount == 0 {
@@ -668,7 +683,17 @@ private struct AttentionSessionCard: View {
         HStack { Text(model.sessionTitle(session)).font(.headline).lineLimit(2); Spacer(); StatusPill(status: Presentation.status(session)) }
         Text(Presentation.activity(session)).font(.subheadline)
         Text(SessionExperience.timing(session)).font(.caption).foregroundStyle(.secondary)
-        if Presentation.needsInput(session) { QuestionWorkContextView(inputs: session.snapshot.inputs, omitted: session.snapshot.omitted?["inputs"] ?? 0) }
+        if Presentation.needsInput(session) {
+          let visible = session.snapshot.inputs.filter { !model.isInputDeferred($0, identity: session.snapshot.identity) }
+          ForEach(visible) { input in
+            VStack(alignment: .leading, spacing: 5) {
+              Text("原输入 · " + input.id.suffix(8)).font(.caption)
+              QuestionWorkContextView(inputs: [input], omitted: session.snapshot.omitted?["inputs"] ?? 0)
+              Button("暂收起15分钟") { model.deferInputDisplay(input, identity: session.snapshot.identity) }.font(.caption)
+                .help("仅本App暂收起此条提醒；原输入仍开放，不延后业务、自动回复或取消问题")
+            }
+          }
+        }
         actions
       }
     }

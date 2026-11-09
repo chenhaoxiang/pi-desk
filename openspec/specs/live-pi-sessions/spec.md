@@ -103,7 +103,15 @@ Pi Desk SHALL provide a compact/expanded native top-edge panel as a daily visual
 
 #### Scenario: Heartbeat without work events
 - **WHEN** a transport heartbeat or startup idle reconciliation arrives without a lifecycle or tool event
-- **THEN** the last-activity clock and turn-end identity do not advance; old bridges without optional event metadata explicitly show unknown timing rather than a fabricated fresh activity
+- **THEN** the last-activity clock and turn-end identity do not advance; a first-time source without optional event metadata shows that activity has not yet been observed, rather than fabricating fresh activity
+
+#### Scenario: Known activity absent from a later snapshot
+- **WHEN** an enrolled session with an observed original activity later omits the optional activity field
+- **THEN** the bounded display view retains the original timestamp with last-known scope, without patching the raw snapshot or advancing execution, unread-result or acceptance state
+
+#### Scenario: Runtime replacement without a new event
+- **WHEN** the same exact host/native-session starts a new runtime epoch without activity
+- **THEN** any retained activity is explicitly labelled as a previous runtime until a new original event arrives; it SHALL NOT be transferred to another session or used as the new runtime turn-end identity
 
 #### Scenario: Synthetic visual preview
 - **WHEN** explicit synthetic preview records are supplied for native screenshot checks

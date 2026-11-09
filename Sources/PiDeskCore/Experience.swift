@@ -21,6 +21,19 @@ public struct SessionActivity: Codable, Equatable, Sendable {
   }
 }
 
+/// A bounded display copy of an event already received from Pi. Not Codable:
+/// it is neither a second source nor execution/turn-end/acceptance evidence.
+public struct ObservedActivityStamp: Equatable, Sendable {
+  public let source: Identity
+  public let at: Double
+  public let kind: String
+  public let sequence: Int
+  public init?(_ snapshot: Snapshot) {
+    guard snapshot.identity.valid, let activity = snapshot.activity, activity.valid else { return nil }
+    source = snapshot.identity; at = activity.at; kind = activity.kind; sequence = activity.sequence
+  }
+}
+
 public struct SpotlightSlot: Identifiable, Sendable {
   public let identity: Identity
   public let session: SessionView?
@@ -40,9 +53,29 @@ public enum SessionExperience {
   public static func timing(_ session: SessionView, now: Date = Date()) -> String {
     if Presentation.needsInput(session), let start = session.snapshot.inputs.map(\.startedAt).min(),
       let duration = elapsed(since: start, now: now) { return duration == "刚刚" ? "刚开始等待输入" : "等待输入 " + duration }
-    guard let activity = session.snapshot.activity, activity.valid else { return "活动时间未提供" }
-    guard let duration = elapsed(since: activity.at, now: now) else { return "活动时间待核" }
+    guard let stamp = activityStamp(session) else { return "尚未观察到活动" }
+    guard let duration = elapsed(since: stamp.at, now: now) else { return "活动时间待核" }
+    let previousRuntime = stamp.source != session.snapshot.identity
+    let lastKnown = previousRuntime || session.snapshot.activity == nil || session.connection != .connected
+    if previousRuntime { return duration == "刚刚" ? "上次运行刚有活动" : "上次运行活动 " + duration + "前" }
+    if lastKnown { return duration == "刚刚" ? "最后已知刚有活动" : "最后已知活动 " + duration + "前" }
     return duration == "刚刚" ? "刚有活动" : "最近活动 " + duration + "前"
+  }
+  public static func activityStamp(_ session: SessionView) -> ObservedActivityStamp? {
+    if let current = ObservedActivityStamp(session.snapshot) { return current }
+    guard let retained = session.lastObservedActivity, retained.source.sessionKey == session.snapshot.identity.sessionKey else { return nil }
+    return retained
+  }
+  public static func activityDetail(_ session: SessionView) -> String {
+    guard let stamp = activityStamp(session) else { return "本次接入尚未收到原生活动事件；状态接收时间不是活动时间。" }
+    let date = Date(timeIntervalSince1970: stamp.at / 1000).formatted(date: .abbreviated, time: .standard)
+    let event = ["agent-start":"回合开始", "tool-start":"工具开始", "tool-end":"工具结束", "agent-settled":"回合结束", "input":"输入等待变化", "child-update":"子任务更新"][stamp.kind] ?? "原生活动"
+    let scope: String
+    if stamp.source != session.snapshot.identity { scope = "上次运行记录；当前运行尚未报告活动，不代表工作停止" }
+    else if session.snapshot.activity == nil { scope = "本次快照未带活动字段，保留已接收原记录" }
+    else if session.connection != .connected { scope = "来源已非实时，保留最后原记录" }
+    else { scope = "原生事件；不是心跳、任务进展或业务验收" }
+    return event + " · " + date + " · " + scope
   }
   public static func title(_ snapshot: Snapshot) -> String {
     let name = snapshot.display.name.trimmingCharacters(in: .whitespacesAndNewlines)

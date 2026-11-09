@@ -24,6 +24,7 @@ import PiDeskCore
       } catch {}
     }
     try StateChecks.run(record.snapshot!)
+    try ActivityContinuityChecks.run(record.snapshot!)
     try TodoChecks.run(record.snapshot!, root: root)
     try GovernanceChecks.run(record.snapshot!, root: root)
     try QuestionLinkChecks.run(record.snapshot!, root: root)

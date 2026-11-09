@@ -199,6 +199,10 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     model.store = resultStore
     let result = model.store.sessions[snapshot.identity.sessionKey]!
     precondition(model.hasUnreadResult(result) && model.unreadResultCount == 1)
+    var onlyDisplayHistory = result; onlyDisplayHistory.snapshot.activity = nil
+    precondition(SessionExperience.activityStamp(onlyDisplayHistory) != nil && !model.hasUnreadResult(onlyDisplayHistory), "cached event time is not current unread-result evidence")
+    onlyDisplayHistory.snapshot.identity.runtimeEpoch = "activity-replacement-epoch"
+    precondition(SessionExperience.activityDetail(onlyDisplayHistory).contains("当前运行尚未报告活动") && !model.hasUnreadResult(onlyDisplayHistory))
     var pendingResult = result; pendingResult.snapshot.pending = true
     precondition(!model.hasUnreadResult(pendingResult), "pending continuation cannot become a completed-result reminder")
     var missingProof = result; missingProof.snapshot.executionObservation = nil
@@ -227,8 +231,8 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     model.note("new runtime note", for: newEpoch.identity)
     model.note("must not land", for: snapshot.identity)
     precondition(model.sessionNotes[newEpoch.identity] == "new runtime note" && model.sessionNotes[snapshot.identity] == nil)
-    var legacyTiming = result; legacyTiming.snapshot.activity = nil
-    precondition(SessionExperience.timing(legacyTiming) == "活动时间未提供")
+    var legacyTiming = result; legacyTiming.snapshot.activity = nil; legacyTiming.lastObservedActivity = nil
+    precondition(SessionExperience.timing(legacyTiming) == "尚未观察到活动")
     precondition(SessionExperience.elapsed(since: -1) == nil)
     var invalidActivity = resultSnapshot.activity!; invalidActivity.turnEndSequence = 99
     precondition(!invalidActivity.valid)

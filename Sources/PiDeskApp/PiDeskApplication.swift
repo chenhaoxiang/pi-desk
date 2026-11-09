@@ -371,6 +371,8 @@ struct SessionDetail: View {
         DeskCard {
           VStack(alignment: .leading, spacing: 10) {
             HStack { Text("当前活动").font(.subheadline.weight(.semibold)); Spacer(); Text(SessionExperience.timing(session)).font(.caption).foregroundStyle(.secondary) }
+            Text(SessionExperience.activityDetail(session)).font(.caption2).foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
             Label(Presentation.activity(session), systemImage: snap.tools.isEmpty ? "circle.dotted" : "wrench.and.screwdriver")
               .font(.system(size: 14, weight: .medium)).fixedSize(horizontal: false, vertical: true)
             if let started = snap.activity?.turnStartedAt {

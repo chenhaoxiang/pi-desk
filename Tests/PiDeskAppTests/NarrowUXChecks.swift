@@ -244,6 +244,21 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     precondition(model.store.apply(WireRecord(kind: "snapshot", identity: snapshot.identity, snapshot: snapshot), connection: liveConnection, now: snapshot.observedAt))
     precondition(model.activeCount == 0 && model.visibleSessions.isEmpty && model.inputCount == 1, "one waiting session is excluded from active count/filter even with multiple prompts")
     model.sessionFilter = "需输入"; precondition(model.visibleSessions.count == model.inputCount)
+    let originalInputs = model.store.sessions[snapshot.identity.sessionKey]!.snapshot.inputs
+    let requestCountBeforeDeferral = model.store.requests.count, postsBeforeDeferral = fake.posts
+    let localNow = Date(timeIntervalSince1970: 2000)
+    model.deferInputDisplay(originalInputs[0], identity: snapshot.identity, now: localNow)
+    precondition(model.isInputDeferred(originalInputs[0], identity: snapshot.identity, now: localNow.addingTimeInterval(899)))
+    precondition(!model.isInputDeferred(originalInputs[0], identity: snapshot.identity, now: localNow.addingTimeInterval(901)))
+    precondition(!model.isInputDeferred(originalInputs[1], identity: snapshot.identity, now: localNow))
+    var otherSource = snapshot.identity; otherSource.runtimeEpoch = "other-deferred-runtime"
+    precondition(!model.isInputDeferred(originalInputs[0], identity: otherSource, now: localNow))
+    var reopened = originalInputs[0]; reopened.startedAt += 1
+    precondition(!model.isInputDeferred(reopened, identity: snapshot.identity, now: localNow), "same ID reopened lifecycle must not inherit local deferral")
+    var metadataOnly = originalInputs[0]; metadataOnly.question = nil
+    precondition(model.isInputDeferred(metadataOnly, identity: snapshot.identity, now: localNow), "optional metadata changes do not reset display preference")
+    precondition(model.store.sessions[snapshot.identity.sessionKey]!.snapshot.inputs == originalInputs && model.inputCount == 1 && model.store.requests.count == requestCountBeforeDeferral && fake.posts == postsBeforeDeferral, "deferral is not input closure, permission, native notification suppression or business IO")
+    model.restoreDeferredInputs(); precondition(!model.isInputDeferred(originalInputs[0], identity: snapshot.identity, now: localNow))
     model.store.disconnect(liveConnection)
     precondition(model.inputCount == 0 && model.visibleSessions.isEmpty, "disconnected old input cannot count as a current input")
     model.store = SessionStore(); model.sessionFilter = "在线"

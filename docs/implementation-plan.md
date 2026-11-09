@@ -44,6 +44,10 @@ PR12问题关联已合入fe12d5a并安装build78，固定原producer0.1.4-fork.6
 
 本轮只改已有工作卡与必要旁路：原result/handoff不能装日常进度，故与Vista冻结原snapshot.codeProgress可选v1侧car，旧lane及query不变；进度永不accepted，work.refresh仍只读内存。UI摘要按完整binding/source/epoch选原最新事实，旧head/unknown历史可展开；显式PR/head/阶段/等待来源/原验收/原下一步与真正原输入分层，未知字段明说未提供。源码、固定producer+合成原件的SDK/SwiftUDS、真实本工程及新runtime/有限CI、独立审查/唯一安装分别验真。用户测试期仍直接覆盖唯一App，不起第二预览、不强reload旧业务。
 
+### 2026-11-09 可信度→阅读→同源观察增量
+
+用户批准先修活动时间连续性，再优化既有阅读和运行观察，且唯一业务事实源不可改变。PR22已实现原事件有界展示副本，不回填原snapshot/不落库；后续原work卡仅以唯一明确PR标识改善阅读，输入优先，完整原引用不丢。提醒暂收起只是App内存表现偏好，当前观察摘要只派生同一Portfolio/InputNotice，既有用量复用同一UsageLedger aggregate，不创建第二业务数据源。无工作价格/phase起点/业务KPI就未知，不冒称全天交付率或经营收益。源码/原生回归/合成SwiftUI渲染/共享PR/唯一安装分层交付，不重载其他Pi或为样本新造Schedule。
+
 ## 1. 当前交付与下一次实施起点
 
 架构基线为 `e561305`，原专属树已完成实现和交付。2026-10-30 本机收口基线为 `506174c` / 0.1.0 build46；源码 PR #1、#2、#3 均已合并，准确 main CI 已通过。通知和 VoiceOver 采用 2026-10-29 用户明确确认的现场结果，保留各自原版本边界，不将历史结果改标为新 build 全面重验。当前本机已配置路径收口，Herdr 正向实机仍未验证；源码、本机安装与正式发行分开。

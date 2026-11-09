@@ -7,8 +7,8 @@ release_scope: 本机实现与首版已配置路径收口；非正式发行或�
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-08
-verification_scope: 活动时间连续性Core与App定向回归；原typed决策/SDK/UDS证据沿原版本，新增展示缓存不改原wire/执行证明，不冒称新GUI或业务验收
+verified: 2026-11-09
+verification_scope: 原工作标识、提醒暂收起与同源观察摘要的Core/App/原生回归和SwiftUI合成渲染；不增加wire/数据库，不冒称真实业务KPI或全GUI验收
 ---
 
 # 系统架构
@@ -260,6 +260,12 @@ Desk分别校验和比较结果lane、进度lane的seq/fingerprint。same outer 
 工作卡片按workRef归组，默认摘要只在相同完整binding/报告来源/观察epoch内取各lane最新seq。旧accepted不能覆盖同绑定更新unknown；不同head、run、revision、session和reporter不合成总体完成。先前观察折叠可见，不删除失败/unknown；进度较新时旧验收标为较早记录而不重新验真。原head、阶段、等待来源、下一步和各自原时间就近显示，公共范围说明只写一次。handoff保留原建议与未重验限制；CI/Gate缺失不变成人工审批。只有当前原生InputNotice的显式declared workRef能附在已有工作卡，未关联输入继续走原会话，不凭工作存在推导需要用户。
 
 原件导航只复用准确来源会话/终端；opaque resultRef供选择复制，不猜文件路径。仅显式已验证repository与pullRequest可构造固定https://github.com/<repo>/pull/<number>链接。没有自动执行、验收或任意shell按钮。producer显式vista_code_observe的受限读取属于原owner，不由Desk刷新触发；原accepted终态仍走旧result验证，进度source-delivery不替代安装/生产/业务验收。
+
+### 同源阅读与运行观察
+
+可读工作标识只用同一WorkResultGroup中唯一明确PR（多个PR不选赢家，回退原引用），不是任务标题；完整workRef保留可展开，真实关联输入前置。当前观察小结只从已有Portfolio/SessionView派生，列当前已收到工作引用、真实原生输入和已知等待起点，摘要保留source/head/原观察时间/原阶段范围。它不是全天履历、交付率或新业务事实，不触发reader、模型、历史扫描或定时日报。用量小结直接复用现有UsageLedger已读aggregate的日期/时区/source/model及known/complete口径，不能按当前session表分摊到work，也不根据Token猜价格/收益；缺经营来源仍未知。没有新的经营数据库、API或观测producer。
+
+提醒的“暂收起15分钟”只在最多128个本App内存偏好中存hash-free准确来源/输入生命周期key和截止时间，不存正文/答案/任务状态、不持久化；原InputNotice仍开放，全部输入计数/原生通知/执行均不变。新epoch/新startedAt不会继承暂收起，metadata单独变化不重置。既有App刷新可见时恢复显示，不新建Schedule、后台worker或额外系统通知；App重启即恢复原提醒。
 
 ### 终端诊断的三个独立记录
 

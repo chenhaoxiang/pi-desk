@@ -35,8 +35,21 @@ private struct WorkRecordCard: View {
     let stages = WorkCardPresentation.stages(group)
     VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
-        Text(group.id.kindTitle + " · " + group.id.key).font(.headline).textSelection(.enabled)
-        Text(group.id.owner + " · 原任务标题未提供").font(.caption2).foregroundStyle(.secondary)
+        Text(WorkCardPresentation.displayTitle(group)).font(.headline).textSelection(.enabled)
+        Text("明确关联的原记录 · 原任务标题未提供").font(.caption2).foregroundStyle(.secondary)
+        DisclosureGroup("完整工作引用") {
+          Text(group.id.kindTitle + " · " + group.id.key)
+          Text(group.id.owner)
+        }.font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+      }
+      VStack(alignment: .leading, spacing: 5) {
+        WorkInfoRow(label: "需你处理", value: WorkCardPresentation.inputTitle(group))
+        if !group.inputs.isEmpty {
+          Text("仅原生输入等待；工作关联由调用方声明，不是已认证的任务归属。").font(.caption2).foregroundStyle(.secondary)
+          ForEach(group.inputs) { entry in
+            WorkSourceLine(reporter: entry.reporter, connected: true, observedAt: entry.input.startedAt, navigation: true)
+          }
+        }
       }
       if stages.isEmpty { WorkInfoRow(label: "阶段 / PR", value: "原来源未提供") }
       ForEach(Array(stages.prefix(4))) { stage in WorkStageCard(stage: stage, navigation: navigation) }
@@ -68,15 +81,7 @@ private struct WorkRecordCard: View {
           }.font(.caption)
         }
       }
-      VStack(alignment: .leading, spacing: 5) {
-        WorkInfoRow(label: "需你处理", value: WorkCardPresentation.inputTitle(group))
-        if !group.inputs.isEmpty {
-          Text("仅原生输入等待；工作关联由调用方声明，不是已认证的任务归属。").font(.caption2).foregroundStyle(.secondary)
-          ForEach(group.inputs) { entry in
-            WorkSourceLine(reporter: entry.reporter, connected: true, observedAt: entry.input.startedAt, navigation: true)
-          }
-        }
-      }
+
     }
   }
 }
@@ -108,7 +113,7 @@ private struct WorkStageCard: View {
             .accessibilityLabel("打开原PR " + progress.progress.repository + " " + String(progress.progress.pullRequest))
         }.font(.caption)
       } else { WorkInfoRow(label: "关联 PR", value: "原来源未提供") }
-      WorkInfoRow(label: "记录 head", value: binding.headSha.map { String($0.prefix(12)) } ?? "未提供")
+      Text("head · " + (binding.headSha.map { String($0.prefix(12)) } ?? "未提供")).font(.caption2.monospaced()).foregroundStyle(.secondary)
       WorkInfoRow(label: "等待来源", value: stage.waitTitle)
       WorkInfoRow(label: "原已验记录", value: stage.resultTitle)
       WorkInfoRow(label: "原下一步", value: stage.nextTitle)

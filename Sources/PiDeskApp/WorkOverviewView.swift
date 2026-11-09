@@ -32,6 +32,7 @@ struct WorkOverviewPage: View {
         Picker("查看工作", selection: $filter) {
           ForEach(["全部", "需要你", "依赖阻塞", "任务未采集"], id: \.self) { Text($0).tag($0) }
         }.pickerStyle(.segmented).labelsHidden()
+        if filter == "全部" { WorkObservationBriefView() }
         if filter == "全部" || filter == "需要你" { WorkResultsSection(onlyNeedingInput: filter == "需要你") }
         if sessions.isEmpty {
           ContentUnavailableView("尚无已接入 Pi", systemImage: "rectangle.stack", description: Text("等待正常接入。不启动新执行器、不扫描历史来填充看板。"))

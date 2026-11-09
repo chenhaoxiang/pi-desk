@@ -93,6 +93,8 @@ struct TerminalDiagnosticObservation: Equatable {
   let localAssistant: LocalAssistantTransport
   @Published var groupFilter = "" { didSet { visibleSessionCache = nil } }
   @Published private(set) var sessionNotes: [Identity: String] = [:]
+  // Local, ephemeral display preference only. The original InputNotice stays open.
+  @Published private(set) var deferredInputUntil: [String: Date] = [:]
   static let sessionFilters = ["在线", "运行中", "需关注", "需输入", "已置顶", "全部", "断连"]
   @Published var usagePreset: UsagePreset = .today
   @Published var usageMetric: UsageMetric = .interaction
@@ -1195,6 +1197,23 @@ struct TerminalDiagnosticObservation: Equatable {
       settings = value
     }
   }
+  private func deferredInputKey(_ input: InputNotice, identity: Identity) -> String {
+    identity.sessionKey + ":" + identity.runtimeEpoch + ":" + input.id + ":" + String(input.startedAt)
+  }
+  func isInputDeferred(_ input: InputNotice, identity: Identity, now: Date = Date()) -> Bool {
+    guard !deferredInputUntil.isEmpty else { return false }
+    return (deferredInputUntil[deferredInputKey(input, identity: identity)] ?? .distantPast) > now
+  }
+  func deferInputDisplay(_ input: InputNotice, identity: Identity, now: Date = Date()) {
+    guard let source = store.sessions[identity.sessionKey], source.snapshot.identity == identity, source.connection == .connected,
+      source.snapshot.inputs.contains(where: { $0.id == input.id && $0.startedAt == input.startedAt }) else { return }
+    let active = Set(sessions.flatMap { s in s.snapshot.inputs.map { deferredInputKey($0, identity: s.snapshot.identity) } })
+    deferredInputUntil = deferredInputUntil.filter { $0.value > now && active.contains($0.key) }
+    let key = deferredInputKey(input, identity: identity)
+    guard deferredInputUntil[key] != nil || deferredInputUntil.count < 128 else { return }
+    deferredInputUntil[key] = now.addingTimeInterval(15 * 60)
+  }
+  func restoreDeferredInputs() { deferredInputUntil.removeAll() }
   func markRead(_ input: InputNotice, session: Identity) {
     if dismissed.count >= 1024 { dismissed.removeAll() }
     dismissed.insert(session.runtimeEpoch + ":" + input.id)

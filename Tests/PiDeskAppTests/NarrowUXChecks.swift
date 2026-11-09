@@ -72,6 +72,11 @@ private final class FakeTerminal: TerminalRouteActivator.Client {
     var chosenDisplay = legacySettings; chosenDisplay.islandMode = IslandDisplayMode.menuOnly.rawValue; chosenDisplay.islandScreen = "display:999999"
     let restoredDisplay = try JSONDecoder().decode(DeskSettings.self, from: JSONEncoder().encode(chosenDisplay))
     precondition(restoredDisplay.displayMode == .menuOnly && restoredDisplay.screenPolicy == "display:999999", "screen choice remains saved even when a display is unavailable")
+    var failedUsage = UsageAggregate.empty(.make(preset: .today))
+    failedUsage.totals.add(input: 10, output: 20, cacheRead: 0, cacheWrite: 0)
+    failedUsage.error = "synthetic-reader-error"; failedUsage.refreshedAt = Date(timeIntervalSince1970: 1_730_000_000)
+    let failedText = UsageObservationText.text(failedUsage)
+    precondition(failedText.contains("读取未确认") && failedText.contains("上次保留") && failedText.contains("原用量更新时间"), "copy and screen must preserve old usage on read failure with its original time")
     let notificationError = NSError(domain: "UNErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "PRIVATE_NOTIFICATION_DETAIL"])
     precondition(AppNotificationDiagnostic.detail(notificationError) == "（UNErrorDomain:1）")
     precondition(AppNotificationDiagnostic.detail(NSError(domain: "PRIVATE_DOMAIN", code: 1)).isEmpty)

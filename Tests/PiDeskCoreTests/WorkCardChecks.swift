@@ -66,6 +66,15 @@ enum WorkCardChecks {
     precondition(briefText.contains("不是全天履历") && briefText.contains("head") && briefText.contains("原观察") && briefText.contains("来源"))
     let repeated = WorkObservationBrief(groups: mixed, sessions: [session, other])
     precondition(repeated.observedWorkCount == 1 && repeated.reportingSourceCount == 2 && repeated.nativeInputCount == 0, "work refs may group, independent reporter scope is not whole-business completion")
+    var resultOnly = session; resultOnly.snapshot.codeProgress = nil
+    let freshText = WorkObservationBrief(groups: WorkResultPortfolio.groups([resultOnly]), sessions: [resultOnly]).text(now: Date(timeIntervalSince1970: 1_730_000_000))
+    resultOnly.snapshot.governance?.stale = true
+    let staleText = WorkObservationBrief(groups: WorkResultPortfolio.groups([resultOnly]), sessions: [resultOnly]).text(now: Date(timeIntervalSince1970: 1_730_000_000))
+    precondition(freshText != staleText && staleText.contains("结果来源非实时"), "copied result-only summary must preserve source-stale qualification")
+    var decisionOnly = session; decisionOnly.snapshot.codeProgress = nil; decisionOnly.snapshot.governance = nil
+    decisionOnly.snapshot.missionDecisions = try JSONDecoder().decode(MissionDecisionsProjection.self, from: Data(contentsOf: root.appendingPathComponent("Fixtures/mission-decisions-v1.json")))
+    let decisionText = WorkObservationBrief(groups: WorkResultPortfolio.groups([decisionOnly]), sessions: [decisionOnly]).text()
+    precondition(decisionText.contains("原决策来源") && decisionText.contains(String(decisionOnly.snapshot.identity.nativeSessionId.suffix(8))) && decisionText.contains("原观察"), "decision-only records keep reporter and original observation")
     var offline = asking; offline.connection = .disconnected
     let offlineBrief = WorkObservationBrief(groups: WorkResultPortfolio.groups([offline]), sessions: [offline])
     precondition(offlineBrief.nativeInputCount == 0 && offlineBrief.oldestInputAt == nil)

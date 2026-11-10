@@ -5,6 +5,22 @@
 
 ## Requirements
 
+### Requirement: Current session record scalars and single-ledger time usage
+
+Desk SHALL derive optional startup record time and compaction count only from the public, already-loaded current Pi SessionManager metadata. Reads SHALL be async/bounded, source-fenced, scalar-only and explicit about coverage; they SHALL NOT open historical files, read private text, fabricate lifecycle/turn-end events, or run on heartbeat/work.refresh.
+
+#### Scenario: Existing session attaches before a new turn
+- **WHEN** the loaded current Pi already has message or compaction records but has emitted no activity event in this bridge runtime
+- **THEN** Desk can display the original scalar record time and compaction count without a model request; original activity/turn-end/input authority is unchanged, and unavailable metadata is not zero
+
+#### Scenario: Same native session usage across four windows
+- **WHEN** a selected session requests lifetime recorded total, today, last7 or last30 including today
+- **THEN** one existing UsageLedger filters the original host/native-session hash and excludes canonical aliases, uses input/output/cacheRead/cacheWrite once and explicit local calendar boundaries, never partitions a global aggregate or adds owner totals; unrecorded periods are unknown and partial fields remain lower bounds
+
+#### Scenario: Old running bridge has no native scalar field
+- **WHEN** an existing runtime has neither lifecycle activity nor the new optional metadata
+- **THEN** existing deduplicated assistant usage receipt time may serve as an explicitly labelled recorded-interaction fallback without changing the raw snapshot; if none exists the activity remains unknown, and Desk does not force a business-session reload
+
 ### Requirement: Explicit usage scope and source
 
 Pi Desk SHALL 为Token显示来源、统计范围、窗口及覆盖，区分接入后观察、owner原生会话累计和上下文占用，不把缺失数据当作0或全历史账单。

@@ -29,8 +29,18 @@ public struct ObservedActivityStamp: Equatable, Sendable {
   public let kind: String
   public let sequence: Int
   public init?(_ snapshot: Snapshot) {
-    guard snapshot.identity.valid, let activity = snapshot.activity, activity.valid else { return nil }
-    source = snapshot.identity; at = activity.at; kind = activity.kind; sequence = activity.sequence
+    guard snapshot.identity.valid else { return nil }
+    let activity = snapshot.activity.flatMap { $0.valid ? $0 : nil }
+    let native = snapshot.nativeSessionMeta.flatMap { $0.valid ? $0 : nil }
+    if let activity {
+      source = snapshot.identity; at = activity.at; kind = activity.kind; sequence = activity.sequence
+    } else if let recordAt = native?.lastActivityAt {
+      source = snapshot.identity; at = recordAt; kind = "record-" + (native?.lastActivityKind ?? "message"); sequence = 0
+    } else { return nil }
+  }
+  public init?(identity: Identity, recordedInteractionAt: Double) {
+    guard identity.valid, MissionDecisionRow.time(recordedInteractionAt) else { return nil }
+    source = identity; at = recordedInteractionAt; kind = "recorded-usage"; sequence = 0
   }
 }
 
@@ -56,26 +66,30 @@ public enum SessionExperience {
     guard let stamp = activityStamp(session) else { return "尚未观察到活动" }
     guard let duration = elapsed(since: stamp.at, now: now) else { return "活动时间待核" }
     let previousRuntime = stamp.source != session.snapshot.identity
-    let lastKnown = previousRuntime || session.snapshot.activity == nil || session.connection != .connected
+    let lastKnown = previousRuntime || (session.snapshot.activity == nil && session.snapshot.nativeSessionMeta?.lastActivityAt == nil && stamp.kind != "recorded-usage") || session.connection != .connected
     if previousRuntime { return duration == "刚刚" ? "上次运行刚有活动" : "上次运行活动 " + duration + "前" }
     if lastKnown { return duration == "刚刚" ? "最后已知刚有活动" : "最后已知活动 " + duration + "前" }
+    if stamp.kind == "recorded-usage" { return duration == "刚刚" ? "刚有已记录交互" : "最后已记录交互 " + duration + "前" }
+    if stamp.kind.hasPrefix("record-") { return duration == "刚刚" ? "刚有原生记录" : "最近原生记录 " + duration + "前" }
     return duration == "刚刚" ? "刚有活动" : "最近活动 " + duration + "前"
   }
   public static func activityStamp(_ session: SessionView) -> ObservedActivityStamp? {
-    if let current = ObservedActivityStamp(session.snapshot) { return current }
-    guard let retained = session.lastObservedActivity, retained.source.sessionKey == session.snapshot.identity.sessionKey else { return nil }
-    return retained
+    let current = ObservedActivityStamp(session.snapshot)
+    guard let retained = session.lastObservedActivity, retained.source.sessionKey == session.snapshot.identity.sessionKey else { return current }
+    return current ?? retained
   }
   public static func activityDetail(_ session: SessionView) -> String {
     guard let stamp = activityStamp(session) else { return "本次接入尚未收到原生活动事件；状态接收时间不是活动时间。" }
     let date = Date(timeIntervalSince1970: stamp.at / 1000).formatted(date: .abbreviated, time: .standard)
-    let event = ["agent-start":"回合开始", "tool-start":"工具开始", "tool-end":"工具结束", "agent-settled":"回合结束", "input":"输入等待变化", "child-update":"子任务更新"][stamp.kind] ?? "原生活动"
+    let event = ["agent-start":"回合开始", "tool-start":"工具开始", "tool-end":"工具结束", "agent-settled":"回合结束", "input":"输入等待变化", "child-update":"子任务更新", "record-message":"原生消息记录", "record-compaction":"原生压缩记录", "record-branch_summary":"原生分支摘要记录", "recorded-usage":"原用量库已记录模型调用"][stamp.kind] ?? "原生活动"
     let scope: String
     if stamp.source != session.snapshot.identity { scope = "上次运行记录；当前运行尚未报告活动，不代表工作停止" }
+    else if stamp.kind == "recorded-usage" { scope = "同一用量记录的原交互时间；非心跳或完整活动履历" }
+    else if stamp.kind.hasPrefix("record-") { scope = "当前Pi已加载记录的原时间，可含分支/继承记录；不代表当前执行或任务完成" }
     else if session.snapshot.activity == nil { scope = "本次快照未带活动字段，保留已接收原记录" }
     else if session.connection != .connected { scope = "来源已非实时，保留最后原记录" }
     else { scope = "原生事件；不是心跳、任务进展或业务验收" }
-    return event + " · " + date + " · " + scope
+    return event + " · " + date + " · " + scope + (session.connection == .connected ? "" : " · 来源已非实时")
   }
   public static func title(_ snapshot: Snapshot) -> String {
     let name = snapshot.display.name.trimmingCharacters(in: .whitespacesAndNewlines)

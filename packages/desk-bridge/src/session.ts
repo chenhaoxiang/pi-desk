@@ -40,6 +40,7 @@ import { GovernanceClient } from "./governance-client.ts";
 import { QuestionObserver, WORK_QUESTION_EVENT } from "./question-observer.ts";
 import { MissionDecisionObserver } from "./mission-decisions.ts";
 import { IntercomRelationsObserver } from "./intercom-observer.ts";
+import { SessionRecordObserver } from "./session-records.ts";
 export type TransportLike = Pick<
 	BridgeTransport,
 	"start" | "publish" | "reply" | "close" | "dropped"
@@ -98,6 +99,7 @@ export class DeskSession {
 	private missionDecisions = new MissionDecisionObserver();
 	private intercomRelations = new IntercomRelationsObserver();
 	private bridgeSource: string;
+	private nativeRecords: SessionRecordObserver;
 	private terminalRoute?: NonNullable<Snapshot["display"]["route"]>;
 	constructor(
 		private pi: ExtensionAPI,
@@ -119,6 +121,7 @@ export class DeskSession {
 			runtimeEpoch: randomUUID(),
 		};
 		if (!safeId(identity.nativeSessionId)) throw Error("invalid-session-id");
+		this.nativeRecords = new SessionRecordObserver(identity.nativeSessionId, () => { if (!this.stopped) { this.snapshot.nativeSessionMeta = this.nativeRecords.read(); this.changed(); } }, this.now);
 		this.questions = new QuestionObserver(identity.nativeSessionId, this.inputs, this.now);
 		this.usage = new AttachmentUsage(identity.runtimeEpoch, this.now());
 		const header = typeof ctx.sessionManager.getHeader === "function" ? ctx.sessionManager.getHeader() : null;
@@ -161,6 +164,7 @@ export class DeskSession {
 			executionObservation: initialExecutionObservation,
 			todo: this.todo.read(),
 			missionDecisions: this.missionDecisions.read(),
+			nativeSessionMeta: this.nativeRecords.read(),
 			intercomRelations: this.intercomRelations.read(),
 			childCoverage: "unknown",
 			tools: [],
@@ -301,6 +305,7 @@ export class DeskSession {
 			this.observationDrops++;
 		}
 		this.deferRefresh(false);
+		this.nativeRecords.sample(ctx.sessionManager, true);
 	}
 	private completedChild(raw: unknown) {
 		if (!object(raw) || (raw.sessionId !== undefined && raw.sessionId !== this.snapshot.identity.nativeSessionId)) return;
@@ -477,6 +482,7 @@ export class DeskSession {
 		this.todo.reset(); this.snapshot.todo = this.todo.read();
 		this.missionDecisions.reset(); this.snapshot.missionDecisions = this.missionDecisions.read();
 		this.intercomRelations.reset(); this.snapshot.intercomRelations = this.intercomRelations.read(); this.observe(ctx);
+		this.nativeRecords.sample(ctx.sessionManager, true);
 	}
 	todoResult(id: string, result: unknown, failed: boolean) {
 		if (this.stopped) return;
@@ -512,6 +518,7 @@ export class DeskSession {
 	}
 	turn(event: TurnEndEvent, ctx: ExtensionContext) {
 		this.observe(ctx);
+		this.nativeRecords.sample(ctx.sessionManager);
 		if (event.message.role === "assistant") {
 			const entry = usageEntry(this.snapshot.identity, event.messageEntryId, event.message, this.now());
 			if (entry) {
@@ -890,12 +897,14 @@ export class DeskSession {
 			this.changed();
 			if (r.query === "work.refresh" || r.query === "refresh") this.governance.refresh();
 			if (r.query === "work.refresh") return;
+			if (this.ctx && r.query === "refresh") this.nativeRecords.sample(this.ctx.sessionManager, true);
 			this.deferRefresh(r.query === "usage.refresh", true, r.target?.owner === "subagents" ? r.target.runId : undefined, r.query);
 		}
 	}
 	close() {
 		if (this.stopped) return;
 		this.stopped = true;
+		this.nativeRecords.close();
 		this.todo.reset();
 		this.governance.close();
 		this.questions.close();

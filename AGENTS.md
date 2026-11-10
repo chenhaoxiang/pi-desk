@@ -5,7 +5,7 @@ Pi Desk 是 Pi-only 的可视化与管理客户端。先读 `README.md` 与下�
 ## 不变边界
 
 - 不降低现有 AI 自动化：基础观察/管理不新增审批、默认模型调用或执行前置，不改业务Pi模型/思考档/工具，UI不拥有Pi生命周期。用户显式AI分析可选择独立模型，不能成为原工作前置或新状态权威。
-- 默认不扫描历史会话。仅按用户2026-10-26明确授权执行一次canonical Pi JSONL的usage元数据preview/apply/rollback；不保存/输出正文、原路径或凭据，不扩为常驻扫描或历史对话UI。原JSONL只读。用户本轮另批准可选AI辅助，并明确选择按需使用所选已接入运行当前分支的有界近期用户/助手文本；只走公开只读SessionManager接口，不读思考/工具原文/凭据文件、不扫描历史目录。提供预览/移除和疑似敏感值阻断，不承诺识别所有敏感内容。其余历史读取不在默认范围，不抓终端文本推断成功、不复制profile。
+- 默认不扫描历史会话。仅按用户2026-10-26明确授权执行一次canonical Pi JSONL的usage元数据preview/apply/rollback；不保存/输出正文、原路径或凭据，不扩为常驻扫描或历史对话UI。原JSONL只读。用户本轮另批准可选AI辅助，并明确选择按需使用所选已接入运行当前分支的有界近期用户/助手文本；只走公开只读SessionManager接口，不读思考/工具原文/凭据文件、不扫描历史目录。提供预览/移除和疑似敏感值阻断，不承诺识别所有敏感内容。用户另明确要求当前会话压缩次数与既有活动：可从该已加载SessionManager的公开getEntries只投影记录type/timestamp与消息role，异步有界、不得触及message.content/summary/custom data或打开其他会话文件；这不是全文/历史目录读取授权。其余历史读取不在默认范围，不抓终端文本推断成功、不复制profile。
 - 用户已批准同源工作观测：原生成功Todo的结构化任务标题/当前步骤/状态/依赖/owner只作有界白名单内存投影，不读params/description/任意metadata/工具正文，不把completed或owner标签当验收/认证；无公开当前snapshot入口就显示未采集，clear/branch/session变更失效旧投影。
 - 观察处理只取必要标量并入有界队列；不等待 socket/网络，不在主路径启动同步子进程，不返回修改输入/输出/continuation 的结果。
 - 管理请求通过具体 owner 公共接口；不能提供任意 shell、任意工具执行或内部状态文件修改接口。

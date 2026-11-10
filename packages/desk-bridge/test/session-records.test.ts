@@ -1,0 +1,50 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { DeskSession } from "../src/session.ts";
+import { SessionRecordObserver, validNativeSessionMeta } from "../src/session-records.ts";
+import type { RecordV1 } from "../src/protocol.ts";
+const at=1730000000000;
+const tick=()=>new Promise<void>(resolve=>setImmediate(resolve));
+test("startup projects current native record scalars without a new turn or private text",async()=>{
+  let privateReads=0,reads=0;const bus=new EventEmitter();let hello!:()=>RecordV1;
+  const message={role:"user"};Object.defineProperty(message,"content",{get(){privateReads++;throw Error("private content");}});
+  const compaction={id:"e2",type:"compaction",parentId:"e1",timestamp:new Date(at-30000).toISOString()};Object.defineProperty(compaction,"summary",{get(){privateReads++;throw Error("private summary");}});
+  const entries=[{id:"e1",type:"message",timestamp:new Date(at-60000).toISOString(),message},compaction,{id:"e3",type:"custom",timestamp:new Date(at-1000).toISOString()}];
+  const pi={getSessionName:()=>"Synthetic session",getThinkingLevel:()=>"max",events:{on(n:string,f:(v:unknown)=>void){bus.on(n,f);return()=>bus.off(n,f);},emit(n:string,v:unknown){bus.emit(n,v);}}} as unknown as ExtensionAPI;
+  const ctx={mode:"rpc",cwd:"/fixture",isIdle:()=>true,hasPendingMessages:()=>false,sessionManager:{getSessionId:()=>"native-records-fixture",getLeafId:()=>"e3",getEntries(){reads++;return entries;},getHeader:()=>({timestamp:new Date(at-90000).toISOString()})}} as unknown as ExtensionContext;
+  const session=new DeskSession(pi,ctx,{usageRoot:false,now:()=>at,captureTerminalRoute:async()=>({kind:"unavailable",sessionId:"native-records-fixture"}),transport:h=>{hello=h;return{start(){},close(){},publish(){},reply(){},dropped:0};}});
+  try{
+    for(let i=0;i<5;i++)await tick();
+    const snapshot=hello().snapshot!;
+    assert.equal(snapshot.nativeSessionMeta?.compactions,1,"known native compaction must be available before a new model turn");
+    assert.equal(snapshot.nativeSessionMeta?.lastActivityAt,at-30000);
+    assert.equal(snapshot.activity,undefined,"startup metadata must not invent a lifecycle event/turn end");
+    assert.equal(privateReads,0);const before=reads;
+    hello();hello();assert.equal(reads,before,"heartbeats do not rescan native records");
+  }finally{session.close();}
+});
+test("native records are scope-fenced, incremental, bounded and explicit about unavailable/partial",async()=>{
+  let sid="own",leaf="a",changes=0,reads=0;
+  const entries:unknown[]=[{type:"compaction",timestamp:new Date(at).toISOString()}];
+  const manager={getSessionId:()=>sid,getLeafId:()=>leaf,getEntries:()=>{reads++;return entries;}};
+  const observer=new SessionRecordObserver(sid,()=>changes++,()=>at);
+  observer.sample(manager);for(let i=0;i<4;i++)await tick();
+  assert.equal(observer.read().compactions,1);assert(validNativeSessionMeta(observer.read()));
+  observer.sample(manager);await tick();assert.equal(reads,1);
+  entries.push({type:"compaction",timestamp:new Date(at+1000).toISOString()});leaf="b";observer.sample(manager);for(let i=0;i<4;i++)await tick();
+  assert.equal(observer.read().compactions,2,"incremental append does not count first entry twice");
+  entries.push({type:"message",message:{role:"user"},timestamp:new Date(at-5000).toISOString()});leaf="clock-backward";
+  observer.sample(manager);for(let i=0;i<4;i++)await tick();assert.equal(observer.read().lastActivityAt,at-5000,"native append order, not wall-clock maximum, identifies the newest record");
+  entries.push({type:"custom",get content(){throw Error("not metadata");}});leaf="c";
+  observer.sample(manager);sid="foreign";for(let i=0;i<4;i++)await tick();
+  assert.equal(observer.read().coverage,"unavailable");assert.equal(observer.read().compactions,undefined);
+  const before=changes;observer.sample(manager);observer.close();for(let i=0;i<4;i++)await tick();assert(changes<=before+1);
+  const large=new SessionRecordObserver("large",()=>{},()=>at);
+  const many=new Array(100001).fill({type:"compaction",timestamp:new Date(at).toISOString()});
+  large.sample({getSessionId:()=>"large",getLeafId:()=>"max",getEntries:()=>many});
+  for(let i=0;i<1000&&large.read().coverage==="not-observed";i++)await tick();
+  assert.equal(large.read().coverage,"partial");assert.equal(large.read().scanned,100000);assert.equal(large.read().compactions,100000);assert(validNativeSessionMeta(large.read()));large.close();
+  for(const value of [null,{}, {version:1,source:"pi.session-manager",scope:"current-session-records",coverage:"observed",observedAt:at,records:2,scanned:1,compactions:0}])assert.equal(validNativeSessionMeta(value),false);
+});

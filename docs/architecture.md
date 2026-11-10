@@ -7,8 +7,8 @@ release_scope: 本机实现与首版已配置路径收口；非正式发行或�
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-09
-verification_scope: 原工作标识、提醒暂收起与同源观察摘要的Core/App/原生回归和SwiftUI合成渲染；不增加wire/数据库，不冒称真实业务KPI或全GUI验收
+verified: 2026-11-10
+verification_scope: 会话原生记录标量及同一usage索引的会话分时查询，Node/Swift和隔离真实SDK到SwiftUDS；非全历史账单或全GUI认证
 ---
 
 # 系统架构
@@ -57,6 +57,12 @@ openspec/changes/archive/2026-10-30-pi-desk-v0-1/  # 首版实施历史
 
 ## 3. 状态与身份
 
+当前会话可选 `nativeSessionMeta`（v1/source=pi.session-manager/scope=current-session-records）只在原Pi中读公开ReadonlySessionManager.getEntries的已加载记录；只取type/timestamp/message.role，绝不读content/summary/custom data，也不打开历史文件。startup、turn_end、compact/tree及显式refresh后异步处理，每片256记录，每轮最多100000；超长初始读取最近100000条并始终标下界，后续追加增量计数；心跳和work.refresh不触发。按原append顺序取最后消息/压缩/分支摘要时间，不假定时钟单调；原记录compaction计数包含所有已加载分支及可能继承项，超过上限或坏标量标partial，缺API/错session标unavailable，不伪称零或独立新增。关闭/换session阻止晚回调，DTO只有固定白名单标量并预留原64KiB帧预算，raw activity及turnEndSequence仍不制造。
+
+活动展示优先原生命周期事件，其次该可选原生记录；旧桥接缺两者时可用同一UsageLedger已去重assistant receipt的原时间作明确的“最后已记录交互”fallback。只查询现有最多64个会话hash（SHA256(localHostId+":"+nativeSessionId)），不建新来源、不写原snapshot、不改执行/未读/输入。查询失败保旧显示；成功空结果可清已回滚receipt的fallback，不清原生事件。活动显示缓存仍只限既有SessionView。
+
+会话详情的累计/今日/含今日7天/含今日30天只查询原usage_entries并沿用usage_aliases排除继承重复项，四桶相加、不再加reasoning/cacheWrite1h，不合并原owner累计或分摊全局。日期按明确本机IANA日历，30天不等本月；固定全部模型和实时/历史去重合计，不跟全局筛选变。无记录为unknown、缺桶字段显示下界、完整历史/附加消耗未确认；压缩次数不证明压缩usage已采集。既有utility队列/数据库只增(session,occurred)索引和内存单项generation/minute缓存，不新增用量库、持久业务模型或常驻扫描。准确identity/request闭包拒绝换代晚回调；错误保旧原refreshedAt。App可正常更新，旧业务Pi不会强reload，新增producer字段只在相应运行正常加载后生效。
+
 ### 3.1 身份
 
 主键是 `{localHostId, nativeSessionId, runtimeEpoch}`，epoch每次扩展runtime替换生成。会话名/cwd/PID/tty只作显示或经过验证的跳转信息，不作控制身份。
@@ -67,7 +73,7 @@ App断线重连同一epoch，要求全量当前快照并保留monotonic seq；�
 
 ### 3.1.1 体验投影与本机偏好
 
-可选 `activity` 只由真实 agent_start、工具开始/结束、agent_settled 与准确子任务事件更新，包含有界 sequence/kind/at、回合起止及结束序号。心跳、刷新、startup idle 对账不更新该时钟；不转发消息、工具参数或结果。首次接入尚无事件显示尚未观察到活动，不强制reload。SessionView在最多64个已接入会话内仅保存一份原事件展示副本（source identity/at/kind/sequence），合法新快照缺activity时保留原时间；新runtime未报活动时明确上次运行，新的真实事件再替换此展示副本。它不是Codable、没有数据库/新wire/新原件读取，App退出或会话被窗口移出即不保留；不承诺恢复未观察历史。原snapshot绝不回填缓存activity，缺字段仍是缺字段。执行证明、needsInput、未查看结果与验收逻辑只用原实时source，绝不把旧runtime的turnEndSequence带入新runtime；显示最后已知并不代表当前工作推进。未查看变化要求当前执行证明、无pending且状态为已结束/异常/中止，并按runtime的结束序号记已查看，不能代替业务验收或回答输入。
+可选 `activity` 只由真实 agent_start、工具开始/结束、agent_settled 与准确子任务事件更新，包含有界 sequence/kind/at、回合起止及结束序号。心跳、刷新、startup idle 对账不更新该时钟；不转发消息、工具参数或结果。首次接入无生命周期事件时按上文只读元数据/既有usage fallback；两者也缺才显示尚未观察到活动，不强制reload。SessionView在最多64个已接入会话内仅保存一份原事件展示副本（source identity/at/kind/sequence），合法新快照缺activity时保留原时间；新runtime未报活动时明确上次运行，新的真实事件再替换此展示副本。此展示副本不是Codable、不落数据库，新增原生标量读取与可选wire只按上文范围，App退出或会话被窗口移出即不保留；不承诺恢复未观察历史。原snapshot绝不回填缓存activity，缺字段仍是缺字段。执行证明、needsInput、未查看结果与验收逻辑只用原实时source，绝不把旧runtime的turnEndSequence带入新runtime；显示最后已知并不代表当前工作推进。未查看变化要求当前执行证明、无pending且状态为已结束/异常/中止，并按runtime的结束序号记已查看，不能代替业务验收或回答输入。
 
 主列表只在用户主动置顶时改变分组，普通状态变化不重排；顶部速览在展开时按输入、异常、未查看变化、置顶、运行选择至多四个在线对象，并冻结该次展开的准确 identities 和槽位；失效 epoch 以等高禁用占位保留，不让后续行或编辑器前移。原会话路由及操作反馈也绑定 identity/epoch，异步回执不跟随当前选中对象漂移。
 

@@ -6,6 +6,7 @@ import { validQuestionWorkLink, type QuestionWorkLink } from "./question-project
 import { validMissionDecisions, type MissionDecisionsProjection } from "./mission-decisions.ts";
 import { validIntercomRelations, type IntercomRelationsProjection } from "./intercom-observer.ts";
 import { validCodeProgress, type CodeProgressProjection } from "./code-progress.ts";
+import { validNativeSessionMeta, type NativeSessionMeta } from "./session-records.ts";
 
 export const VERSION = 1;
 export const MAX_FRAME = 65_536;
@@ -145,6 +146,7 @@ export type Snapshot = {
 	pending: boolean | null;
 	executionObservation?: ExecutionObservation;
 	activity?: SessionActivity;
+	nativeSessionMeta?: NativeSessionMeta;
 	todo?: TodoProjection;
 	/** Optional consumer projection; Pi Vista/owner remains authoritative. */
 	governance?: GovernanceProjection;
@@ -252,6 +254,7 @@ export function validate(v: unknown): asserts v is RecordV1 {
 			throw new Error("invalid-snapshot");
 		if (display.createdAtSource !== undefined && !["session-header", "unknown"].includes(String(display.createdAtSource)))
 			throw new Error("invalid-snapshot");
+		if (s.nativeSessionMeta !== undefined && !validNativeSessionMeta(s.nativeSessionMeta)) throw new Error("invalid-native-session-meta");
 		if (s.todo !== undefined && !validTodoProjection(s.todo)) throw new Error("invalid-todo");
 		if (s.governance !== undefined && !validGovernanceProjection(s.governance)) throw new Error("invalid-governance");
 		if (s.missionDecisions !== undefined && !validMissionDecisions(s.missionDecisions)) throw new Error("invalid-mission-decisions");

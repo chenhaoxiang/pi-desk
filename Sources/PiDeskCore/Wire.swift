@@ -192,6 +192,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var pending: Bool?
   public var executionObservation: ExecutionObservation?
   public var activity: SessionActivity?
+  public var nativeSessionMeta: NativeSessionMeta?
   public var todo: TodoProjection?
   public var governance: GovernanceProjection?
   public var missionDecisions: MissionDecisionsProjection?
@@ -214,6 +215,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
       && (display.createdAtSource == nil || ["session-header", "unknown"].contains(display.createdAtSource!))
       && (executionObservation == nil || executionObservation!.valid)
       && (activity == nil || activity!.valid)
+      && (nativeSessionMeta == nil || nativeSessionMeta!.valid)
       && (todo == nil || todo!.valid)
       && (governance == nil || governance!.valid)
       && (missionDecisions == nil || missionDecisions!.valid)

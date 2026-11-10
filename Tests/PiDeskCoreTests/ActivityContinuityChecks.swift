@@ -2,8 +2,43 @@ import Foundation
 import PiDeskCore
 
 enum ActivityContinuityChecks {
+  static func checkNativeAndLedger(_ base: Snapshot, at: Double) throws {
+    var snapshot=base; snapshot.seq=1; snapshot.activity=nil
+    let meta=try JSONDecoder().decode(NativeSessionMeta.self,from:Data("{\"version\":1,\"source\":\"pi.session-manager\",\"scope\":\"current-session-records\",\"coverage\":\"observed\",\"observedAt\":\(at),\"records\":10,\"scanned\":10,\"compactions\":2,\"lastActivityAt\":\(at-60_000),\"lastActivityKind\":\"message\"}".utf8))
+    precondition(meta.valid && meta.compactionTitle.contains("2 次")); snapshot.nativeSessionMeta=meta
+    let connection=UUID(); var store=SessionStore()
+    precondition(store.apply(WireRecord(kind:"hello",identity:snapshot.identity,snapshot:snapshot),connection:connection,now:at))
+    let first=store.sessions[snapshot.identity.sessionKey]!
+    precondition(SessionExperience.timing(first,now:Date(timeIntervalSince1970:at/1000))=="最近原生记录 1分钟前","startup native metadata fills an already-active session before a new turn")
+    precondition(first.snapshot.activity==nil && first.snapshot.activity?.turnEndSequence==nil,"native metadata must not make unread/execution events")
+    precondition(SessionExperience.activityDetail(first).contains("原生消息记录"))
+    snapshot.nativeSessionMeta?.lastActivityAt=at+60_000
+    snapshot.activity=SessionActivity(sequence:1,kind:"tool-end",at:at-180_000);snapshot.seq+=1
+    precondition(store.apply(WireRecord(kind:"snapshot",identity:snapshot.identity,snapshot:snapshot),connection:connection,now:at))
+    precondition(SessionExperience.timing(store.sessions[snapshot.identity.sessionKey]!,now:Date(timeIntervalSince1970:at/1000))=="最近活动 3分钟前","raw original event wins metadata without assuming clocks are monotonic")
+    snapshot.activity=SessionActivity(sequence:2,kind:"tool-end",at:at-240_000);snapshot.seq+=1
+    precondition(store.apply(WireRecord(kind:"snapshot",identity:snapshot.identity,snapshot:snapshot),connection:connection,now:at))
+    precondition(SessionExperience.timing(store.sessions[snapshot.identity.sessionKey]!,now:Date(timeIntervalSince1970:at/1000))=="最近活动 4分钟前","new original event cannot be masked by retained later clock time")
+    snapshot.activity=nil;snapshot.nativeSessionMeta=nil; snapshot.seq+=1
+    store=SessionStore()
+    precondition(store.apply(WireRecord(kind:"hello",identity:snapshot.identity,snapshot:snapshot),connection:connection,now:at))
+    store.retainRecordedInteractions([NotificationTarget.hash(snapshot.identity.sessionKey):at-30_000,NotificationTarget.hash("foreign"):at])
+    let indexed=store.sessions[snapshot.identity.sessionKey]!
+    precondition(SessionExperience.timing(indexed,now:Date(timeIntervalSince1970:at/1000))=="刚有已记录交互")
+    precondition(indexed.snapshot.activity==nil && SessionExperience.activityDetail(indexed).contains("原用量库"))
+    precondition(store.sessions.count==1,"foreign indexed session cannot create a source")
+    store.retainRecordedInteractions([:],queriedHashes:[NotificationTarget.hash(snapshot.identity.sessionKey)])
+    precondition(store.sessions[snapshot.identity.sessionKey]!.lastObservedActivity==nil,"successful ledger rollback/empty no longer claims an extant indexed receipt")
+    store.retainRecordedInteractions([NotificationTarget.hash(snapshot.identity.sessionKey):at-30_000])
+    store.disconnect(connection)
+    precondition(SessionExperience.activityDetail(store.sessions[snapshot.identity.sessionKey]!).contains("非实时"))
+    snapshot.nativeSessionMeta=nil; snapshot.seq+=1
+    let data=try Wire.encode(WireRecord(kind:"snapshot",identity:snapshot.identity,snapshot:snapshot))
+    precondition(!String(decoding:data,as:UTF8.self).contains("lastObservedActivity"))
+  }
   static func run(_ base: Snapshot) throws {
     let at=1_730_000_000_000.0, connection=UUID()
+    try checkNativeAndLedger(base, at: at)
     var snapshot=base; snapshot.inputs=[]; snapshot.seq=1; snapshot.observedAt=at
     snapshot.activity=SessionActivity(sequence:3,kind:"agent-settled",at:at-60_000,turnEndedAt:at-60_000,turnEndSequence:3)
     var store=SessionStore()

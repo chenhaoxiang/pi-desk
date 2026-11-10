@@ -462,7 +462,24 @@ private struct DiskRecorder: Decodable {
   let reasons: [String]
 }
 
+public struct SessionUsageSummary {
+  public let session: String
+  public let timeZoneID: String
+  public var total = UsageTokenTotals()
+  public var today = UsageTokenTotals()
+  public var last7 = UsageTokenTotals()
+  public var last30 = UsageTokenTotals()
+  public var recordCount = 0
+  public var earliestAt: Date?
+  public var latestAt: Date?
+  public var refreshedAt: Date?
+  public var error: String?
+  public var reasons: [String] = []
+  public init(session: String, timeZone: TimeZone = .current) { self.session = session; timeZoneID = timeZone.identifier }
+}
 protocol UsageLedgerClient: AnyObject {
+  func refreshSession(session: String, now: Date, timeZone: TimeZone, completion: @escaping (SessionUsageSummary) -> Void)
+  func latestInteractions(sessions: [String], completion: @escaping ([String: Double]?) -> Void)
   func refresh(range: UsageDateRange, completion: @escaping (UsageAggregate) -> Void)
   func refresh(range: UsageDateRange, model: String?, completion: @escaping (UsageAggregate) -> Void)
   func refresh(range: UsageDateRange, model: String?, origin: UsageOrigin, completion: @escaping (UsageAggregate) -> Void)
@@ -471,6 +488,10 @@ protocol UsageLedgerClient: AnyObject {
   @discardableResult func flushViewState(_ state: UsageViewState) -> Bool
 }
 extension UsageLedgerClient {
+  func refreshSession(session: String, now: Date, timeZone: TimeZone, completion: @escaping (SessionUsageSummary) -> Void) {
+    var value = SessionUsageSummary(session: session, timeZone: timeZone); value.error = "session-query-unavailable"; completion(value)
+  }
+  func latestInteractions(sessions: [String], completion: @escaping ([String: Double]?) -> Void) { completion(nil) }
   func loadViewState(completion: @escaping (UsageViewState?, String?) -> Void) { completion(nil, nil) }
   func saveViewState(_ state: UsageViewState, completion: @escaping (String?) -> Void) { completion(nil) }
   @discardableResult func flushViewState(_ state: UsageViewState) -> Bool { saveViewState(state) { _ in }; return true }
@@ -492,6 +513,8 @@ public final class UsageLedger: UsageLedgerClient {
   private var cacheBucket: Date?
   private var counters = ["databaseOpens": 0, "importScans": 0, "aggregateScans": 0, "cacheHits": 0]
   private var persistedViewState: UsageViewState?
+  private var sessionMetricCache: (key: String, generation: String, value: SessionUsageSummary)?
+  private var interactionCache: (key: String, generation: String, value: [String: Double])?
 
   public init(root: URL? = nil) {
     if let root {
@@ -565,6 +588,46 @@ public final class UsageLedger: UsageLedgerClient {
         if self.pendingRefresh != nil { self.runNextRefresh() }
         else { self.isRefreshing = false; work.completion(result) }
       }
+    }
+  }
+  public func refreshSession(session: String, now: Date = Date(), timeZone: TimeZone = .current, completion: @escaping (SessionUsageSummary) -> Void) {
+    queue.async { [weak self] in
+      var value = SessionUsageSummary(session: session, timeZone: timeZone)
+      do {
+        guard let self, session.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { throw LedgerError.unsafeStorage }
+        let db = try self.openDatabase()
+        let key = session + ":" + timeZone.identifier + ":" + String(Int64(now.timeIntervalSince1970 / 60))
+        let generation = try self.metadataGeneration(db: db)
+        if let cached = self.sessionMetricCache, cached.key == key, cached.generation == generation {
+          self.counters["sessionCacheHits", default: 0] += 1
+          DispatchQueue.main.async { completion(cached.value) }; return
+        }
+        let imported = try db.importSpool()
+        value = try db.sessionSummary(session: session, now: now, timeZone: timeZone)
+        self.counters["sessionAggregateScans", default: 0] += 1
+        value.reasons = imported.reasons
+        if imported.pending > 0 { value.reasons.append("仍有记录待导入") }
+        if imported.conflicts > 0 { value.reasons.append("原receipt冲突，保留首次记录") }
+        value.refreshedAt = Date()
+        // Bind the pre-read generation: a concurrent publish must stay dirty.
+        self.sessionMetricCache = (key, generation, value)
+      } catch { value.error = Self.errorText(error) }
+      DispatchQueue.main.async { completion(value) }
+    }
+  }
+  public func latestInteractions(sessions: [String], completion: @escaping ([String: Double]?) -> Void) {
+    let keys = Set(sessions.filter { $0.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil }.prefix(64))
+    guard !keys.isEmpty else { completion([:]); return }
+    queue.async { [weak self] in
+      var result: [String: Double]?
+      do { if let self {
+        let db = try self.openDatabase(), generation = try self.metadataGeneration(db: db)
+        let key = keys.sorted().joined(separator: ":") + ":" + String(Int64(Date().timeIntervalSince1970 / 60))
+        if let cached = self.interactionCache, cached.key == key, cached.generation == generation { result = cached.value }
+        else { _ = try db.importSpool(); let values = try db.latestInteractions(keys: keys); result = values; self.interactionCache = (key, generation, values) }
+      } }
+      catch { /* lookup failure never erases a known event or blocks Pi */ }
+      DispatchQueue.main.async { completion(result) }
     }
   }
   private func openDatabase() throws -> Database {
@@ -746,6 +809,7 @@ public final class UsageLedger: UsageLedgerClient {
           CREATE TABLE IF NOT EXISTS usage_entries(id TEXT PRIMARY KEY, session TEXT NOT NULL, occurred INTEGER NOT NULL,
             model TEXT NOT NULL, input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER);
           CREATE INDEX IF NOT EXISTS usage_time ON usage_entries(occurred);
+          CREATE INDEX IF NOT EXISTS usage_session_time ON usage_entries(session,occurred);
           CREATE TABLE IF NOT EXISTS usage_conflicts(id TEXT PRIMARY KEY);
           CREATE TABLE IF NOT EXISTS usage_meta(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS usage_provenance(id TEXT PRIMARY KEY,origin TEXT NOT NULL,import_id TEXT NOT NULL,kind TEXT NOT NULL,coverage TEXT NOT NULL,has_realtime INTEGER NOT NULL DEFAULT 0);
@@ -932,6 +996,38 @@ public final class UsageLedger: UsageLedgerClient {
     private var aggregateCaches: [UsageDateRange: (version: Int64, cursor: Int64, value: UsageAggregate, days: [Date: UsageTokenTotals])] = [:]
     private var rangeOrder: [UsageDateRange] = []
     private var coverageCache: (version: Int64, cursor: Int64, values: [String: Date])?
+    func latestInteractions(keys: Set<String>) throws -> [String: Double] {
+      let ids = keys.sorted()
+      let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ",")
+      let statement = try prepare("SELECT e.session,max(e.occurred) FROM usage_entries e LEFT JOIN usage_provenance p ON p.id=e.id WHERE COALESCE(p.kind,'assistant')='assistant' AND e.session IN (" + placeholders + ") AND e.occurred<=? AND NOT EXISTS(SELECT 1 FROM usage_aliases a JOIN usage_entries canonical ON canonical.id=a.canonical_id WHERE a.alias_id=e.id) GROUP BY e.session")
+      defer { sqlite3_finalize(statement) }
+      for (index,id) in ids.enumerated() { bind(id, statement, Int32(index + 1)) }
+      bind(Int64(Date().timeIntervalSince1970 * 1000), statement, Int32(ids.count + 1))
+      var result: [String: Double] = [:], step = sqlite3_step(statement)
+      while step == SQLITE_ROW { result[string(statement,0)] = Double(int(statement,1) ?? 0); step = sqlite3_step(statement) }
+      guard step == SQLITE_DONE else { throw LedgerError.databaseUnavailable }; return result
+    }
+    func sessionSummary(session: String, now: Date, timeZone: TimeZone) throws -> SessionUsageSummary {
+      var result = SessionUsageSummary(session: session, timeZone: timeZone)
+      var calendar = Calendar(identifier: .gregorian); calendar.timeZone = timeZone
+      let today = calendar.startOfDay(for: now)
+      let seven = calendar.date(byAdding: .day, value: -6, to: today)!
+      let thirty = calendar.date(byAdding: .day, value: -29, to: today)!
+      let statement = try prepare("SELECT e.occurred,e.input,e.output,e.cache_read,e.cache_write FROM usage_entries e WHERE e.session=? AND e.occurred<=? AND NOT EXISTS(SELECT 1 FROM usage_aliases a JOIN usage_entries canonical ON canonical.id=a.canonical_id WHERE a.alias_id=e.id) ORDER BY e.occurred")
+      defer { sqlite3_finalize(statement) }; bind(session, statement, 1); bind(Int64(now.timeIntervalSince1970 * 1000), statement, 2)
+      var step = sqlite3_step(statement)
+      while step == SQLITE_ROW {
+        let date = Date(timeIntervalSince1970: Double(int(statement,0) ?? 0) / 1000)
+        let a=int(statement,1),b=int(statement,2),c=int(statement,3),d=int(statement,4)
+        result.total.add(input:a,output:b,cacheRead:c,cacheWrite:d)
+        if date >= today { result.today.add(input:a,output:b,cacheRead:c,cacheWrite:d) }
+        if date >= seven { result.last7.add(input:a,output:b,cacheRead:c,cacheWrite:d) }
+        if date >= thirty { result.last30.add(input:a,output:b,cacheRead:c,cacheWrite:d) }
+        result.earliestAt = min(result.earliestAt ?? date, date); result.latestAt = date; result.recordCount += 1
+        step = sqlite3_step(statement)
+      }
+      guard step == SQLITE_DONE else { throw LedgerError.databaseUnavailable }; return result
+    }
     func aggregate(range: UsageDateRange) throws -> UsageAggregate {
       let version = try scalar("PRAGMA data_version")
       let maximum = try scalar("SELECT COALESCE(max(rowid),0) FROM usage_entries")

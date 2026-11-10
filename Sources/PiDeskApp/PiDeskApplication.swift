@@ -384,6 +384,7 @@ struct SessionDetail: View {
           }
         }
         }
+        DeskCard { SessionMetricsView(session: session) }
         DeskCard { TodoObservationCard(session: session).id(snap.identity.runtimeEpoch + (snap.todo?.scope ?? "unavailable")) }
         DeskCard { GovernanceSessionDetail(session: session) }
         OperationsSection(identity: snap.identity)

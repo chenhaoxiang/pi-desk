@@ -7,8 +7,8 @@ release_scope: 首版本地源码与旁路候选；非完整发行验收
 status: active
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-06
-verification_scope: PR13/14与build84已交付，PR42有限W3自然样本已核；本片#81工作卡与独立代码进度候选通过定向Core/bridge及冻结producer SDK/UDS，真实新工程/审查/安装另记，不泛化长期自治
+verified: 2026-11-10
+verification_scope: 当前会话元数据及单一usage索引分时统计的本机Node/Swift和隔离SDK至SwiftUDS；历史各批结论保留各自范围，不泛化旧live loaded或全历史账单
 ---
 
 # 分阶段实施方案
@@ -213,6 +213,10 @@ M1仅是观察纵切，不能作为完整首版交付。M2开始必须有真正�
 性能根因是Pi事件总线同步派发OwnerRPC：把`cost`包在setImmediate不隔离owner的branch/artifact I/O。已移除session_start/settled/async完成等自动owner扫描，只有当前用户显式兴趣/刷新才限频合并查询，workflow detail只对所选runId。实际固定Subagents owner的10,128条合成branch/128 children cost RPC同步约0.59–6.06ms，不能声称免费。相同30回合实际InteractiveMode/PTY对照：未接入dispatch p95/p99约0.0051/0.0055ms，接入约0.0238/0.0265ms；turn中位数约1.914/1.894ms，RSS增量约13.2/12.4MB，pending/drop0、新增模型/确认0。仅显式cost刷新触发一次owner读取，不推导零开销或全平台性能。
 
 App ledger现以utility queue持久连接、metadata generation/DB data_version缓存、rowid增量归桶与单一合并刷新代替每轮quick_check/DDL/全范围聚合；定向检查证明10次无变化刷新不增加aggregate扫描，新final只增量读1row；模型过滤与空态仍保留unknown。生产writer实际link后SIGKILL的隔离复现已验证准确自有临时链接恢复；未知第二链接依旧拒绝。真实数据/hash/原件只记本机tmp，不在公开Git暴露真实用量。
+
+### 当前已加载会话的记录与分时统计（增量）
+
+针对首次接入既有Pi仍无活动事件的缺口，公开SessionManager内存记录只投影type/timestamp/role与compaction数量；异步256片、100000上限、partial/unavailable、关闭及准确session fencing，心跳/work.refresh不读。优先真实lifecycle；缺时只读既有原生记录，旧producer可复用原usage索引assistant receipt原时间，不伪造raw activity/未读。会话累计/今日/含今日7/30天只走同一UsageLedger session hash、四桶/aliases/本机日历，不新库或自动历史补采；零记录未知、缺字段下界，固定全部模型和去重来源，不合并owner累计或猜费用。新增源码验证包括startup red→green、Node隐私/边界、Core展示隔离、同DB分时/夏令时/去重/无数据，以及实际隔离SDK正常reload自有fixture后新startup→SwiftUDS。新bridge必须相应运行正常加载才有原生元数据，不强reload旧业务Pi；隔离faux不是旧业务loaded或真实计费验收。
 
 ### 一次性历史usage补采
 

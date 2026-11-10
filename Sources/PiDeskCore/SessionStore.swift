@@ -93,6 +93,21 @@ public struct SessionStore {
     }
     return false
   }
+  /// Same original Pi interaction metadata indexed by the existing usage ledger.
+  /// Display-only: never writes activity or turn-end identity into the snapshot.
+  public mutating func retainRecordedInteractions(_ bySessionHash: [String: Double], queriedHashes: Set<String> = []) {
+    for (key, var session) in sessions {
+      // Metadata fallback must not overrule a real event or rely on clock ordering.
+      guard ObservedActivityStamp(session.snapshot) == nil, session.lastObservedActivity == nil || session.lastObservedActivity?.kind == "recorded-usage" else { continue }
+      let hash = NotificationTarget.hash(key)
+      if let at = bySessionHash[hash] {
+        guard let stamp = ObservedActivityStamp(identity: session.snapshot.identity, recordedInteractionAt: at) else { continue }
+        session.lastObservedActivity = stamp; sessions[key] = session
+      } else if queriedHashes.contains(hash), session.lastObservedActivity?.kind == "recorded-usage" {
+        session.lastObservedActivity = nil; sessions[key] = session
+      }
+    }
+  }
   @discardableResult public mutating func updateRoute(_ route: Route, identity: Identity, connection: UUID) -> Bool {
     guard var current = sessions[identity.sessionKey], current.connectionId == connection, current.snapshot.identity == identity, current.snapshot.display.route == nil, current.connection == .connected, route.valid, route.sessionId == identity.nativeSessionId else { return false }
     current.snapshot.display.route = route

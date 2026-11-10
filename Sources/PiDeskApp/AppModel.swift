@@ -104,6 +104,10 @@ struct TerminalDiagnosticObservation: Equatable {
   @Published var usageCustomEnd = Date()
   @Published var aggregate = UsageAggregate.empty(.make(preset: .today))
   @Published var usageLoading = false
+  @Published private(set) var sessionUsage: [String: SessionUsageSummary] = [:]
+  private var sessionReadingWork: DispatchWorkItem?
+  private var sessionReadingRequest = UUID()
+  private var lastSessionReading = Date.distantPast
   @Published var usageComparisonEnabled = false
   @Published var comparisonAggregate: UsageAggregate?
   @Published var notificationStatus = "尚未检查系统通知状态"
@@ -733,6 +737,7 @@ struct TerminalDiagnosticObservation: Equatable {
     }
     guard !usageLoading, let ledger else { return }
     usageLoading = true; lastUsageRefresh = Date()
+    refreshSessionReadings()
     let filter = usageModel.isEmpty ? nil : usageModel
     ledger.refresh(range: range, model: filter, origin: usageOrigin) { [weak self] result in
       guard let self else { return }
@@ -753,6 +758,34 @@ struct TerminalDiagnosticObservation: Equatable {
         guard self.customRangeIsValid else { return }
         guard self.matchesUsageSelection(result) else { self.refreshUsage(); return }
         self.comparisonAggregate = self.usageComparisonEnabled ? self.applyingLiveCoverage(prior) : nil
+      }
+    }
+  }
+  func refreshSessionReadings(force: Bool = false) {
+    guard !isPreview, ledger != nil else { return }
+    if !force && Date().timeIntervalSince(lastSessionReading) < 15 { return }
+    sessionReadingWork?.cancel()
+    let work = DispatchWorkItem { [weak self] in self?.readSessionReadings() }
+    sessionReadingWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+  }
+  private func readSessionReadings() {
+    guard let ledger, !isPreview else { return }
+    lastSessionReading = Date(); let request = UUID(); sessionReadingRequest = request
+    let ids = sessions.prefix(64).map { $0.snapshot.identity }, selectedIdentity = current?.snapshot.identity
+    ledger.latestInteractions(sessions: ids.map { UsageViewStateKey.hash($0.sessionKey) }) { [weak self] values in
+      guard let self, self.sessionReadingRequest == request else { return }
+      if let values {
+        let hashes = Set(ids.map { UsageViewStateKey.hash($0.sessionKey) })
+        self.store.retainRecordedInteractions(values.filter { hashes.contains($0.key) }, queriedHashes: hashes)
+      }
+      guard let selectedIdentity else { return }
+      ledger.refreshSession(session: UsageViewStateKey.hash(selectedIdentity.sessionKey), now: Date(), timeZone: .current) { [weak self] value in
+        guard let self, self.sessionReadingRequest == request, self.store.sessions[selectedIdentity.sessionKey]?.snapshot.identity == selectedIdentity, value.session == UsageViewStateKey.hash(selectedIdentity.sessionKey) else { return }
+        if value.error != nil, var old = self.sessionUsage[selectedIdentity.sessionKey] { old.error = value.error; self.sessionUsage[selectedIdentity.sessionKey] = old }
+        else { self.sessionUsage[selectedIdentity.sessionKey] = value }
+        let active = Set(self.store.sessions.keys)
+        self.sessionUsage = self.sessionUsage.filter { active.contains($0.key) }
       }
     }
   }
@@ -949,7 +982,7 @@ struct TerminalDiagnosticObservation: Equatable {
         if record.kind == "hello" { server.close(connection) }
         return
       }
-      if !wasKnown { rememberSessionOrder(record.identity) }
+      if !wasKnown { rememberSessionOrder(record.identity); refreshSessionReadings(force: true) }
       resolveNotification()
       if record.kind == "action-result", let id = record.requestId, let request = store.requests[id] {
         note(Presentation.action(request.action) + "：" + Presentation.receipt(request.status), for: record.identity)
@@ -1009,6 +1042,7 @@ struct TerminalDiagnosticObservation: Equatable {
   }
   func stop() {
     routingStopped = true; permissionRequests.removeAll(); locationRequests.removeAll(); routeAttempts.removeAll()
+    sessionReadingWork?.cancel(); sessionReadingRequest = UUID()
     assistant.stop()
     localAssistant.stop()
     flushViewState()

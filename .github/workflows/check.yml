@@ -27,6 +27,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: bash scripts/check-native.sh
       - run: node --import tsx scripts/check-socket-host.mjs
+      - run: node --import tsx scripts/check-session-records-native.mjs --socket
       - run: node --import tsx scripts/check-todo-native.mjs --socket
       - run: node --import tsx scripts/check-governance-native.mjs --socket
       - run: node --import tsx scripts/check-question-native.mjs --socket

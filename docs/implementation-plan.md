@@ -3,7 +3,7 @@ doc_type: plan
 project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
-release_scope: 首版本地源码与旁路候选；非完整发行验收
+release_scope: 停止独立产品扩张；既有安装和在途成果保全，必要能力转入pi-lobehub计划
 status: active
 truth_mode: maintained
 created: 2026-10-24
@@ -12,6 +12,21 @@ verification_scope: 当前会话元数据及单一usage索引分时统计的本�
 ---
 
 # 分阶段实施方案
+
+## 2026-11-10 转向 Pi LobeHub
+
+用户已批准放弃 Pi Desk 作为独立产品继续迭代，改由 [pi-lobehub 的单一 Change](https://github.com/chenhaoxiang/pi-lobehub/tree/main/openspec/changes/adopt-pi-workspace) 承接工作入口；本轮只实施其第一批 P0/P1 与第二批 P2。下方历史 W1–W4/M0–M5 及旧 Change 保留原件，不自动变成新 backlog 或待办，不反向重写已交付结果。
+
+| 既有能力 | 当前处置 | 后续 owner / 验收边界 |
+|---|---|---|
+| 原生 Pi、Todo、Subagents、Schedule、工作/交接/结果与治理合同 | 保留原 owner，不移交给 UI | Pi/治理原公共接口继续为事实源，不从 session/Todo.completed 推导业务验收 |
+| 工作状态、阻塞/下一步、需要真实输入的关注信息 | 选择性消费计划，尚未迁移 | LobeHub 既有 Task/Goal/关注入口；按原来源/请求/运行身份展示，不建第二工作台 |
+| 用量去重、覆盖/unknown 与数据保全语义 | 保留现有原件，按需复用语义和必要测试 | 优先 LobeHub 当前运行用量；不默认迁移历史正文/全量用量，不把统计当完整账单 |
+| SwiftUI 顶部胶囊、原生壳、独立 AI 助手/设置/分组 | 不整体迁入，不继续扩张产品 | 仅证实必要的平台能力才回原 owner 单独评估，不先拆通用 SDK |
+| 精确控制、停止确认与 unknown 不重放 | 保留约束，按必要路径适配 | 操作仍回具体运行 owner；未确认停止不启动第二 writer |
+| 已安装 App/固定 bridge、用量库与备份 | 保全，尚未运行退出 | Pi LobeHub P5 替代证据满足后才进入 P6；不提前卸载或伤及已加载 Pi |
+
+本次未复制 Desk 源代码到 LobeHub，以上“计划/保留”不冒称已集成。停止独立扩张不自动关闭已有 PR、删除工作树、清理分支或覆盖未提交成果；本次只读核对时 main 为 `58a471b`、GitHub 无打开的 PR，既存任务树仍保留。必要稳定性/安全维护按实际授权继续，不建立额外审批账本。未来运行退出必须按原管理入口只处理本工具拥有的 App/bridge，并分别记录源码、安装、运行、数据保全与回退；当前没有执行卸载、发布或旧 Pi reload。
 
 ## 0. Pi同源CEO工作台与自主推进路线（2026-11-05）
 

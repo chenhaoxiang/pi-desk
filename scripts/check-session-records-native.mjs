@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdir,mkdtemp,rm } from "node:fs/promises";
+import { mkdir,mkdtemp,rm,readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve,join } from "node:path";
 import { spawn } from "node:child_process";
 import { createHost,ai,until } from "./native-host.mjs";
@@ -35,7 +36,21 @@ try{
   assert(!JSON.stringify(projected).includes("PRIVATE_SYNTHETIC"));assert.deepEqual(host.errors,[]);
   console.log(JSON.stringify({ok:true,nativeSdk:true,realSwiftUDS:socket,publicCurrentMemory:true,originalCompactionCount:expected,startupActivityWithoutNewTurn:true,rawActivityNotFabricated:true,privateTextNotProjected:true,metadataExtraModelCalls:0,realProviderCalls:0,activeBusinessReloads:0}));
 }finally{
-  if(host)await host.close();
+  if(host){
+    await host.close();
+    // Reload owns two asynchronous writers for the same native session. The
+    // shared host helper may first find the old closed recorder; drain BOTH
+    // exact runtime receipts before deleting this fixture's private directory.
+    const epochs=new Set(records.map(r=>r.identity.runtimeEpoch));
+    await until(async()=>{
+      for(const epoch of epochs){
+        const id=createHash("sha256").update(epoch).digest("hex");
+        const state=await readFile(join(root,"usage-v1/recorders",id+".json"),"utf8").then(JSON.parse,()=>null);
+        if(!state||state.closed!==true||state.pending!==0)return false;
+      }
+      return true;
+    });
+  }
   if(server&&server.exitCode===null){const exit=new Promise(r=>server.once("exit",r));const safety=setTimeout(()=>server.kill(),1000).unref();server.stdin.end();await exit;clearTimeout(safety);}
   await rm(root,{recursive:true,force:true});
 }

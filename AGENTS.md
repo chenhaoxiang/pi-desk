@@ -4,7 +4,7 @@ Pi Desk 是 Pi-only 的可视化与管理客户端。先读 `README.md` 与下�
 
 ## 当前产品方向（2026-11-10）
 
-用户已决定停止 Pi Desk 作为独立产品的功能扩张，以维护 fork [pi-lobehub](https://github.com/chenhaoxiang/pi-lobehub) 承接工作入口，Pi Runtime 与治理仍由原 owner 负责。后续任务/状态/关注/用量等能力按原仓 [迁移处置](docs/implementation-plan.md#2026-11-10-转向-pi-lobehub) 选择性消费，不继续建设第二工作台。历史 W1–W4 与未勾选事项不是自动续做授权。必要稳定性/安全维护与已授权在途成果保全，不擅自终止他人工作；本次不卸载 App/bridge，不删数据，不强 reload Pi。
+用户已决定停止 Pi Desk 作为独立产品的功能扩张，以维护 fork [pi-lobehub](https://github.com/chenhaoxiang/pi-lobehub) 承接工作入口，Pi Runtime 与治理仍由原 owner 负责。后续任务/状态/关注/用量等能力按原仓 [迁移处置](docs/implementation-plan.md#2026-11-10-转向-pi-lobehub) 选择性消费，不继续建设第二工作台。历史 W1–W4 与未勾选事项不是自动续做授权。2026-11-14 用户明确授权后，Pi Desk 当前 App、manifest 指向的 bridge 与自动发现入口已完成可逆受控归档；历史用量、配置、会话和旧 bridge 保留，不强 reload 日常 Pi，不迁移历史正文或凭据。后续如需恢复，只能按归档收据在确认无并发加载后恢复原路径，不自动恢复任务。
 
 ## 不变边界
 

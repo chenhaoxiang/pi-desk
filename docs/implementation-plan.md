@@ -4,10 +4,10 @@ project: workspace
 owner_repository: chenhaoxiang/pi-desk
 product_line: pi-desk
 release_scope: 停止独立产品扩张；既有安装和在途成果保全，必要能力转入pi-lobehub计划
-status: active
+status: maintained
 truth_mode: maintained
 created: 2026-10-24
-verified: 2026-11-10
+verified: 2026-11-14
 verification_scope: 当前会话元数据及单一usage索引分时统计的本机Node/Swift和隔离SDK至SwiftUDS；历史各批结论保留各自范围，不泛化旧live loaded或全历史账单
 ---
 
@@ -24,9 +24,9 @@ verification_scope: 当前会话元数据及单一usage索引分时统计的本�
 | 用量去重、覆盖/unknown 与数据保全语义 | 保留现有原件，按需复用语义和必要测试 | 优先 LobeHub 当前运行用量；不默认迁移历史正文/全量用量，不把统计当完整账单 |
 | SwiftUI 顶部胶囊、原生壳、独立 AI 助手/设置/分组 | 不整体迁入，不继续扩张产品 | 仅证实必要的平台能力才回原 owner 单独评估，不先拆通用 SDK |
 | 精确控制、停止确认与 unknown 不重放 | 保留约束，按必要路径适配 | 操作仍回具体运行 owner；未确认停止不启动第二 writer |
-| 已安装 App/固定 bridge、用量库与备份 | 保全，尚未运行退出 | Pi LobeHub P5 替代证据满足后才进入 P6；不提前卸载或伤及已加载 Pi |
+| 已安装 App/固定 bridge、用量库与备份 | App/当前 bridge/自动发现入口已受控归档；用量库、配置、旧 bridge 与备份保留 | 受控退出已完成；不强 reload Pi，不迁移历史正文/凭据/全量用量 |
 
-本次未复制 Desk 源代码到 LobeHub，以上“计划/保留”不冒称已集成。停止独立扩张不自动关闭已有 PR、删除工作树、清理分支或覆盖未提交成果；本次只读核对时 main 为 `58a471b`、GitHub 无打开的 PR，既存任务树仍保留。必要稳定性/安全维护按实际授权继续，不建立额外审批账本。未来运行退出必须按原管理入口只处理本工具拥有的 App/bridge，并分别记录源码、安装、运行、数据保全与回退；当前没有执行卸载、发布或旧 Pi reload。
+本次未复制 Desk 源代码到 LobeHub，以上“计划/保留”不冒称已集成。停止独立扩张不自动关闭已有 PR、删除工作树、清理分支或覆盖未提交成果；必要稳定性/安全维护按实际授权继续，不建立额外审批账本。2026-11-14 用户明确授权后，已按原管理入口完成 Pi Desk 的受控卸载：当前 `0.1.0/build108` App、manifest 指向的 bridge、`~/.pi/agent/extensions/pi-desk-bridge.ts` 已从活动路径移入用户域 `PiDesk/retired/20261114T114902Z/`，原 manifest 与二进制完整性收据一并保留。历史用量 SQLite/WAL/SHM、settings、backups 和旧 bridge 版本未删除；未强制停止或 reload 日常 Pi，未迁移历史正文/凭据/全量用量，未处理其他扩展或未知请求。
 
 ## 0. Pi同源CEO工作台与自主推进路线（2026-11-05）
 
